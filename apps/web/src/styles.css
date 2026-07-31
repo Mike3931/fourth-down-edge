@@ -1,0 +1,56 @@
+@import 'tailwindcss';
+
+/* Scan workspace UI package for class names (Tailwind v4). */
+@source "../../../packages/ui/src";
+
+@theme {
+  /* Fourth Down Edge — institutional dark graphite terminal palette. */
+  --color-bg: #0d1117;
+  --color-panel: #151b23;
+  --color-panel-raised: #1b2330;
+  --color-edge: #2a3342;
+  --color-ink: #e6e9ef;
+  --color-ink-muted: #9aa4b2;
+  /* WCAG AA requires >=4.5:1 for normal text; #6b7580 measured only 3.7:1
+     against --color-panel. Lightened to keep >=4.5:1 against both panel
+     surfaces while staying visually fainter than --color-ink-muted. */
+  --color-ink-faint: #828b95;
+  --color-accent: #37b8c8;
+  --color-ok: #3fb96a;
+  --color-warn: #d9a13b;
+  --color-bad: #e05d5d;
+  --color-model: #8b93d6;
+
+  --font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Cascadia Mono', 'Consolas', ui-monospace, monospace;
+}
+
+html {
+  background-color: var(--color-bg);
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-bg text-ink antialiased;
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Focus visibility for keyboard navigation. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* Dense scrollbars appropriate for a terminal feel. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-edge) transparent;
+}

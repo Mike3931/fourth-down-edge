@@ -1,0 +1,26 @@
+{
+  "name": "fourth-down-edge",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Private NFL probability, pricing, research, and bankroll decision-support platform. Not a sportsbook, betting bot, or pick generator.",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @fde/web",
+    "build": "npm run build -w @fde/web",
+    "preview": "npm run preview -w @fde/web",
+    "test": "npm run test -w @fde/calculations && npm run test -w @fde/api-client",
+    "test:db": "node supabase/test/validate-migrations.mjs",
+    "test:e2e": "npm run build -w @fde/web && playwright test",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.4",
+    "@playwright/test": "^1.62.1"
+  }
+}

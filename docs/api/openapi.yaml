@@ -1,0 +1,236 @@
+openapi: 3.1.0
+info:
+  title: Fourth Down Edge Analytical Service
+  version: 0.1.0
+  description: >
+    Contract for the future Python FastAPI analytical service. The v1 web app
+    binds a mock implementation of this same contract (MockFdeApi). All
+    endpoints are read-only research endpoints except manual price submission;
+    nothing here places wagers or contacts any sportsbook.
+servers:
+  - url: https://api.fourthdownedge.local/v1
+security:
+  - bearerAuth: []
+paths:
+  /games:
+    get:
+      operationId: listGames
+      summary: List games for the active season/week
+      parameters:
+        - { name: season, in: query, schema: { type: integer } }
+        - { name: week, in: query, schema: { type: integer } }
+      responses:
+        '200':
+          description: Games
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Game' } }
+  /games/{gameId}/predictions:
+    get:
+      operationId: listPredictions
+      summary: All immutable prediction vintages for a game
+      parameters:
+        - { name: gameId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Prediction vintages (append-only history)
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Prediction' } }
+  /games/{gameId}/recommendation:
+    get:
+      operationId: getRecommendation
+      summary: Deterministic recommendation for the best-edge selection
+      parameters:
+        - { name: gameId, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Recommendation with full decision record
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Recommendation' }
+        '422':
+          description: DATA INCOMPLETE — critical inputs missing (still a structured Recommendation)
+  /recommendations:
+    get:
+      operationId: listRecommendations
+      summary: Recommendations for the full slate
+      responses:
+        '200':
+          description: One recommendation per game
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Recommendation' } }
+  /manual-prices:
+    post:
+      operationId: submitManualPrice
+      summary: Append an immutable manually observed sportsbook price
+      description: >
+        The user must have manually observed the price. confirmedVisible must
+        be true. Records are append-only; prior records are never modified.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ManualBookPriceInput' }
+      responses:
+        '201':
+          description: Created immutable record
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ManualBookPrice' }
+        '400': { description: Validation failure (e.g., unconfirmed price) }
+  /models:
+    get:
+      operationId: listModelVersions
+      summary: Model registry with governance metadata
+      responses:
+        '200':
+          description: Model versions
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/ModelVersion' } }
+  /health/feeds:
+    get:
+      operationId: listFeedStatuses
+      summary: Operational status of every feed and service
+      responses:
+        '200':
+          description: Feed statuses
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/FeedStatus' } }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  schemas:
+    Game:
+      type: object
+      required: [id, season, week, kickoffUtc, awayTeamId, homeTeamId, stadiumId, roofStatus, status]
+      properties:
+        id: { type: string }
+        season: { type: integer }
+        week: { type: integer }
+        kickoffUtc: { type: string, format: date-time }
+        awayTeamId: { type: string }
+        homeTeamId: { type: string }
+        stadiumId: { type: string }
+        roofStatus: { type: string, enum: [OUTDOOR, DOME, RETRACTABLE_OPEN, RETRACTABLE_CLOSED] }
+        status: { type: string, enum: [SCHEDULED, IN_PROGRESS, FINAL, POSTPONED] }
+    Prediction:
+      type: object
+      required: [id, gameId, modelVersionId, vintage, asOfAt, homeWinProbability, expectedMargin, expectedTotal]
+      properties:
+        id: { type: string }
+        gameId: { type: string }
+        modelVersionId: { type: string }
+        vintage: { type: string, enum: [OPENING, EARLY_WEEK, PRACTICE_UPDATE, FINAL_INJURY_REPORT, PREGAME, CLOSING_CAPTURE] }
+        asOfAt: { type: string, format: date-time, description: 'Cutoff: only data observed at/before this instant was used' }
+        featureSnapshotId: { type: string }
+        homeWinProbability: { type: number, minimum: 0, maximum: 1 }
+        awayWinProbability: { type: number, minimum: 0, maximum: 1 }
+        expectedHomeScore: { type: number }
+        expectedAwayScore: { type: number }
+        expectedMargin: { type: number }
+        expectedTotal: { type: number }
+        marginInterval80: { type: array, items: { type: number }, minItems: 2, maxItems: 2 }
+        totalInterval80: { type: array, items: { type: number }, minItems: 2, maxItems: 2 }
+        marginStd: { type: number }
+        totalStd: { type: number }
+        dataCompletenessScore: { type: number, minimum: 0, maximum: 1 }
+        isOfficial: { type: boolean }
+    Recommendation:
+      type: object
+      required: [id, gameId, predictionId, market, selection, american, status, statusReasons]
+      properties:
+        id: { type: string }
+        gameId: { type: string }
+        predictionId: { type: string }
+        manualPriceId: { type: string, nullable: true }
+        market: { type: string, enum: [MONEYLINE, SPREAD, TOTAL] }
+        selection: { type: string, enum: [HOME, AWAY, OVER, UNDER] }
+        line: { type: number, nullable: true }
+        american: { type: integer }
+        status: { type: string, enum: [BET, WATCH, PASS, 'DATA INCOMPLETE'] }
+        modelProbability: { type: number }
+        conservativeProbability: { type: number }
+        marketNoVigProbability: { type: number }
+        breakEvenProbability: { type: number }
+        edge: { type: number }
+        evPerDollar: { type: number }
+        pushProbability: { type: number }
+        fairAmerican: { type: integer }
+        confidence: { type: string, enum: [LOW, MEDIUM, HIGH] }
+        stake: { $ref: '#/components/schemas/StakeBreakdown' }
+        supportingFactors: { type: array, items: { type: string } }
+        opposingFactors: { type: array, items: { type: string } }
+        reasonsToPass: { type: array, items: { type: string } }
+        invalidationConditions: { type: array, items: { type: string } }
+        statusReasons: { type: array, items: { type: string } }
+        targetPrice: { type: integer, nullable: true }
+        invalidationPrice: { type: integer, nullable: true }
+        createdAt: { type: string, format: date-time }
+    StakeBreakdown:
+      type: object
+      nullable: true
+      properties:
+        fullKellyPct: { type: number }
+        quarterKellyPct: { type: number }
+        afterUncertaintyHaircutPct: { type: number }
+        afterDataQualityHaircutPct: { type: number }
+        afterCalibrationHaircutPct: { type: number }
+        perBetCapPct: { type: number }
+        finalStakePct: { type: number }
+        finalStakeAmount: { type: number }
+        bindingConstraint: { type: string }
+    ManualBookPriceInput:
+      type: object
+      required: [gameId, sportsbook, market, selection, american, priceObservedAt, confirmedVisible]
+      properties:
+        gameId: { type: string }
+        sportsbook: { type: string }
+        market: { type: string, enum: [MONEYLINE, SPREAD, TOTAL] }
+        selection: { type: string, enum: [HOME, AWAY, OVER, UNDER] }
+        line: { type: number, nullable: true }
+        american: { type: integer }
+        priceObservedAt: { type: string, format: date-time }
+        confirmedVisible: { type: boolean, enum: [true] }
+    ManualBookPrice:
+      allOf:
+        - $ref: '#/components/schemas/ManualBookPriceInput'
+        - type: object
+          required: [id, userId, enteredAt]
+          properties:
+            id: { type: string }
+            userId: { type: string }
+            enteredAt: { type: string, format: date-time }
+    ModelVersion:
+      type: object
+      required: [id, name, version, status, isPlaceholder]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        version: { type: string }
+        status: { type: string, enum: [APPROVED_DEMO, PLACEHOLDER, IN_DEVELOPMENT, RETIRED] }
+        target: { type: string }
+        algorithm: { type: string }
+        artifactHash: { type: string }
+        gitCommit: { type: string }
+        approvedAt: { type: string, format: date-time, nullable: true }
+        knownLimitations: { type: array, items: { type: string } }
+        driftStatus: { type: string }
+        isPlaceholder: { type: boolean }
+    FeedStatus:
+      type: object
+      required: [feed, status]
+      properties:
+        feed: { type: string }
+        status: { type: string, enum: [CURRENT, AGING, STALE, MISSING, CONFLICTING] }
+        lastSuccessAt: { type: string, format: date-time, nullable: true }
+        lastAttemptAt: { type: string, format: date-time, nullable: true }
+        recordCount: { type: integer }
+        freshnessMinutes: { type: number, nullable: true }
+        error: { type: string, nullable: true }
+        impactedGameIds: { type: array, items: { type: string } }
+        impactedPredictionIds: { type: array, items: { type: string } }
+        resolutionStatus: { type: string, enum: [OK, INVESTIGATING, DEGRADED, FAILED] }
