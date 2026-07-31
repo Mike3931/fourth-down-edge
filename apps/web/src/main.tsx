@@ -16,7 +16,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <StoreProvider>
-          <BrowserRouter>
+          {/* basename supports deployment under a subpath (e.g. GitHub
+              Pages project sites at /repo-name/); import.meta.env.BASE_URL
+              is injected by Vite from the --base build flag and defaults
+              to '/' for root deployments and local dev. */}
+          <BrowserRouter basename={import.meta.env.BASE_URL}>
             <App />
           </BrowserRouter>
         </StoreProvider>
@@ -31,7 +35,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 // serves cached data only alongside an 'offline' flag (see public/sw.js).
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {
       // Registration failure is non-fatal; app remains fully usable online.
     });
   });

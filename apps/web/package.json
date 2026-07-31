@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build && node scripts/build-sw.mjs",
+    "build:pages": "tsc --noEmit && vite build --base=/fourth-down-edge/ && node scripts/build-sw.mjs --base=/fourth-down-edge/",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },

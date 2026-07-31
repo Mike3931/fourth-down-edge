@@ -1,9 +1,32 @@
 # Deployment
 
-## Static frontend (v1)
+## GitHub Pages (automated via `.github/workflows/deploy.yml`)
+
+Every push to `master` that passes the full test gate (unit/integration tests, the Postgres migration
+validation, and the Playwright E2E journey) deploys automatically to
+**https://mike3931.github.io/fourth-down-edge/**. Nothing further to run manually; `workflow_dispatch`
+is also available for on-demand redeploys from the Actions tab.
+
+GitHub Pages project sites are served under `/<repo-name>/`, not the domain root, which two things in
+this codebase specifically account for:
+
+- `apps/web/package.json`'s `build:pages` script passes `--base=/fourth-down-edge/` to both `vite
+  build` and `scripts/build-sw.mjs`, so bundle references, the manifest/icon links, and the service
+  worker's precache list all resolve under the subpath. The default `npm run build` (root base) is
+  unaffected and remains correct for root-domain hosts below.
+- `main.tsx` passes `basename={import.meta.env.BASE_URL}` to `BrowserRouter`, and the workflow copies
+  `dist/index.html` to `dist/404.html` after the build — GitHub Pages has no server-side rewrite rule,
+  so it serves `404.html` verbatim (HTTP 404) for any client-side route a user navigates to directly or
+  refreshes; because that file is identical to `index.html`, the SPA boots anyway and `basename`
+  resolves the real route from `window.location`. Verified locally against a server reproducing this
+  exact behavior before being added to the workflow.
+
+If you rename the repository, update `--base=/fourth-down-edge/` in `build:pages` to match.
+
+## Other static hosts
 
 ```
-npm run build            # -> apps/web/dist
+npm run build            # -> apps/web/dist (root base path)
 ```
 
 Deploy `apps/web/dist` to any HTTPS static host. Examples:

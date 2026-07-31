@@ -10,9 +10,13 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://*.supabase.co; worker-src 'self'; manifest-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
     />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" href="/icons/icon-192.png" type="image/png" />
-    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <!-- Relative (not root-absolute) so these resolve correctly whether the
+         app is deployed at the domain root or under a subpath (e.g. GitHub
+         Pages project sites at /repo-name/) — Vite does not rewrite
+         root-absolute references into public/ when a custom --base is set. -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon-192.png" type="image/png" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
     <title>Fourth Down Edge</title>
   </head>
   <body>

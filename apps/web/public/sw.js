@@ -24,6 +24,9 @@ const MATCH_OPTS = { ignoreVary: true };
 
 const CACHE_VERSION = '__FDE_CACHE_VERSION__';
 const PRECACHE_URLS = __FDE_PRECACHE_URLS__;
+// Base-prefixed shell document path — correct whether the app is deployed at
+// the domain root or under a subpath (e.g. GitHub Pages project sites).
+const SHELL_INDEX = '__FDE_SHELL_INDEX__';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -65,12 +68,12 @@ self.addEventListener('fetch', (event) => {
         .then((res) => {
           if (res && res.ok) {
             const copy = res.clone();
-            caches.open(CACHE_VERSION).then((c) => c.put('/index.html', copy));
+            caches.open(CACHE_VERSION).then((c) => c.put(SHELL_INDEX, copy));
           }
           return res;
         })
         .catch(async () => {
-          const cached = await caches.match('/index.html', MATCH_OPTS);
+          const cached = await caches.match(SHELL_INDEX, MATCH_OPTS);
           return (
             cached ??
             new Response('<!doctype html><title>Offline</title><p>Fourth Down Edge is offline.</p>', {
@@ -84,7 +87,9 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Static assets: cache-first (content-hashed filenames are immutable).
-  if (/\.(js|css|png|svg|woff2?)$/.test(url.pathname) || url.pathname === '/manifest.webmanifest') {
+  // The manifest check is suffix-based (not an exact root path) so it still
+  // matches when the app is deployed under a subpath.
+  if (/\.(js|css|png|svg|woff2?)$/.test(url.pathname) || url.pathname.endsWith('manifest.webmanifest')) {
     event.respondWith(
       caches.match(req, MATCH_OPTS).then((cached) => {
         if (cached) return cached;

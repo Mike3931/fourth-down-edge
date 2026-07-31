@@ -1,0 +1,97 @@
+name: Deploy
+
+# Tests and the database migration check gate the deploy job — nothing
+# reaches GitHub Pages without passing the same suite documented in the
+# README. Pull requests run the test job as a check but never deploy;
+# only a push to master (or a manual dispatch) can publish.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch: {}
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Unit & integration tests (calculations, api-client)
+        run: npm test
+
+      - name: Database migration validation (real Postgres engine, no Docker)
+        run: npm run test:db
+
+      - name: Typecheck & build
+        run: npm run build
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end journey test
+        run: npx playwright test
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # GitHub Pages project sites are served under /<repo-name>/, not the
+      # domain root, so this build uses --base=/fourth-down-edge/ (see
+      # apps/web/package.json's build:pages script). The default `npm run
+      # build` (root base) is for root-domain hosts like Vercel/Netlify —
+      # do not swap this step for that one.
+      - name: Build for GitHub Pages
+        run: npm run build:pages -w @fde/web
+
+      # GitHub Pages has no server-side rewrite rule for a project site, so a
+      # direct navigation or refresh on a client-side route (e.g. /slate)
+      # would 404 without this: GitHub Pages serves 404.html (verbatim here)
+      # for any unmatched path, the SPA boots from it, and React Router's
+      # basename resolves the real URL from window.location. Verified
+      # locally against a server that reproduces this exact behavior.
+      - name: Add SPA fallback for client-side routing
+        run: cp apps/web/dist/index.html apps/web/dist/404.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

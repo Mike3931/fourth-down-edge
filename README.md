@@ -1,7 +1,12 @@
 # Fourth Down Edge
 
+[![Deploy](https://github.com/Mike3931/fourth-down-edge/actions/workflows/deploy.yml/badge.svg)](https://github.com/Mike3931/fourth-down-edge/actions/workflows/deploy.yml)
+
 A private NFL probability, pricing, research, and bankroll **decision-support** platform, styled as an
 institutional quantitative research terminal.
+
+**Live demo:** https://mike3931.github.io/fourth-down-edge/ — redeploys automatically from `master`
+once the full test suite passes (see `.github/workflows/deploy.yml`).
 
 **What it is not:** a sportsbook, a gambling entertainment app, an automated betting bot, or an AI pick
 generator. It never places wagers, never connects to a sportsbook, never stores sportsbook credentials,
