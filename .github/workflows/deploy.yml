@@ -87,6 +87,17 @@ jobs:
       - name: Migrations apply to PostgreSQL
         run: uv run alembic upgrade head
 
+      # Proves the data migration against a table that already has rows.
+      # A fresh-database migration cannot catch NOT-NULL-without-default or
+      # a wrong legacy-state mapping.
+      - name: Upgrade migration from the prior revision (PostgreSQL)
+        run: uv run pytest tests/test_migration_upgrade.py -v
+
+      - name: Downgrade and re-upgrade
+        run: |
+          uv run alembic downgrade 34134455937d
+          uv run alembic upgrade head
+
       # Network-marked tests download real provider data; they are excluded so
       # CI does not depend on an external service being up.
       - name: Tests

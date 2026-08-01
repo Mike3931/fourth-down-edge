@@ -1,15 +1,14 @@
 """initial canonical schema
 
 Revision ID: c6e894509ff2
-Revises: 
+Revises:
 Create Date: 2026-08-01 07:50:48.883845
 
 """
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision: str = 'c6e894509ff2'
 down_revision: str | None = None

@@ -373,7 +373,28 @@ class ScheduledJobRun(Base):
     scheduled_for: Mapped[datetime | None] = mapped_column()
     started_at: Mapped[datetime | None] = mapped_column()
     completed_at: Mapped[datetime | None] = mapped_column()
+    # Legacy single-state column, retained so historical rows stay queryable
+    # and so the migration mapping can be audited after the fact.
     status: Mapped[str] = mapped_column(String(16))  # queued|running|finished|failed|skipped
+
+    # Two independent axes, promoted out of free text into typed columns.
+    job_outcome: Mapped[str | None] = mapped_column(String(24), index=True)
+    domain_state: Mapped[str | None] = mapped_column(String(24), index=True)
+
+    # --- recovery lineage -------------------------------------------------
+    root_run_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    recovery_of_run_id: Mapped[str | None] = mapped_column(String(64))
+    recovery_sequence: Mapped[int] = mapped_column(Integer, default=0)
+    logical_slot: Mapped[datetime | None] = mapped_column()
+    original_idempotency_key: Mapped[str | None] = mapped_column(String(160))
+    recovery_reason: Mapped[str | None] = mapped_column(Text)
+    reconciled_at: Mapped[datetime | None] = mapped_column()
+    prior_effects_detected: Mapped[bool | None] = mapped_column(Boolean)
+    replay_decision: Mapped[str | None] = mapped_column(String(40))
+    administrative_override: Mapped[bool] = mapped_column(Boolean, default=False)
+    override_operator: Mapped[str | None] = mapped_column(String(80))
+    override_reason: Mapped[str | None] = mapped_column(Text)
+
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     provider_calls: Mapped[int] = mapped_column(Integer, default=0)
     records_received: Mapped[int] = mapped_column(Integer, default=0)
@@ -394,3 +415,24 @@ class ProviderQuotaUsage(Base):
     calls_remaining: Mapped[int | None] = mapped_column(Integer)
     quota_limit: Mapped[int | None] = mapped_column(Integer)
     last_response_at: Mapped[datetime | None] = mapped_column()
+
+
+class MigrationAudit(Base):
+    """Record of a semantic reinterpretation performed by a migration.
+
+    Kept so a state split can be explained after the fact: which rule ran,
+    what the original value was, and whether the mapping was exact or a
+    conservative default. Deliberately carries no payload content.
+    """
+
+    __tablename__ = "migration_audit"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    revision: Mapped[str] = mapped_column(String(48), index=True)
+    table_name: Mapped[str] = mapped_column(String(64))
+    record_id: Mapped[str] = mapped_column(String(96))
+    original_value: Mapped[str | None] = mapped_column(String(48))
+    new_outcome: Mapped[str | None] = mapped_column(String(24))
+    new_domain_state: Mapped[str | None] = mapped_column(String(24))
+    mapping_rule: Mapped[str] = mapped_column(String(120))
+    exact: Mapped[bool] = mapped_column(Boolean)
+    migrated_at: Mapped[datetime] = mapped_column()
