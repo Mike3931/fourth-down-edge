@@ -11,7 +11,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, Float, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Float,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fde_api.db.models import Base
@@ -378,8 +387,14 @@ class ScheduledJobRun(Base):
     status: Mapped[str] = mapped_column(String(16))  # queued|running|finished|failed|skipped
 
     # Two independent axes, promoted out of free text into typed columns.
+    # These are AUTHORITATIVE; `status` above is compatibility-only.
     job_outcome: Mapped[str | None] = mapped_column(String(24), index=True)
     domain_state: Mapped[str | None] = mapped_column(String(24), index=True)
+
+    # Where the row's state came from. Enforced against domain_state by a
+    # CHECK constraint so no ORM path, bulk insert, or raw SQL can create a
+    # live row claiming unreconstructable history.
+    state_origin: Mapped[str] = mapped_column(String(20), default="LIVE", index=True)
 
     # --- recovery lineage -------------------------------------------------
     root_run_id: Mapped[str | None] = mapped_column(String(64), index=True)
@@ -402,6 +417,20 @@ class ScheduledJobRun(Base):
     error_summary: Mapped[str | None] = mapped_column(Text)
     code_commit: Mapped[str] = mapped_column(String(48))
     created_at: Mapped[datetime] = mapped_column()
+    __table_args__ = (
+        # UNKNOWN_LEGACY is reconstructable-history only. A LIVE row may never
+        # carry it, whatever writes the row.
+        CheckConstraint(
+            "domain_state <> 'UNKNOWN_LEGACY' OR state_origin = 'MIGRATED_LEGACY'",
+            name="ck_unknown_legacy_requires_migrated_origin",
+        ),
+        CheckConstraint(
+            "state_origin IN ('LIVE', 'MIGRATED_LEGACY')",
+            name="ck_state_origin_vocabulary",
+        ),
+        # One active member per (root, logical slot): no parallel branches.
+        Index("ix_run_root_slot", "root_run_id", "logical_slot"),
+    )
 
 
 class ProviderQuotaUsage(Base):

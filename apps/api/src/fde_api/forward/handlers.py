@@ -42,59 +42,17 @@ from fde_api.db.forward_models import (
 from fde_api.forward.cohort import ProviderMode
 from fde_api.forward.consensus import build_all_consensus_for_game, closing_consensus
 from fde_api.forward.scheduler import JobContext, JobResult, JobSkipped
+from fde_api.forward.state import (
+    DomainState,
+    IllegalDomainStateError,
+    Outcome,
+)
 from fde_api.forward.weather import (
     NwsClient,
     NwsUnavailable,
     VenueNotSupported,
     capture_forecast_for_game,
 )
-
-
-class Outcome(StrEnum):
-    """How the scheduler EXECUTION went.
-
-    Deliberately independent of data quality: the reliability dashboard is
-    built on this, so "the job ran fine but the data was thin" must not be
-    counted as an execution failure.
-    """
-
-    SUCCESS = "SUCCESS"
-    SUCCESS_WITH_WARNINGS = "SUCCESS_WITH_WARNINGS"
-    SKIPPED = "SKIPPED"
-    RETRYABLE_FAILURE = "RETRYABLE_FAILURE"
-    TERMINAL_FAILURE = "TERMINAL_FAILURE"
-    INTERRUPTED = "INTERRUPTED"
-    RUNNING = "RUNNING"
-
-
-class DomainState(StrEnum):
-    """What the DATA looks like, independent of execution.
-
-    A job can execute perfectly and still leave the domain incomplete —
-    a missing provider key is the canonical example.
-    """
-
-    COMPLETE = "COMPLETE"
-    DATA_INCOMPLETE = "DATA_INCOMPLETE"
-    NOT_YET_AVAILABLE = "NOT_YET_AVAILABLE"
-    NOT_APPLICABLE = "NOT_APPLICABLE"
-    STALE = "STALE"
-    SUPPRESSED = "SUPPRESSED"
-    NO_ELIGIBLE_RECORDS = "NO_ELIGIBLE_RECORDS"
-
-    # Migrated history only. Legacy rows recorded an execution status that
-    # does not establish what the DATA looked like — "finished" says the job
-    # ran, not that the domain was complete. New runs may never emit this.
-    UNKNOWN_LEGACY = "UNKNOWN_LEGACY"
-
-
-# States a live handler is permitted to produce. UNKNOWN_LEGACY is excluded:
-# it exists solely to represent history we cannot reconstruct.
-LIVE_DOMAIN_STATES = frozenset(DomainState) - {DomainState.UNKNOWN_LEGACY}
-
-
-class IllegalDomainStateError(ValueError):
-    """Raised when live code attempts to emit a migration-only state."""
 
 
 class WeatherStatus(StrEnum):

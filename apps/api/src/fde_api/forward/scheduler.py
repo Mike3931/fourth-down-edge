@@ -42,9 +42,22 @@ from sqlalchemy.orm import Session
 from fde_api.db.forward_models import ScheduledJobRun
 from fde_api.forward.cohort import Cohort, ProviderMode
 from fde_api.forward.modes import DataMode
+from fde_api.forward.state import DomainState, Outcome, StateOrigin, apply_state
 from fde_api.util import current_code_commit, utc_now
 
 log = logging.getLogger("fde.scheduler")
+
+# Execution-status -> authoritative outcome. The scheduler still tracks its
+# own lifecycle vocabulary internally; this is the single translation point.
+_JOB_STATUS_TO_OUTCOME: dict[JobStatus, Outcome] = {}
+
+
+def _domain_from(result: JobResult | None) -> DomainState | None:
+    """Read the domain state a handler reported, if any."""
+    if result is None:
+        return None
+    raw = (result.detail or {}).get("domain_state")
+    return DomainState(raw) if raw else None
 
 
 class Clock(Protocol):
@@ -83,6 +96,9 @@ class JobStatus(StrEnum):
     SKIPPED = "skipped"
     INTERRUPTED = "interrupted"
     DEAD_LETTER = "dead_letter"
+
+
+_JOB_STATUS_TO_OUTCOME.update({})  # populated after JobStatus is defined
 
 
 class CatchUpPolicy(StrEnum):
@@ -154,6 +170,18 @@ class JobSkipped(RuntimeError):
     """Raised by a handler to record a deliberate no-op."""
 
 
+_JOB_STATUS_TO_OUTCOME.update(
+    {
+        JobStatus.RUNNING: Outcome.RUNNING,
+        JobStatus.FINISHED: Outcome.SUCCESS,
+        JobStatus.FAILED: Outcome.RETRYABLE_FAILURE,
+        JobStatus.SKIPPED: Outcome.SKIPPED,
+        JobStatus.INTERRUPTED: Outcome.INTERRUPTED,
+        JobStatus.DEAD_LETTER: Outcome.TERMINAL_FAILURE,
+    }
+)
+
+
 def slot_for(interval: timedelta, now: datetime) -> datetime:
     """Floor `now` to the job's logical slot.
 
@@ -218,6 +246,39 @@ class Scheduler:
     def shutting_down(self) -> bool:
         return self._shutdown
 
+    def _recovery_lineage(
+        self, prior: ScheduledJobRun, run_id: str, key: str, reason: str
+    ) -> dict[str, Any]:
+        """A recovery inherits the root and slot, and increments by one."""
+        return {
+            "root_run_id": prior.root_run_id or prior.id,
+            "recovery_of_run_id": prior.id,
+            "recovery_sequence": (prior.recovery_sequence or 0) + 1,
+            "logical_slot": prior.logical_slot or prior.scheduled_for,
+            "original_idempotency_key": prior.original_idempotency_key or prior.idempotency_key,
+            "recovery_reason": reason,
+            "reconciled_at": self.clock.now(),
+            "prior_effects_detected": None,
+            "replay_decision": None,
+            "administrative_override": False,
+            "override_operator": None,
+            "override_reason": None,
+        }
+
+    def recovery_chain(self, root_run_id: str) -> list[ScheduledJobRun]:
+        """Chain members in chronological order."""
+        with self._session() as s:
+            rows = list(
+                s.scalars(
+                    select(ScheduledJobRun)
+                    .where(ScheduledJobRun.root_run_id == root_run_id)
+                    .order_by(ScheduledJobRun.recovery_sequence, ScheduledJobRun.created_at)
+                )
+            )
+            for r in rows:
+                s.expunge(r)
+        return rows
+
     def reconcile_startup(self) -> dict[str, Any]:
         """Mark runs orphaned by a crash, so they are never counted as
         finished and never silently re-execute under the same key."""
@@ -252,28 +313,50 @@ class Scheduler:
         """Atomically claim a slot. Returns the run id, or None if another
         worker already holds it (UNIQUE constraint on idempotency_key)."""
         run_id = f"run_{uuid.uuid4().hex[:16]}"
+        # Lineage is populated immediately, not lazily when something fails:
+        # an initial run is a complete chain of one, and leaving the fields
+        # null until an interruption makes the chain unqueryable.
+        lineage = self._initial_lineage(run_id, key, slot)
         try:
             with self._session() as s:
-                s.add(
-                    ScheduledJobRun(
-                        id=run_id,
-                        job_kind=job.name,
-                        idempotency_key=key,
-                        data_mode=self.data_mode.value,
-                        scheduled_for=slot,
-                        started_at=self.clock.now(),
-                        status=JobStatus.RUNNING.value,
-                        retry_count=attempt - 1,
-                        provider_calls=0,
-                        records_received=0,
-                        records_written=0,
-                        code_commit=current_code_commit(),
-                        created_at=self.clock.now(),
-                    )
+                run = ScheduledJobRun(
+                    id=run_id,
+                    job_kind=job.name,
+                    idempotency_key=key,
+                    data_mode=self.data_mode.value,
+                    scheduled_for=slot,
+                    started_at=self.clock.now(),
+                    retry_count=attempt - 1,
+                    provider_calls=0,
+                    records_received=0,
+                    records_written=0,
+                    code_commit=current_code_commit(),
+                    created_at=self.clock.now(),
+                    **lineage,
                 )
+                apply_state(run, outcome=Outcome.RUNNING, state_origin=StateOrigin.LIVE)
+                s.add(run)
         except IntegrityError:
             return None
         return run_id
+
+    @staticmethod
+    def _initial_lineage(run_id: str, key: str, slot: datetime) -> dict[str, Any]:
+        """An initial run is its own root at sequence zero."""
+        return {
+            "root_run_id": run_id,
+            "recovery_of_run_id": None,
+            "recovery_sequence": 0,
+            "logical_slot": slot,
+            "original_idempotency_key": key,
+            "recovery_reason": None,
+            "reconciled_at": None,
+            "prior_effects_detected": False,
+            "replay_decision": None,
+            "administrative_override": False,
+            "override_operator": None,
+            "override_reason": None,
+        }
 
     def _recovery_key(self, key: str) -> str:
         """Return a fresh key when the prior run for this slot was interrupted.
@@ -395,8 +478,9 @@ class Scheduler:
             row = s.get(ScheduledJobRun, run_id)
             if row is None:
                 return
-            row.status = status.value
             row.completed_at = self.clock.now()
+            apply_state(row, outcome=_JOB_STATUS_TO_OUTCOME[status],
+                        domain_state=_domain_from(result))
             if result is not None:
                 row.records_received = result.records_read
                 row.records_written = result.records_written

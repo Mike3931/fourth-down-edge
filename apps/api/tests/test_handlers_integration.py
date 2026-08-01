@@ -27,8 +27,6 @@ from fde_api.forward.cohort import Cohort, ProviderMode
 from fde_api.forward.handlers import (
     HANDLERS,
     JOB_DEPENDENCY_RULES,
-    DomainState,
-    Outcome,
     WeatherStatus,
     register_all,
 )
@@ -43,6 +41,7 @@ from fde_api.forward.ledger import HealthGate, evaluate_candidate
 from fde_api.forward.policy import build_policy_draft, freeze_policy
 from fde_api.forward.schedule import ingest_schedule
 from fde_api.forward.scheduler import FrozenClock, JobStatus, Scheduler
+from fde_api.forward.state import DomainState, Outcome
 from fde_api.forward.venues import seed_venues
 
 KICK = datetime(2026, 9, 13, 17, 0, tzinfo=UTC)

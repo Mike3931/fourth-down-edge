@@ -65,18 +65,14 @@ class TestNoDomainInferenceFromExecutionStatus:
 
 class TestUnknownLegacyIsMigrationOnly:
     def test_live_handler_result_rejects_it(self) -> None:
-        from fde_api.forward.handlers import (
-            DomainState,
-            HandlerResult,
-            IllegalDomainStateError,
-            Outcome,
-        )
+        from fde_api.forward.handlers import HandlerResult
+        from fde_api.forward.state import DomainState, IllegalDomainStateError, Outcome
 
         with pytest.raises(IllegalDomainStateError, match="migrated history"):
             HandlerResult(outcome=Outcome.SUCCESS, domain_state=DomainState.UNKNOWN_LEGACY)
 
     def test_live_domain_states_excludes_it(self) -> None:
-        from fde_api.forward.handlers import LIVE_DOMAIN_STATES, DomainState
+        from fde_api.forward.state import LIVE_DOMAIN_STATES, DomainState
 
         assert DomainState.UNKNOWN_LEGACY not in LIVE_DOMAIN_STATES
         assert len(LIVE_DOMAIN_STATES) == len(DomainState) - 1
