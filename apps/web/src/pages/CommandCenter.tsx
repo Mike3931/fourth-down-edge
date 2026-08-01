@@ -4,7 +4,7 @@ import { brierScore, logLoss } from '@fde/calculations';
 import { useDataset, useRecommendations } from '../lib/api';
 import { useStore } from '../lib/store';
 import { fmtAgo, fmtMarketLine, fmtMoney, fmtOdds, fmtPct, fmtSignedPct } from '../lib/format';
-import { gameLabel } from '../lib/joins';
+import { gameLabel, modelVersionLabel } from '../lib/joins';
 
 export default function CommandCenter() {
   const { data: ds, isLoading, error } = useDataset();
@@ -89,7 +89,11 @@ export default function CommandCenter() {
         <Stat label="Weekly exposure" value={fmtPct(store.weeklyExposurePct)} sub={`${fmtMoney(store.openStake)} open`} />
         <Stat label="Avg model edge" value={fmtSignedPct(avgEdge)} sub="BET + WATCH only" />
         <Stat label="Avg closing-line value" value={fmtSignedPct(avgClv / 100)} sub={`${settled.length} settled demo bets`} />
-        <Stat label="Model version" value={<span className="text-model">ensemble 0.3.0-demo</span>} mono={false} />
+        <Stat
+          label="Model version"
+          value={<span className="text-model">{modelVersionLabel(ds, ds.predictions.find((p) => p.isOfficial)?.modelVersionId)}</span>}
+          mono={false}
+        />
         <Stat label="Data-health score" value={fmtPct(healthScore, 0)} tone={healthScore > 0.85 ? 'positive' : 'warning'} sub={`${healthOk}/${ds.feedStatuses.length} feeds current`} />
         <Stat label="Backtest log loss / Brier" value={`${logLoss(btPairs).toFixed(3)} / ${brierScore(btPairs).toFixed(3)}`} sub="synthetic demo backtest" />
       </section>
@@ -97,7 +101,7 @@ export default function CommandCenter() {
       {/* Priority queue */}
       <Card>
         <CardHeader title="Priority queue" hint="Conditions requiring analyst attention, derived from live data checks" />
-        <div className="grid gap-2 p-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 p-3 md:grid-cols-2 xl:grid-cols-3">
           {queue.length === 0 ? (
             <EmptyState title="No outstanding attention items" />
           ) : (

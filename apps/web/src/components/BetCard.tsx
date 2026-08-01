@@ -3,7 +3,7 @@ import { Button, Card, CardHeader, Mono, Pill, RecBadge, SectionLabel, Term, cn 
 import { americanToDecimal, americanToImpliedProbability } from '@fde/calculations';
 import type { Recommendation } from '@fde/shared-types';
 import type { DemoDataset } from '@fde/api-client';
-import { gameLabel, gameLabelLong } from '../lib/joins';
+import { gameLabel, gameLabelLong, modelVersionLabel } from '../lib/joins';
 import { fmtAgo, fmtMarketLine, fmtMoney, fmtOdds, fmtPct, fmtSignedPct, fmtUtc } from '../lib/format';
 import { useStore } from '../lib/store';
 
@@ -49,7 +49,7 @@ export default function BetCard({ ds, rec }: { ds: DemoDataset; rec: Recommendat
         hint={gameLabelLong(ds, rec.gameId)}
         right={<RecBadge status={rec.status} />}
       />
-      <div className="grid gap-4 p-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-3">
         {/* Pricing column */}
         <div>
           <SectionLabel>Price &amp; probabilities</SectionLabel>
@@ -97,7 +97,7 @@ export default function BetCard({ ds, rec }: { ds: DemoDataset; rec: Recommendat
           </div>
           <div className="mt-3 space-y-1 text-[11px] text-ink-faint">
             <p>Data completeness: <Mono>{pred ? fmtPct(pred.dataCompletenessScore, 0) : '—'}</Mono></p>
-            <p>Model version: <Mono className="text-model">{pred?.modelVersionId ?? '—'} (demo)</Mono></p>
+            <p>Model version: <Mono className="text-model">{modelVersionLabel(ds, pred?.modelVersionId)} (demo)</Mono></p>
             <p>Prediction as-of: <Mono>{pred ? fmtUtc(pred.asOfAt) : '—'}</Mono></p>
             <p>
               Price confirmed:{' '}

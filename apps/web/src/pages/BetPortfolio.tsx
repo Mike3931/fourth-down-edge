@@ -5,7 +5,7 @@ import type { Bet } from '@fde/shared-types';
 import { useDataset } from '../lib/api';
 import { useStore } from '../lib/store';
 import { fmtMarketLine, fmtMoney, fmtOdds, fmtPct, fmtSignedMoney, fmtUtc } from '../lib/format';
-import { gameById, gameLabel, teamById } from '../lib/joins';
+import { exposureMaps, gameLabel, teamById } from '../lib/joins';
 
 type Tab = 'OPEN' | 'SETTLED' | 'ALL';
 
@@ -32,7 +32,7 @@ export default function BetPortfolio() {
   const avgClv = clvBets.length ? clvBets.reduce((a, b) => a + (b.closingLineValuePct ?? 0), 0) / clvBets.length : 0;
 
   const bankrollCurve = useMemo(() => {
-    let bal = 10_000;
+    let bal = ds?.bankrollAccount.startingBalance ?? 0;
     const curve = [bal];
     for (const b of [...settled].sort((x, y) => (x.settledAt ?? '').localeCompare(y.settledAt ?? ''))) {
       if (b.result === 'WIN') bal += (b.payout ?? 0) - b.stake;
@@ -40,18 +40,14 @@ export default function BetPortfolio() {
       curve.push(bal);
     }
     return curve;
-  }, [settled]);
+  }, [settled, ds]);
 
+  // Shared with the recommendation engine's staking-cap inputs (see
+  // lib/api.ts's useExposureContext) so both read one definition of
+  // "current exposure" instead of two implementations that could drift.
   const teamExposure = useMemo(() => {
-    const m = new Map<string, number>();
-    if (!ds) return m;
-    for (const b of open) {
-      const g = gameById(ds, b.gameId);
-      if (!g) continue;
-      const teamId = b.selection === 'HOME' ? g.homeTeamId : b.selection === 'AWAY' ? g.awayTeamId : null;
-      if (teamId) m.set(teamId, (m.get(teamId) ?? 0) + b.stake);
-    }
-    return m;
+    if (!ds) return new Map<string, number>();
+    return new Map(Object.entries(exposureMaps(ds, open).byTeam));
   }, [open, ds]);
 
   if (isLoading) return <LoadingState label="Loading portfolio…" />;
@@ -205,7 +201,7 @@ export default function BetPortfolio() {
         {actionError ? <p role="alert" className="px-3 py-2 text-xs text-bad">{actionError}</p> : null}
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader title="Exposure by team" hint="Weekly per-team cap 1.50% of bankroll" />
           {teamExposure.size === 0 ? (

@@ -61,7 +61,7 @@ export default function InjuryCenter() {
     <div className="space-y-4">
       <Card>
         <CardHeader title="Injury highlights" hint="Player availability is probabilistic: inactive / active-restricted / active-ordinary" />
-        <div className="grid gap-2 p-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 p-3 md:grid-cols-2 xl:grid-cols-3">
           {highlights.length === 0 ? (
             <EmptyState title="No high-priority injury situations" />
           ) : (

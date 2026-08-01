@@ -62,7 +62,7 @@ export default function ModelAudit() {
         </div>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {ds.modelVersions.map((m) => (
           <Card key={m.id}>
             <CardHeader

@@ -5,10 +5,15 @@
  *
  * This is not a substitute for `supabase db push` against a real project —
  * it stubs the `auth` schema (auth.users, auth.uid(), auth.role()) that
- * Supabase's GoTrue normally provides, just enough for our RLS policies to
- * parse and execute. What it DOES catch, with a real Postgres parser and
- * planner: DDL syntax errors, constraint/type errors, trigger and policy
- * syntax errors, and it exercises the append-only guard triggers end to end.
+ * Supabase's GoTrue normally provides, and the `anon`/`authenticated`
+ * database roles Supabase pre-creates, just enough for our RLS policies to
+ * parse and actually be enforced. What it DOES catch, with a real Postgres
+ * parser and planner: DDL syntax errors, constraint/type errors, trigger and
+ * policy syntax errors; it exercises the append-only guard triggers end to
+ * end; and — critically, since RLS does not apply to table owners by
+ * default — it runs queries as a genuinely non-owner `authenticated` role to
+ * confirm the policies actually isolate one user's data from another's, not
+ * just that policies exist.
  *
  * Run: node supabase/test/validate-migrations.mjs
  */
@@ -113,6 +118,66 @@ if (allOk) {
   } catch (err) {
     console.log(`OK   settlement guard blocked direct re-settlement (${err.message.split('\n')[0]})`);
   }
+
+  // --- RLS enforcement: policies must actually isolate users, not just exist ---
+  const USER_B = '44444444-4444-4444-4444-444444444444';
+  await db.exec(`
+    create role anon nologin;
+    create role authenticated nologin;
+    grant usage on schema public to anon, authenticated;
+    grant select, insert, update, delete on all tables in schema public to anon, authenticated;
+    insert into auth.users (id, email) values ('${USER_B}', 'userb@example.com');
+    insert into users (id, email) values ('${USER_B}', 'userb@example.com');
+    insert into manual_book_prices (id, user_id, game_id, sportsbook, market, selection, american, price_observed_at, entered_at, confirmed_visible)
+      values (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'g1', 'bet365 (manual entry)', 'SPREAD', 'HOME', -110, now(), now(), true);
+  `);
+
+  async function checkRls(label, expectOk, fn) {
+    try {
+      const ok = await fn();
+      if (ok === expectOk) console.log(`OK   ${label}`);
+      else { console.log(`FAIL ${label}: got ${ok}, expected ${expectOk}`); allOk = false; }
+    } catch (err) {
+      if (!expectOk) console.log(`OK   ${label} (${err.message.split('\n')[0]})`);
+      else { console.log(`FAIL ${label}: threw ${err.message.split('\n')[0]}`); allOk = false; }
+    }
+  }
+
+  await db.exec(`
+    set role authenticated;
+    select set_config('request.jwt.claim.sub', '${USER_B}', false);
+    select set_config('request.jwt.claim.role', 'authenticated', false);
+  `);
+  await checkRls('RLS: a different authenticated user sees ZERO of another user\'s manual_book_prices rows', true, async () => {
+    const r = await db.query(`select count(*)::int as n from manual_book_prices`);
+    return r.rows[0].n === 0;
+  });
+  await checkRls('RLS: a different authenticated user sees ZERO of another user\'s bankroll_accounts rows', true, async () => {
+    const r = await db.query(`select count(*)::int as n from bankroll_accounts`);
+    return r.rows[0].n === 0;
+  });
+  await checkRls('RLS: a user cannot INSERT a manual price claiming to be a different user', false, async () => {
+    await db.query(
+      `insert into manual_book_prices (id, user_id, game_id, sportsbook, market, selection, american, price_observed_at, entered_at, confirmed_visible) values (gen_random_uuid(),'11111111-1111-1111-1111-111111111111','g1','bet365 (manual entry)','SPREAD','AWAY',-120, now(), now(), true)`,
+    );
+    return true;
+  });
+  await checkRls('RLS: shared reference data (teams) remains readable across users', true, async () => {
+    const r = await db.query(`select count(*)::int as n from teams`);
+    return r.rows[0].n === 2;
+  });
+
+  await db.exec(`
+    set role anon;
+    select set_config('request.jwt.claim.sub', '', false);
+    select set_config('request.jwt.claim.role', 'anon', false);
+  `);
+  await checkRls('RLS: an unauthenticated session sees ZERO user-owned manual_book_prices rows', true, async () => {
+    const r = await db.query(`select count(*)::int as n from manual_book_prices`);
+    return r.rows[0].n === 0;
+  });
+
+  await db.exec(`reset role;`);
 }
 
 console.log('---');

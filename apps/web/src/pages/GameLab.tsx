@@ -14,7 +14,7 @@ import { useStore } from '../lib/store';
 import { CoverByLineChart, DistributionChart } from '../components/charts';
 import BetCard from '../components/BetCard';
 import { fmtKickoff, fmtLine, fmtNum, fmtOdds, fmtPct, fmtSigned, fmtUtc } from '../lib/format';
-import { gameById, playerById, roofLabel, stadiumById, teamById } from '../lib/joins';
+import { gameById, modelVersionLabel, playerById, roofLabel, stadiumById, teamById } from '../lib/joins';
 import { Rng } from '@fde/api-client';
 
 const FACTOR_NAMES = [
@@ -165,7 +165,7 @@ export default function GameLab() {
               <Pill tone="neutral">
                 ML <Mono>{ml ? `${fmtOdds(ml.awayAmerican, store.settings.oddsFormat)} / ${fmtOdds(ml.homeAmerican, store.settings.oddsFormat)}` : '—'}</Mono>
               </Pill>
-              <Pill tone="model">model mv_ensemble 0.3.0-demo</Pill>
+              <Pill tone="model">model {modelVersionLabel(ds, pred.modelVersionId)}</Pill>
               <Pill tone="neutral" title="Prediction cutoff (as-of) timestamp">as-of <Mono>{fmtUtc(pred.asOfAt)}</Mono></Pill>
               <Pill tone={pred.dataCompletenessScore >= 0.85 ? 'ok' : 'bad'}>
                 data {fmtPct(pred.dataCompletenessScore, 0)}
@@ -203,7 +203,7 @@ export default function GameLab() {
       </section>
 
       {/* Distributions */}
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card className="p-3">
           <SectionLabel>Scoring-margin distribution (home − away)</SectionLabel>
           <DistributionChart
@@ -244,7 +244,7 @@ export default function GameLab() {
       </div>
 
       {/* Key numbers + components */}
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card>
           <CardHeader title="Probability around key football numbers" />
           <div className="overflow-x-auto">
@@ -329,7 +329,7 @@ export default function GameLab() {
           hint="Scenarios never overwrite the official production prediction"
           right={<Pill tone="warn">EXPLORATORY — NOT PRODUCTION</Pill>}
         />
-        <div className="grid gap-4 p-4 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-3">
           <fieldset className="space-y-2">
             <legend className="mb-1 text-xs font-medium text-ink-muted">Assumptions</legend>
             <label className="flex items-center gap-2 text-xs text-ink">

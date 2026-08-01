@@ -10,10 +10,14 @@ import {
 import {
   ageMinutes,
   americanToImpliedProbability,
+  assertNoLookahead,
   breakEvenProbability,
   computeStake,
   decideRecommendation,
   expectedValuePerDollar,
+  filterToCutoff,
+  isModelUsableAtCutoff,
+  isUsableAtCutoff,
   marginDistribution,
   noVigProbabilities,
   probabilityToFairAmerican,
@@ -53,29 +57,116 @@ export interface CandidateEvaluation {
 /** Shrink model probability toward market no-vig prob (conservatism). */
 const MARKET_SHRINK = 0.35;
 
+/**
+ * Latest snapshot for a market, optionally restricted to what was actually
+ * observable at a prediction cutoff. UI display call sites (Weekly Slate,
+ * Market Monitor, Game Lab headers) omit cutoffAt and see the current state,
+ * same as before this parameter existed. The recommendation engine's own
+ * calls below always pass ds.demoNow, so odds used to price a recommendation
+ * can never be a record the app hadn't actually observed yet — point-in-time
+ * integrity enforced live, not just unit-tested in isolation.
+ */
 export function latestSnapshot(
   odds: OddsSnapshot[],
   gameId: string,
   market: MarketType,
+  cutoffAt?: string,
 ): OddsSnapshot | undefined {
-  return odds
-    .filter((o) => o.gameId === gameId && o.market === market)
-    .sort((a, b) => a.observedAt.localeCompare(b.observedAt))
-    .at(-1);
+  const inScope = odds.filter((o) => o.gameId === gameId && o.market === market);
+  const usable = cutoffAt === undefined ? inScope : filterToCutoff(inScope, cutoffAt);
+  return usable.sort((a, b) => a.observedAt.localeCompare(b.observedAt)).at(-1);
 }
 
-export function evaluateCandidates(ds: DemoDataset, gameId: string): CandidateEvaluation[] {
+function openingSnapshot(
+  odds: OddsSnapshot[],
+  gameId: string,
+  market: MarketType,
+  cutoffAt?: string,
+): OddsSnapshot | undefined {
+  return odds.find(
+    (o) => o.gameId === gameId && o.market === market && o.isOpening &&
+      (cutoffAt === undefined || isUsableAtCutoff(o, cutoffAt)),
+  );
+}
+
+/** No-vig probability required by a specific selection at a specific snapshot. */
+function noVigProbabilityForSelection(snapshot: OddsSnapshot, selection: SelectionSide): number | undefined {
+  if (selection === 'HOME' || selection === 'AWAY') {
+    if (snapshot.homeAmerican === 0 && snapshot.awayAmerican === 0) return undefined;
+    const [homeNV, awayNV] = noVigProbabilities([snapshot.homeAmerican, snapshot.awayAmerican]);
+    return selection === 'HOME' ? homeNV : awayNV;
+  }
+  if (snapshot.overAmerican === undefined || snapshot.underAmerican === undefined) return undefined;
+  const [overNV, underNV] = noVigProbabilities([snapshot.overAmerican, snapshot.underAmerican]);
+  return selection === 'OVER' ? overNV : underNV;
+}
+
+/**
+ * True when the market has drifted in this selection's favor since opening
+ * — i.e. the price has been improving, even if it has not yet crossed the
+ * qualifying threshold. Uses the same opening/current snapshots Market
+ * Monitor already displays as line movement.
+ *
+ * For SPREAD/TOTAL this compares the point line, not the quoted American
+ * odds: this demo dataset's per-snapshot juice is drawn independently at
+ * random (it does not track the line), so a probability computed from juice
+ * alone would mostly be reading noise. The line is where this generator's
+ * genuine movement lives. MONEYLINE has no line to compare, so it falls
+ * back to no-vig probability — though note this dataset generator computes
+ * a single moneyline price once per game and reuses it for every snapshot,
+ * so moneyline movement will never be detected until that's also modeled.
+ */
+export function movingTowardAcceptablePrice(
+  ds: DemoDataset,
+  gameId: string,
+  market: MarketType,
+  selection: SelectionSide,
+  cutoffAt?: string,
+): boolean {
+  const opening = openingSnapshot(ds.oddsSnapshots, gameId, market, cutoffAt);
+  const current = latestSnapshot(ds.oddsSnapshots, gameId, market, cutoffAt);
+  if (!opening || !current || opening.id === current.id) return false;
+
+  if (market === 'MONEYLINE') {
+    const openProb = noVigProbabilityForSelection(opening, selection);
+    const currentProb = noVigProbabilityForSelection(current, selection);
+    if (openProb === undefined || currentProb === undefined) return false;
+    return currentProb < openProb - 0.003; // ignore noise below ~0.3 probability points
+  }
+
+  if (opening.line === undefined || current.line === undefined) return false;
+  const delta = current.line - opening.line; // ignore sub-half-point noise
+  if (Math.abs(delta) < 0.5) return false;
+  if (market === 'SPREAD') {
+    return selection === 'HOME' ? delta > 0 : delta < 0;
+  }
+  // TOTAL: OVER wants the total to fall, UNDER wants it to rise.
+  return selection === 'OVER' ? delta < 0 : delta > 0;
+}
+
+/**
+ * cutoffAt is optional: the web app's direct useCandidates() call omits it
+ * (wants "current" candidates for display, as always). evaluateGame's own
+ * internal call always passes ds.demoNow, so the odds and manual prices
+ * feeding an actual recommendation can never include a record the app
+ * hadn't observed yet as of that cutoff.
+ */
+export function evaluateCandidates(ds: DemoDataset, gameId: string, cutoffAt?: string): CandidateEvaluation[] {
   const pred = ds.predictions.find((p) => p.gameId === gameId && p.isOfficial);
   if (!pred) return [];
   const mDist = marginDistribution(pred.expectedMargin, pred.marginStd);
   const tDist = totalDistribution(pred.expectedTotal, pred.totalStd);
   const out: CandidateEvaluation[] = [];
 
-  const freshManual = (market: MarketType, selection: SelectionSide): ManualBookPrice | undefined =>
-    ds.manualPrices
-      .filter((m) => m.gameId === gameId && m.market === market && m.selection === selection && m.confirmedVisible)
-      .sort((a, b) => a.enteredAt.localeCompare(b.enteredAt))
-      .at(-1);
+  const freshManual = (market: MarketType, selection: SelectionSide): ManualBookPrice | undefined => {
+    const candidates = ds.manualPrices.filter(
+      (m) => m.gameId === gameId && m.market === market && m.selection === selection && m.confirmedVisible,
+    );
+    const inScope = cutoffAt === undefined
+      ? candidates
+      : candidates.filter((m) => isUsableAtCutoff({ observedAt: m.enteredAt }, cutoffAt));
+    return inScope.sort((a, b) => a.enteredAt.localeCompare(b.enteredAt)).at(-1);
+  };
 
   const push = (market: MarketType, selection: SelectionSide, line: number | undefined,
     american: number, modelP: number, marketP: number, pushP: number,
@@ -98,7 +189,7 @@ export function evaluateCandidates(ds: DemoDataset, gameId: string): CandidateEv
   };
 
   // SPREAD
-  const spread = latestSnapshot(ds.oddsSnapshots, gameId, 'SPREAD');
+  const spread = latestSnapshot(ds.oddsSnapshots, gameId, 'SPREAD', cutoffAt);
   if (spread?.line !== undefined) {
     const { cover, push: pushP } = spreadOutcomeProbabilities(mDist, spread.line);
     const awayRes = spreadOutcomeProbabilities(mDist, spread.line); // away covers when home doesn't
@@ -111,7 +202,7 @@ export function evaluateCandidates(ds: DemoDataset, gameId: string): CandidateEv
   }
 
   // TOTAL
-  const total = latestSnapshot(ds.oddsSnapshots, gameId, 'TOTAL');
+  const total = latestSnapshot(ds.oddsSnapshots, gameId, 'TOTAL', cutoffAt);
   if (total?.line !== undefined && total.overAmerican !== undefined && total.underAmerican !== undefined) {
     const { over, push: pushP, under } = totalOutcomeProbabilities(tDist, total.line);
     const [overNV, underNV] = noVigProbabilities([total.overAmerican, total.underAmerican]);
@@ -122,7 +213,7 @@ export function evaluateCandidates(ds: DemoDataset, gameId: string): CandidateEv
   }
 
   // MONEYLINE
-  const ml = latestSnapshot(ds.oddsSnapshots, gameId, 'MONEYLINE');
+  const ml = latestSnapshot(ds.oddsSnapshots, gameId, 'MONEYLINE', cutoffAt);
   if (ml) {
     const [homeNV, awayNV] = noVigProbabilities([ml.homeAmerican, ml.awayAmerican]);
     const mHome = freshManual('MONEYLINE', 'HOME');
@@ -137,9 +228,22 @@ export function evaluateCandidates(ds: DemoDataset, gameId: string): CandidateEv
 export interface EvaluationContext {
   riskControls?: RiskControls;
   bankroll?: number;
+  /**
+   * Portfolio-wide open stake as a fraction of bankroll. Legitimately a
+   * single scalar shared across every game in a batch call — it's a
+   * whole-portfolio total, not per-game.
+   */
   existingWeeklyOpenStakePct?: number;
-  existingGameExposurePct?: number;
-  existingTeamExposurePct?: number;
+  /**
+   * Already-open stake in dollars, keyed by id. Per-game and per-team caps
+   * cannot share one flat percentage across a batch evaluation of many
+   * games — each game needs its own existing-exposure baseline, and each
+   * selection's cap depends on which specific team it backs. Dollar amounts
+   * (not pre-computed percentages) let evaluateGame divide by the bankroll
+   * it's already resolving, so callers don't need to duplicate that math.
+   */
+  existingGameExposureByGame?: Record<string, number>;
+  existingTeamExposureByTeam?: Record<string, number>;
 }
 
 export function evaluateGame(
@@ -152,20 +256,67 @@ export function evaluateGame(
   const game = ds.games.find((g) => g.id === gameId);
   if (!game) throw new Error(`Unknown game ${gameId}`);
   const pred = ds.predictions.find((p) => p.gameId === gameId && p.isOfficial);
-  const candidates = evaluateCandidates(ds, gameId);
+
+  // Prediction cutoff for this evaluation: "right now" in the demo's frozen
+  // clock. Every lookup below is restricted to records observed at or before
+  // this instant — point-in-time integrity enforced live in the pipeline
+  // that actually produces a recommendation, not just unit-tested in
+  // isolation (see @fde/calculations/pointInTime and docs/limitations.md,
+  // "The frozen demo clock").
+  const now = ds.demoNow;
+  try {
+    assertNoLookahead(ds.oddsSnapshots.filter((o) => o.gameId === gameId), now, `odds snapshots for ${gameId}`);
+    assertNoLookahead(ds.weatherSnapshots.filter((w) => w.gameId === gameId), now, `weather snapshots for ${gameId}`);
+    assertNoLookahead(ds.injuryReports.filter((r) => r.gameId === gameId), now, `injury reports for ${gameId}`);
+    assertNoLookahead(ds.availabilitySnapshots.filter((a) => a.gameId === gameId), now, `availability snapshots for ${gameId}`);
+  } catch (err) {
+    // A lookahead violation is a missing/bad critical-data condition, not a
+    // fatal error: degrade this one game to DATA INCOMPLETE (spec principle
+    // "missing critical information must produce Data Incomplete, not a
+    // fabricated recommendation") rather than throwing out of a batch
+    // evaluation and taking every other game down with it.
+    const reason = err instanceof Error ? err.message : String(err);
+    return {
+      id: `rec_${gameId}`,
+      gameId,
+      predictionId: pred?.id ?? 'missing',
+      market: 'SPREAD',
+      selection: 'HOME',
+      american: -110,
+      status: 'DATA INCOMPLETE',
+      modelProbability: 0,
+      conservativeProbability: 0,
+      marketNoVigProbability: 0,
+      breakEvenProbability: 0,
+      edge: 0,
+      evPerDollar: 0,
+      pushProbability: 0,
+      fairAmerican: 0,
+      confidence: 'LOW',
+      stake: null,
+      supportingFactors: [],
+      opposingFactors: [],
+      reasonsToPass: [],
+      invalidationConditions: [],
+      statusReasons: [`Point-in-time integrity violation: ${reason}`],
+      createdAt: now,
+    };
+  }
+
+  const candidates = evaluateCandidates(ds, gameId, now);
   const best = [...candidates].sort((a, b) => b.edge - a.edge)[0];
 
-  const now = ds.demoNow;
-  const spreadSnap = latestSnapshot(ds.oddsSnapshots, gameId, 'SPREAD');
+  const spreadSnap = latestSnapshot(ds.oddsSnapshots, gameId, 'SPREAD', now);
   const priceAge = spreadSnap ? ageMinutes(spreadSnap.observedAt, now) : Infinity;
 
-  const availability = ds.availabilitySnapshots.filter((a) => a.gameId === gameId);
+  const availability = filterToCutoff(ds.availabilitySnapshots.filter((a) => a.gameId === gameId), now);
   const qbUnresolved = availability.some((a) => {
     const player = ds.players.find((p) => p.id === a.playerId);
     return player?.position === 'QB' && a.activeProbability > 0.15 && a.activeProbability < 0.85;
   });
   const outdoor = game.roofStatus === 'OUTDOOR' || game.roofStatus === 'RETRACTABLE_OPEN';
-  const weather = ds.weatherSnapshots.find((w) => w.gameId === gameId);
+  const weatherInScope = filterToCutoff(ds.weatherSnapshots.filter((w) => w.gameId === gameId), now);
+  const weather = weatherInScope.sort((a, b) => a.observedAt.localeCompare(b.observedAt)).at(-1);
   const injuryFeedDown = ds.feedStatuses.find((f) => f.feed === 'injury')?.status === 'MISSING';
 
   const manual = best?.manualPriceId
@@ -175,6 +326,8 @@ export function evaluateGame(
     ? manual.confirmedVisible && ageMinutes(manual.enteredAt, now) <= rc.maxPriceAgeMinutes
     : false;
 
+  const official = ds.modelVersions.find((m) => m.id === pred?.modelVersionId);
+
   const checks: CriticalDataChecks = {
     startingQuarterbackResolved: !qbUnresolved,
     injuryFeedAvailable: !injuryFeedDown,
@@ -182,11 +335,19 @@ export function evaluateGame(
     // Manual price confirmation blocks only when a manual record exists but
     // is unconfirmed; absence of a manual price caps at WATCH further below.
     manualPriceConfirmed: manual ? manual.confirmedVisible : true,
+    // Structurally always true in v1, not a forgotten TODO: this dataset
+    // (and the Supabase schema behind it) models exactly one canonical
+    // schedule source per game, so there is no second feed for kickoff time
+    // or venue to disagree with. A genuine conflict check requires multiple
+    // real schedule providers reconciled through entity_mappings — see
+    // docs/limitations.md ("Schedule conflict detection").
     kickoffTimeConsistent: true,
     venueConsistent: true,
     weatherAvailableIfOutdoor: !outdoor || !!weather,
-    modelApproved:
-      ds.modelVersions.find((m) => m.id === pred?.modelVersionId)?.status === 'APPROVED_DEMO',
+    // Both the model's approval status AND its approval date relative to
+    // this cutoff matter — a model approved after the fact could not
+    // legitimately have produced a prediction at this cutoff.
+    modelApproved: official?.status === 'APPROVED_DEMO' && isModelUsableAtCutoff(official?.approvedAt, now),
     predictionTimestampPresent: !!pred?.asOfAt,
     featureSnapshotPresent: !!pred?.featureSnapshotId,
     criticalProviderHealthy: !ds.feedStatuses.some(
@@ -200,12 +361,53 @@ export function evaluateGame(
   );
   const weatherUncertain = !!weather && (weather.severity === 'HIGH' || weather.severity === 'CRITICAL');
 
+  // Existing exposure (dollars) converted to a fraction of the current
+  // bankroll, resolved per-game and for whichever specific team this
+  // selection backs. A single flat scalar can't work across a batch
+  // evaluation of many games — each game has its own already-committed
+  // stake, and team exposure depends on which side is actually selected.
+  const existingGameExposureDollars = ctx.existingGameExposureByGame?.[gameId] ?? 0;
+  const selectedTeamId =
+    best?.selection === 'HOME' ? game.homeTeamId : best?.selection === 'AWAY' ? game.awayTeamId : undefined;
+  const existingTeamExposureDollars = selectedTeamId
+    ? (ctx.existingTeamExposureByTeam?.[selectedTeamId] ?? 0)
+    : 0;
+  const existingGameExposurePct = bankroll > 0 ? existingGameExposureDollars / bankroll : 0;
+  const existingTeamExposurePct = bankroll > 0 ? existingTeamExposureDollars / bankroll : 0;
+  // No cross-game correlation model exists — that would require modeling
+  // (shared officiating crews, shared weather systems, division/conference
+  // linkage) the source specification doesn't define, and fabricating one
+  // would be new scope, not a fix. Same-game, cross-market exposure is the
+  // one correlation signal this app already reasons about (see the Bet
+  // Card's correlation warning), so it doubles as the cluster proxy rather
+  // than leaving the cap permanently inert at zero.
+  const existingClusterExposurePct = existingGameExposurePct;
+  const existingWeeklyOpenStakePct = ctx.existingWeeklyOpenStakePct ?? 0;
+
+  // A cap already fully consumed must PASS the recommendation outright, not
+  // surface as a green BET card with a computed stake of $0 — the spec
+  // requires "portfolio exposure is within limits" as a BET precondition.
+  const exposureWouldExceedLimit =
+    existingWeeklyOpenStakePct >= rc.maxWeeklyOpenStakePct ||
+    existingGameExposurePct >= rc.maxPerGamePct ||
+    existingTeamExposurePct >= rc.maxPerTeamWeeklyPct ||
+    existingClusterExposurePct >= rc.maxCorrelatedClusterPct;
+
   const edgeA: EdgeAssessment = {
     evPerDollar: best?.evPerDollar ?? -1,
     edge: best?.edge ?? -1,
     uncertaintyStd: pred?.marginStd ?? 99,
+    // Structurally always false in v1: both of these require comparing the
+    // CURRENT price/conditions against a PERSISTED prior recommendation
+    // snapshot (the price/data as of when a recommendation was first
+    // issued). evaluateGame recomputes fresh on every call — recommendations
+    // aren't persisted the way predictions are (predictions have immutable
+    // vintages; recommendations don't) — so there is nothing earlier to
+    // compare against yet. Genuine support needs recommendation history
+    // tracking, which is real backend work, not a wiring fix. See
+    // docs/limitations.md ("Recommendation invalidation over time").
     priceWorseThanMaxAcceptable: false,
-    exposureWouldExceedLimit: (ctx.existingWeeklyOpenStakePct ?? 0) >= rc.maxWeeklyOpenStakePct,
+    exposureWouldExceedLimit,
     modelMarketAligned: best ? Math.abs(best.edge) < 0.005 : true,
     componentsMateriallyDisagree: componentsDisagree(ds, pred?.id),
     invalidatedByNewerInformation: false,
@@ -216,12 +418,19 @@ export function evaluateGame(
     materialInjuryUncertainty: injuryUncertain,
     materialWeatherUncertainty: weatherUncertain,
     lineNearTargetThreshold: !!best && Math.abs(best.edge - rc.minEdgeForBet) < 0.005,
-    marketMovingTowardAcceptablePrice: false,
+    marketMovingTowardAcceptablePrice:
+      !!best && movingTowardAcceptablePrice(ds, gameId, best.market, best.selection, now),
     awaitingOfficialUpdate: ds.injuryReports.some(
       (r) => r.gameId === gameId && r.practiceFri === 'NO_DATA' && r.designation === 'QUESTIONABLE',
     ),
   };
 
+  // Always eligible: the product currently defines no ineligible mode.
+  // PAPER is the default and always eligible; REAL_TRACKING requires
+  // completing the loss-budget/acknowledgment flow in Settings before the
+  // user can even enter it, so there is no further "ineligible mode" state
+  // to gate on here (unlike the exposure caps, this isn't a hardcoded stub
+  // masking a real signal — there is genuinely nothing to check yet).
   let decision = decideRecommendation(checks, edgeA, watch, rc, true);
 
   // BET requires a recently confirmed manual price at the exact line/price.
@@ -235,7 +444,7 @@ export function evaluateGame(
     };
   }
 
-  const stake =
+  let stake =
     decision.status === 'BET' && best
       ? computeStake({
           winProbability: best.conservativeProbability,
@@ -246,12 +455,29 @@ export function evaluateGame(
           uncertaintyMultiplier: 0.85,
           dataQualityMultiplier: checks.dataCompletenessScore,
           calibrationMultiplier: 0.9,
-          existingGameExposurePct: ctx.existingGameExposurePct ?? 0,
-          existingTeamExposurePct: ctx.existingTeamExposurePct ?? 0,
-          existingClusterExposurePct: 0,
-          existingWeeklyOpenStakePct: ctx.existingWeeklyOpenStakePct ?? 0,
+          existingGameExposurePct,
+          existingTeamExposurePct,
+          existingClusterExposurePct,
+          existingWeeklyOpenStakePct,
         })
       : null;
+
+  // A cap can leave a sliver of technically-legal room (a few cents) without
+  // being fully exhausted. That room is real and correctly computed, but a
+  // sub-minimum stake isn't a wager any real sportsbook accepts, so
+  // presenting it as an actionable BET card would overstate what's on
+  // offer. Downgrade to PASS rather than show a stake nobody could place.
+  const MIN_VIABLE_STAKE = 1;
+  if (decision.status === 'BET' && stake && stake.finalStakeAmount < MIN_VIABLE_STAKE) {
+    decision = {
+      status: 'PASS',
+      reasons: [
+        `Remaining risk-limit room ($${stake.finalStakeAmount.toFixed(2)}) is below the $${MIN_VIABLE_STAKE.toFixed(2)} minimum viable stake — ${stake.bindingConstraint} is nearly exhausted`,
+        ...decision.reasons,
+      ],
+    };
+    stake = null;
+  }
 
   const home = ds.teams.find((t) => t.id === game.homeTeamId)!;
   const away = ds.teams.find((t) => t.id === game.awayTeamId)!;
@@ -273,6 +499,12 @@ export function evaluateGame(
     }
     if (weather && weather.severity !== 'LOW' && weather.severity !== 'NONE') opposing.push(`Weather risk: wind ${weather.windMph} mph, severity ${weather.severity}`);
     if (best.priceSource !== 'bet365 (manual entry)') opposing.push('Price is mock consensus, not a manually confirmed book price');
+    if (existingGameExposureDollars > 0) {
+      opposing.push(`Existing exposure on this game: ${(existingGameExposurePct * 100).toFixed(2)}% of bankroll (cap ${(rc.maxPerGamePct * 100).toFixed(2)}%)`);
+    }
+    if (existingTeamExposureDollars > 0 && favoredTeam) {
+      opposing.push(`Existing weekly exposure to ${favoredTeam}: ${(existingTeamExposurePct * 100).toFixed(2)}% of bankroll (cap ${(rc.maxPerTeamWeeklyPct * 100).toFixed(2)}%)`);
+    }
     opposing.push('Demo thresholds are not historically validated');
   }
 

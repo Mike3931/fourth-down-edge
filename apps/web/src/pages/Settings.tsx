@@ -41,7 +41,7 @@ export default function Settings() {
     <div className="max-w-4xl space-y-4">
       <Card>
         <CardHeader title="Display" />
-        <div className="grid gap-4 p-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2">
           <label className="block text-xs text-ink-muted">
             Odds format
             <select

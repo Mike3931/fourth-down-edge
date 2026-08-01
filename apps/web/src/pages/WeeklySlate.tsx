@@ -10,7 +10,7 @@ import { useDataset, useRecommendations } from '../lib/api';
 import { useStore } from '../lib/store';
 import { latestSnapshot, type DemoDataset } from '@fde/api-client';
 import { fmtKickoff, fmtLine, fmtOdds, fmtPct, fmtSigned, fmtUtc } from '../lib/format';
-import { stadiumById, teamById } from '../lib/joins';
+import { modelVersionLabel, stadiumById, teamById } from '../lib/joins';
 
 interface SlateRow {
   gameId: string;
@@ -69,7 +69,7 @@ function buildRows(ds: DemoDataset, recs: Recommendation[]): SlateRow[] {
       weatherSeverity: g.roofStatus === 'DOME' || g.roofStatus === 'RETRACTABLE_CLOSED' ? 'NONE' : wx?.severity ?? 'MISSING',
       completeness: pred.dataCompletenessScore,
       predictionAt: pred.asOfAt,
-      modelVersion: 'ensemble 0.3.0-demo',
+      modelVersion: modelVersionLabel(ds, pred.modelVersionId),
       rec,
     };
   });

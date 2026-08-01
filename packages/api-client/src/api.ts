@@ -7,7 +7,7 @@ import type {
   Recommendation,
 } from '@fde/shared-types';
 import { generateDemoDataset, type DemoDataset } from './dataset';
-import { evaluateCandidates, evaluateGame, type CandidateEvaluation } from './evaluate';
+import { evaluateCandidates, evaluateGame, type CandidateEvaluation, type EvaluationContext } from './evaluate';
 
 /**
  * Typed API abstraction for Fourth Down Edge.
@@ -24,8 +24,8 @@ export interface FdeApi {
   getDataset(): Promise<DemoDataset>;
   getGames(): Promise<Game[]>;
   getPredictions(gameId: string): Promise<Prediction[]>;
-  getRecommendation(gameId: string): Promise<Recommendation>;
-  getAllRecommendations(): Promise<Recommendation[]>;
+  getRecommendation(gameId: string, ctx?: EvaluationContext): Promise<Recommendation>;
+  getAllRecommendations(ctx?: EvaluationContext): Promise<Recommendation[]>;
   getCandidates(gameId: string): Promise<CandidateEvaluation[]>;
   getModelVersions(): Promise<ModelVersion[]>;
   getFeedStatuses(): Promise<FeedStatus[]>;
@@ -89,12 +89,12 @@ export class MockFdeApi implements FdeApi {
     return delay(this.ds.predictions.filter((p) => p.gameId === gameId));
   }
 
-  getRecommendation(gameId: string): Promise<Recommendation> {
-    return delay(evaluateGame(this.ds, gameId));
+  getRecommendation(gameId: string, ctx: EvaluationContext = {}): Promise<Recommendation> {
+    return delay(evaluateGame(this.ds, gameId, ctx));
   }
 
-  getAllRecommendations(): Promise<Recommendation[]> {
-    return delay(this.ds.games.map((g) => evaluateGame(this.ds, g.id)));
+  getAllRecommendations(ctx: EvaluationContext = {}): Promise<Recommendation[]> {
+    return delay(this.ds.games.map((g) => evaluateGame(this.ds, g.id, ctx)));
   }
 
   getCandidates(gameId: string): Promise<CandidateEvaluation[]> {

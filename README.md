@@ -94,7 +94,12 @@ service-worker installability. See `docs/deployment.md` for exact steps and head
 - `npm run test:db` — runs `supabase/migrations/*.sql` and `supabase/seed/seed.sql` against a real
   embedded Postgres engine (no Docker required), then exercises the append-only guard triggers end to
   end (confirms a direct `UPDATE` on `predictions` and an unevented bet re-settlement are both
-  rejected by the database itself, not just by application code).
+  rejected by the database itself, not just by application code), and confirms Row Level Security
+  actually isolates users rather than just having policies defined — a second, genuinely non-owner
+  `authenticated` role is created and switched to, and verified to see zero rows of another user's
+  manual prices or bankroll account (with no `WHERE` clause needed), to be blocked from inserting a
+  row that claims another user's id, and to still see shared reference data; an anonymous session is
+  verified to see zero rows of anyone's data.
 - `npm run test:e2e` — Playwright spec covering the full user journey (sign in → slate → Game Lab →
   manual price entry → paper bet → settlement → Performance Lab → Model Audit → Data Health) against
   the production build. Requires `npx playwright install chromium` once.

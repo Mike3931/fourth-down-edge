@@ -41,6 +41,8 @@ export default function PerformanceLab() {
     });
   }, [ds, statusFilter, marketFilter, edgeTier, venueFilter, sideFilter, horizonFilter, dataTier, weekFilter]);
 
+  const startingBalance = ds?.bankrollAccount.startingBalance ?? 0;
+
   const metrics = useMemo(() => {
     const pairs = records.map((r) => ({ p: r.p, outcome: r.outcome }));
     const bins = calibrationBins(pairs);
@@ -48,7 +50,7 @@ export default function PerformanceLab() {
     const wagers = records.filter((r) => r.stake > 0);
     const staked = wagers.reduce((a, r) => a + r.stake, 0);
     const profit = wagers.reduce((a, r) => a + r.profit, 0);
-    let bal = 10_000;
+    let bal = startingBalance;
     const curve = [bal];
     for (const r of records) {
       bal += r.profit;
@@ -78,7 +80,7 @@ export default function PerformanceLab() {
       curve,
       pairs,
     };
-  }, [records]);
+  }, [records, startingBalance]);
 
   if (isLoading) return <LoadingState label="Computing performance metrics…" />;
   if (error || !ds) return <ErrorState title="Failed to load performance data" />;
@@ -148,7 +150,7 @@ export default function PerformanceLab() {
         </section>
       </Card>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card className="p-3">
           <SectionLabel>Reliability diagram — predicted vs observed</SectionLabel>
           <ReliabilityChart
@@ -184,7 +186,7 @@ export default function PerformanceLab() {
             points={metrics.curve.map((v, i) => ({ x: i, y: v }))}
             yFormatter={(v) => `$${(v / 1000).toFixed(1)}k`}
             label="Bankroll curve"
-            textSummary={`Bankroll moves from $10,000 to ${fmtMoney(metrics.curve.at(-1) ?? 10_000)} across the filtered demo backtest.`}
+            textSummary={`Bankroll moves from ${fmtMoney(startingBalance)} to ${fmtMoney(metrics.curve.at(-1) ?? startingBalance)} across the filtered demo backtest.`}
           />
         </Card>
         <Card className="p-3">
@@ -199,7 +201,7 @@ export default function PerformanceLab() {
         </Card>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card>
           <CardHeader title="Performance by edge tier" />
           <SliceTable slices={tiers} />
