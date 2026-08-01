@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 from fde_api.canonical.team_map import canonical_team_code
 from fde_api.db.forward_models import ScheduleObservation
 from fde_api.forward.modes import DataMode
-from fde_api.forward.venues import INTERNATIONAL_COUNTRIES, resolve_venue
+from fde_api.forward.venues import is_international, resolve_venue
 from fde_api.util import utc_now
 
 _EASTERN = ZoneInfo("America/New_York")
@@ -163,7 +163,9 @@ def ingest_schedule(
         # Store the RESOLVED venue id so downstream weather/roof logic can
         # never pick up the wrong stadium for an international game.
         stadium_id = venue.id if venue is not None else (None if neutral else raw_stadium_id)
-        international = bool(venue and venue.country in INTERNATIONAL_COUNTRIES)
+        # Venue-driven, NOT location-flag-driven: a designated home game
+        # played abroad is still an international game.
+        international = is_international(venue)
 
         # The source has no explicit status column; a scheduled game with no
         # kickoff is treated as unresolved rather than assumed playable.

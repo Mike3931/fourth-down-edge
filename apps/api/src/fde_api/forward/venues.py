@@ -154,12 +154,30 @@ def unmapped_stadium_ids(session: Session, stadium_ids: set[str]) -> list[str]:
 def resolve_venue(*, stadium_id: str | None, stadium_name: str | None, neutral_site: bool) -> VenueSpec | None:
     """Resolve the venue a game is actually played at.
 
-    For a neutral-site game the source's `stadium_id` and `roof` describe
-    the HOME CLUB's usual stadium, not where the game is played, so they
-    are ignored entirely and the venue is resolved by name. Getting this
-    wrong would query weather for the wrong continent and mislabel an
-    open-air ground as a dome.
+    Resolution is by VENUE NAME first, never by the `location` flag.
+
+    Two independent source quirks make the flag unusable:
+      * For games played abroad the source populates `stadium_id` and
+        `roof` with the HOME CLUB's usual stadium (2026_01_SF_LA at
+        Melbourne Cricket Ground carries LAX01/"dome").
+      * A club's designated home game may still be played abroad, in
+        which case `location` reads "Home" even though the venue is
+        international (2026_05_PHI_JAX at Tottenham Hotspur Stadium).
+
+    Keying off the flag therefore silently sends an international game to
+    a domestic stadium — wrong coordinates, wrong time zone, wrong roof.
+    Matching the name against the international registry first is
+    unambiguous, because that registry contains only overseas venues.
     """
+    by_name = NEUTRAL_BY_NAME.get(_normalize_name(stadium_name or ""))
+    if by_name is not None:
+        return by_name
     if neutral_site:
-        return NEUTRAL_BY_NAME.get(_normalize_name(stadium_name or ""))
+        # Declared neutral but the venue is unknown: refuse to fall back to
+        # the home club's stadium, which would be actively misleading.
+        return None
     return VENUES_BY_ID.get(stadium_id or "")
+
+
+def is_international(venue: VenueSpec | None) -> bool:
+    return bool(venue and venue.country in INTERNATIONAL_COUNTRIES)
