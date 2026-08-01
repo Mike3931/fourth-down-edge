@@ -139,7 +139,7 @@ class ForwardTestPolicy(BaseModel):
         return hashlib.sha256(self.canonical_payload().encode()).hexdigest()
 
 
-def build_default_policy(
+def build_policy_draft(
     *,
     policy_version: str,
     model_version: str = "market-residual-v1",
@@ -148,7 +148,12 @@ def build_default_policy(
     start: date,
     end: date,
 ) -> ForwardTestPolicy:
-    """The 2026 forward-test policy.
+    """Build a DRAFT policy from current code.
+
+    Uses the *current* code commit, so a draft built later differs from an
+    already-frozen policy. That is correct and expected: the frozen record
+    keeps the commit it was frozen at, and verification never rebuilds a
+    draft. Only `freeze_policy` may create an immutable record.
 
     Threshold and band are carried over unchanged from the frozen Phase 2
     configuration. They are deliberately NOT re-tuned: the 2024/2025
@@ -240,17 +245,40 @@ def active_policy(session: Session, at: date | None = None) -> ForwardTestPolicy
     return None
 
 
-def load_policy(session: Session, policy_version: str) -> ForwardTestPolicy:
+def load_frozen_policy(session: Session, policy_version: str) -> ForwardTestPolicy:
+    """Read a frozen policy from its stored payload and verify it.
+
+    Never rebuilds a draft: the stored payload is the authority, including
+    the commit it was frozen at.
+    """
     rec = session.get(ForwardTestPolicyRecord, policy_version)
     if rec is None:
         raise LookupError(f"Unknown forward-test policy version {policy_version}")
-    policy = ForwardTestPolicy.model_validate(rec.payload)
-    if policy.policy_hash() != rec.policy_hash:
+    if not verify_frozen_policy(session, policy_version):
         raise PolicyImmutabilityError(
-            f"Stored policy {policy_version} no longer matches its recorded hash — "
+            f"Stored policy {policy_version} fails hash verification — "
             "the immutable record has been tampered with."
         )
-    return policy
+    return ForwardTestPolicy.model_validate(rec.payload)
+
+
+def verify_frozen_policy(session: Session, policy_version: str) -> bool:
+    """Hash the STORED canonical payload and compare to the stored hash.
+
+    This is the whole point of the creation/verification split: it never
+    consults current code, so shipping new application commits cannot
+    change the verdict.
+    """
+    rec = session.get(ForwardTestPolicyRecord, policy_version)
+    if rec is None:
+        raise LookupError(f"Unknown forward-test policy version {policy_version}")
+    recomputed = ForwardTestPolicy.model_validate(rec.payload).policy_hash()
+    return recomputed == rec.policy_hash
+
+
+# Backwards-compatible aliases.
+load_policy = load_frozen_policy
+build_default_policy = build_policy_draft
 
 
 def verify_all_policies(session: Session) -> list[dict[str, Any]]:

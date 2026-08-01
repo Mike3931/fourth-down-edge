@@ -51,12 +51,36 @@ from fde_api.forward.weather import (
 
 
 class Outcome(StrEnum):
+    """How the scheduler EXECUTION went.
+
+    Deliberately independent of data quality: the reliability dashboard is
+    built on this, so "the job ran fine but the data was thin" must not be
+    counted as an execution failure.
+    """
+
     SUCCESS = "SUCCESS"
     SUCCESS_WITH_WARNINGS = "SUCCESS_WITH_WARNINGS"
     SKIPPED = "SKIPPED"
-    DATA_INCOMPLETE = "DATA_INCOMPLETE"
     RETRYABLE_FAILURE = "RETRYABLE_FAILURE"
     TERMINAL_FAILURE = "TERMINAL_FAILURE"
+    INTERRUPTED = "INTERRUPTED"
+    RUNNING = "RUNNING"
+
+
+class DomainState(StrEnum):
+    """What the DATA looks like, independent of execution.
+
+    A job can execute perfectly and still leave the domain incomplete —
+    a missing provider key is the canonical example.
+    """
+
+    COMPLETE = "COMPLETE"
+    DATA_INCOMPLETE = "DATA_INCOMPLETE"
+    NOT_YET_AVAILABLE = "NOT_YET_AVAILABLE"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+    STALE = "STALE"
+    SUPPRESSED = "SUPPRESSED"
+    NO_ELIGIBLE_RECORDS = "NO_ELIGIBLE_RECORDS"
 
 
 class WeatherStatus(StrEnum):
@@ -73,9 +97,13 @@ NWS_HORIZON = timedelta(days=7)
 
 @dataclass
 class HandlerResult:
-    """Structured outcome persisted to the scheduler run record."""
+    """Structured outcome persisted to the scheduler run record.
+
+    Two independent axes: `outcome` is execution, `domain_state` is data.
+    """
 
     outcome: Outcome
+    domain_state: DomainState = DomainState.COMPLETE
     records_read: int = 0
     records_created: int = 0
     records_updated: int = 0
@@ -99,9 +127,12 @@ class HandlerResult:
             records_written=self.records_created + self.records_updated,
             provider_calls=self.provider_calls,
             provider_credits=self.provider_credits,
-            warnings=[*self.warnings, f"outcome={self.outcome.value}"],
+            warnings=[*self.warnings,
+                      f"outcome={self.outcome.value}",
+                      f"domain_state={self.domain_state.value}"],
             detail={
                 "outcome": self.outcome.value,
+                "domain_state": self.domain_state.value,
                 "records_created": self.records_created,
                 "records_updated": self.records_updated,
                 "records_skipped": self.records_skipped,
@@ -116,25 +147,28 @@ class HandlerResult:
 
 
 # Declared dependency rules, asserted by tests so they cannot drift.
-JOB_DEPENDENCY_RULES: dict[str, dict[str, str]] = {
+JOB_DEPENDENCY_RULES: dict[str, dict[str, tuple[str, str]]] = {
     "odds_capture": {
-        "missing_key": Outcome.SKIPPED.value,
-        "provider_unavailable": Outcome.RETRYABLE_FAILURE.value,
-        "quota_exhausted": Outcome.SKIPPED.value,
+        "missing_key": (Outcome.SKIPPED.value, DomainState.DATA_INCOMPLETE.value),
+        "provider_unavailable": (Outcome.RETRYABLE_FAILURE.value, DomainState.DATA_INCOMPLETE.value),
+        "quota_exhausted": (Outcome.SKIPPED.value, DomainState.DATA_INCOMPLETE.value),
     },
     "weather_capture": {
-        "beyond_horizon": Outcome.SUCCESS_WITH_WARNINGS.value,
-        "international_venue": Outcome.SUCCESS_WITH_WARNINGS.value,
-        "dome": Outcome.SUCCESS_WITH_WARNINGS.value,
-        "nws_down": Outcome.RETRYABLE_FAILURE.value,
+        "beyond_horizon": (Outcome.SUCCESS_WITH_WARNINGS.value, DomainState.NOT_YET_AVAILABLE.value),
+        "international_venue": (Outcome.SUCCESS_WITH_WARNINGS.value, DomainState.NOT_APPLICABLE.value),
+        "dome": (Outcome.SUCCESS_WITH_WARNINGS.value, DomainState.NOT_APPLICABLE.value),
+        "nws_down": (Outcome.RETRYABLE_FAILURE.value, DomainState.DATA_INCOMPLETE.value),
     },
     "prediction_vintage": {
-        "missing_quarterback": Outcome.DATA_INCOMPLETE.value,
-        "missing_consensus": Outcome.DATA_INCOMPLETE.value,
-        "cutoff_not_reached": Outcome.SKIPPED.value,
+        "missing_quarterback": (Outcome.SUCCESS_WITH_WARNINGS.value, DomainState.DATA_INCOMPLETE.value),
+        "missing_consensus": (Outcome.SUCCESS_WITH_WARNINGS.value, DomainState.DATA_INCOMPLETE.value),
+        "cutoff_not_reached": (Outcome.SKIPPED.value, DomainState.NOT_YET_AVAILABLE.value),
+        "health_suppressed": (Outcome.SUCCESS_WITH_WARNINGS.value, DomainState.SUPPRESSED.value),
     },
-    "settlement": {"no_final_score": Outcome.SKIPPED.value},
-    "closing_capture": {"no_eligible_consensus": Outcome.SUCCESS_WITH_WARNINGS.value},
+    "settlement": {"no_final_score": (Outcome.SKIPPED.value, DomainState.NOT_YET_AVAILABLE.value)},
+    "closing_capture": {
+        "no_eligible_consensus": (Outcome.SUCCESS_WITH_WARNINGS.value, DomainState.DATA_INCOMPLETE.value)
+    },
 }
 
 
@@ -227,6 +261,7 @@ def odds_capture(ctx: JobContext) -> JobResult:
     if ctx.provider_mode is ProviderMode.KEY_MISSING:
         return HandlerResult(
             outcome=Outcome.SKIPPED,
+            domain_state=DomainState.DATA_INCOMPLETE,
             provider_mode=ProviderMode.KEY_MISSING,
             records_created=0,
             warnings=["FDE_ODDS_API_KEY not configured; no market data captured"],
@@ -248,6 +283,7 @@ def odds_capture(ctx: JobContext) -> JobResult:
     if not decision.allowed:
         return HandlerResult(
             outcome=Outcome.SKIPPED,
+            domain_state=DomainState.DATA_INCOMPLETE,
             provider_mode=ProviderMode.QUOTA_EXHAUSTED
             if decision.state == "EXHAUSTED"
             else ctx.provider_mode,
@@ -268,6 +304,7 @@ def odds_capture(ctx: JobContext) -> JobResult:
         except Exception as e:  # transient by default; the scheduler backs off
             return HandlerResult(
                 outcome=Outcome.RETRYABLE_FAILURE,
+                domain_state=DomainState.DATA_INCOMPLETE,
                 provider_mode=ProviderMode.UNAVAILABLE,
                 error_code="PROVIDER_UNAVAILABLE",
                 error_summary=f"{type(e).__name__}: {e}",
@@ -385,6 +422,7 @@ def weather_capture(ctx: JobContext) -> JobResult:
     if any(s == WeatherStatus.PROVIDER_UNAVAILABLE.value for s in statuses.values()) and created == 0:
         return HandlerResult(
             outcome=Outcome.RETRYABLE_FAILURE,
+            domain_state=DomainState.DATA_INCOMPLETE,
             provider_calls=calls,
             error_code="NWS_UNAVAILABLE",
             error_summary="every NWS request failed",
@@ -392,8 +430,21 @@ def weather_capture(ctx: JobContext) -> JobResult:
             detail={"weather_status": statuses},
         ).to_job_result()
 
+    values = set(statuses.values())
+    if created or unchanged:
+        domain = DomainState.COMPLETE
+    elif values and values <= {WeatherStatus.NOT_APPLICABLE.value}:
+        domain = DomainState.NOT_APPLICABLE
+    elif WeatherStatus.NOT_YET_AVAILABLE.value in values:
+        domain = DomainState.NOT_YET_AVAILABLE
+    elif not statuses:
+        domain = DomainState.NO_ELIGIBLE_RECORDS
+    else:
+        domain = DomainState.DATA_INCOMPLETE
+
     return HandlerResult(
         outcome=Outcome.SUCCESS_WITH_WARNINGS if warnings else Outcome.SUCCESS,
+        domain_state=domain,
         records_read=len(games),
         records_created=created,
         records_skipped=unchanged,
@@ -528,13 +579,12 @@ def prediction_vintage(ctx: JobContext) -> JobResult:
                     f"({'; '.join(inputs.warnings[:2])})"
                 )
 
-    outcome = Outcome.SUCCESS
-    if incomplete:
-        outcome = Outcome.DATA_INCOMPLETE
-    elif warnings:
-        outcome = Outcome.SUCCESS_WITH_WARNINGS
+    # Execution succeeded either way; thin data is a DOMAIN state.
+    outcome = Outcome.SUCCESS_WITH_WARNINGS if (incomplete or warnings) else Outcome.SUCCESS
+    domain = DomainState.DATA_INCOMPLETE if incomplete else DomainState.COMPLETE
     return HandlerResult(
         outcome=outcome,
+        domain_state=domain,
         records_created=created,
         records_skipped=skipped,
         warnings=warnings[:25],
@@ -711,6 +761,7 @@ def data_health_reconciliation(ctx: JobContext) -> JobResult:
     critical = [c for c in report["checks"] if c["severity"] == "CRITICAL" and c["status"] != "OK"]
     return HandlerResult(
         outcome=Outcome.SUCCESS_WITH_WARNINGS if critical else Outcome.SUCCESS,
+        domain_state=DomainState.SUPPRESSED if report["candidates_suppressed"] else DomainState.COMPLETE,
         records_read=len(report["checks"]),
         warnings=[f"{c['id']}: {c['explanation']}" for c in critical][:25],
         detail={

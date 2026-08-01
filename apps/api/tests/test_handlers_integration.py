@@ -27,6 +27,7 @@ from fde_api.forward.cohort import Cohort, ProviderMode
 from fde_api.forward.handlers import (
     HANDLERS,
     JOB_DEPENDENCY_RULES,
+    DomainState,
     Outcome,
     WeatherStatus,
     register_all,
@@ -39,7 +40,7 @@ from fde_api.forward.health import (
     run_health_checks,
 )
 from fde_api.forward.ledger import HealthGate, evaluate_candidate
-from fde_api.forward.policy import build_default_policy, freeze_policy
+from fde_api.forward.policy import build_policy_draft, freeze_policy
 from fde_api.forward.schedule import ingest_schedule
 from fde_api.forward.scheduler import FrozenClock, JobStatus, Scheduler
 from fde_api.forward.venues import seed_venues
@@ -85,7 +86,7 @@ def factory(tmp_path, monkeypatch):
     f = sessionmaker(bind=engine, future=True)
     with f() as s:
         seed_venues(s)
-        freeze_policy(s, build_default_policy(
+        freeze_policy(s, build_policy_draft(
             policy_version="ftp-2026-v1", start=date(2026, 9, 1), end=date(2027, 2, 28)))
         ingest_schedule(s, _csv(_row()), season=2026, observed_at=NOW - timedelta(days=10))
         s.commit()
@@ -142,11 +143,13 @@ class TestDependencyOutcomeRules:
         with factory() as sess:
             assert sess.scalar(select(func.count(OddsQuote.id))) == 0
 
-    def test_declared_rules_match_implementation(self) -> None:
-        assert JOB_DEPENDENCY_RULES["odds_capture"]["missing_key"] == Outcome.SKIPPED.value
-        assert JOB_DEPENDENCY_RULES["weather_capture"]["beyond_horizon"] == Outcome.SUCCESS_WITH_WARNINGS.value
-        assert JOB_DEPENDENCY_RULES["weather_capture"]["international_venue"] == Outcome.SUCCESS_WITH_WARNINGS.value
-        assert JOB_DEPENDENCY_RULES["prediction_vintage"]["missing_quarterback"] == Outcome.DATA_INCOMPLETE.value
+    def test_declared_rules_are_two_axis_tuples(self) -> None:
+        for job, rules in JOB_DEPENDENCY_RULES.items():
+            for condition, value in rules.items():
+                assert isinstance(value, tuple) and len(value) == 2, f"{job}/{condition}"
+                outcome, domain = value
+                assert outcome in {o.value for o in Outcome}, f"{job}/{condition}"
+                assert domain in {d.value for d in DomainState}, f"{job}/{condition}"
 
     def test_weather_beyond_horizon_is_not_a_failure(self, factory) -> None:
         far = KICK - timedelta(days=30)
@@ -308,7 +311,7 @@ class TestDataHealth:
             report = run_health_checks(sess, provider_mode=ProviderMode.KEY_MISSING,
                                        policy_version="ftp-2026-v1", now=NOW)
             gate = HealthGate.from_report(report)
-            policy = build_default_policy(policy_version="ftp-2026-v1",
+            policy = build_policy_draft(policy_version="ftp-2026-v1",
                                           start=date(2026, 9, 1), end=date(2027, 2, 28))
             # A probability that would otherwise be a strong candidate.
             ev = evaluate_candidate(
@@ -324,7 +327,7 @@ class TestDataHealth:
                                    policy_version="ftp-2026-v1", now=NOW)
 
     def test_candidate_allowed_when_gate_clear(self, factory) -> None:
-        policy = build_default_policy(policy_version="ftp-2026-v1",
+        policy = build_policy_draft(policy_version="ftp-2026-v1",
                                       start=date(2026, 9, 1), end=date(2027, 2, 28))
         ev = evaluate_candidate(
             market="SPREAD", selection="HOME", line=-2.5, american=-110,
@@ -368,3 +371,55 @@ class TestRunRecordPersistence:
         assert row.records_written > 0
         assert row.code_commit
         assert row.error_summary and "outcome=" in row.error_summary
+
+
+class TestOutcomeDomainSeparation:
+    """Execution health and data quality are independent axes."""
+
+    def test_enum_members(self) -> None:
+        assert {o.value for o in Outcome} == {
+            "SUCCESS", "SUCCESS_WITH_WARNINGS", "SKIPPED",
+            "RETRYABLE_FAILURE", "TERMINAL_FAILURE", "INTERRUPTED", "RUNNING",
+        }
+        assert {d.value for d in DomainState} == {
+            "COMPLETE", "DATA_INCOMPLETE", "NOT_YET_AVAILABLE", "NOT_APPLICABLE",
+            "STALE", "SUPPRESSED", "NO_ELIGIBLE_RECORDS",
+        }
+
+    def test_data_states_are_not_execution_outcomes(self) -> None:
+        outcomes = {o.value for o in Outcome}
+        assert "DATA_INCOMPLETE" not in outcomes
+        assert "SUPPRESSED" not in outcomes
+
+    def test_missing_key_skipped_execution_incomplete_domain(self, factory) -> None:
+        s = _sched(factory, provider_mode=ProviderMode.KEY_MISSING)
+        r = s.run_job("odds_capture", slot=NOW)
+        assert r["status"] == "finished"
+        assert any("outcome=SKIPPED" in w for w in r["warnings"])
+        assert any("domain_state=DATA_INCOMPLETE" in w for w in r["warnings"])
+
+    def test_declared_rules_carry_both_axes(self) -> None:
+        assert JOB_DEPENDENCY_RULES["odds_capture"]["missing_key"] == (
+            Outcome.SKIPPED.value, DomainState.DATA_INCOMPLETE.value)
+        assert JOB_DEPENDENCY_RULES["weather_capture"]["beyond_horizon"] == (
+            Outcome.SUCCESS_WITH_WARNINGS.value, DomainState.NOT_YET_AVAILABLE.value)
+        assert JOB_DEPENDENCY_RULES["weather_capture"]["international_venue"] == (
+            Outcome.SUCCESS_WITH_WARNINGS.value, DomainState.NOT_APPLICABLE.value)
+        assert JOB_DEPENDENCY_RULES["prediction_vintage"]["missing_quarterback"] == (
+            Outcome.SUCCESS_WITH_WARNINGS.value, DomainState.DATA_INCOMPLETE.value)
+        assert JOB_DEPENDENCY_RULES["prediction_vintage"]["health_suppressed"] == (
+            Outcome.SUCCESS_WITH_WARNINGS.value, DomainState.SUPPRESSED.value)
+
+    def test_both_axes_persisted_to_run_record(self, factory) -> None:
+        s = _sched(factory)
+        s.run_job("odds_capture", slot=NOW, params={"fixture_payload": _odds_payload(NOW)})
+        with factory() as sess:
+            row = sess.scalars(select(ScheduledJobRun)).one()
+        assert "outcome=" in row.error_summary
+        assert "domain_state=" in row.error_summary
+
+    def test_health_suppression_reports_suppressed_domain_state(self, factory) -> None:
+        s = _sched(factory, provider_mode=ProviderMode.KEY_MISSING)
+        r = s.run_job("data_health_reconciliation", slot=NOW)
+        assert r["status"] == "finished"
+        assert any("domain_state=SUPPRESSED" in w for w in r["warnings"])
