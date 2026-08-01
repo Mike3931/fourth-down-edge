@@ -10,3 +10,18 @@ coverage/
 .vite/
 playwright-report/
 test-results/
+
+# Python analytical engine (apps/api)
+.venv/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+# Generated data: immutable raw source artifacts, the local database, and
+# model/feature caches are reproducible from ingestion and far too large for
+# git. The generated REPORTS are deliverables and are committed.
+apps/api/data/raw/
+apps/api/data/artifacts/
+apps/api/data/*.db
+.hypothesis/

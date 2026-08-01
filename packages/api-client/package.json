@@ -14,7 +14,8 @@
   },
   "dependencies": {
     "@fde/calculations": "*",
-    "@fde/shared-types": "*"
+    "@fde/shared-types": "*",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "typescript": "^5.6.3",

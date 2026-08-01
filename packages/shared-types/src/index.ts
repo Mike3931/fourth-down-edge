@@ -496,6 +496,8 @@ export interface UserSettings {
   riskControls: RiskControls;
   realTrackingAcknowledgedAt?: string;
   monthlyLossBudget?: number;
+  /** Base URL of the Python analytical engine; empty/undefined disables research mode. */
+  researchApiUrl?: string;
 }
 
 /** Banner text required on every screen that shows demonstration data. */

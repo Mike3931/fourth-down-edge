@@ -48,9 +48,53 @@ jobs:
       - name: End-to-end journey test
         run: npx playwright test
 
+  api:
+    name: Analytical engine (Python)
+    runs-on: ubuntu-latest
+    # The engine runs against a real PostgreSQL service here, not the local
+    # SQLite default, so schema portability is proven on every push.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: fde_test
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+        ports: ['5432:5432']
+    env:
+      FDE_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/fde_test
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run ruff check src tests
+
+      - name: Type check
+        run: uv run mypy
+
+      - name: Migrations apply to PostgreSQL
+        run: uv run alembic upgrade head
+
+      # Network-marked tests download real provider data; they are excluded so
+      # CI does not depend on an external service being up.
+      - name: Tests
+        run: uv run pytest tests -m "not network"
+
   deploy:
     name: Deploy to GitHub Pages
-    needs: test
+    needs: [test, api]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     permissions:

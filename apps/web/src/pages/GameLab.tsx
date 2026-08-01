@@ -13,6 +13,7 @@ import { useDataset, useRecommendations } from '../lib/api';
 import { useStore } from '../lib/store';
 import { CoverByLineChart, DistributionChart } from '../components/charts';
 import BetCard from '../components/BetCard';
+import ResearchPanel from '../components/ResearchPanel';
 import { fmtKickoff, fmtLine, fmtNum, fmtOdds, fmtPct, fmtSigned, fmtUtc } from '../lib/format';
 import { gameById, modelVersionLabel, playerById, roofLabel, stadiumById, teamById } from '../lib/joins';
 import { Rng } from '@fde/api-client';
@@ -39,9 +40,12 @@ function hashString(s: string): number {
 }
 
 function buildFactors(ds: DemoDataset, gameId: string): FactorAssessment[] {
+  const game = gameById(ds, gameId);
+  // A URL can name a game that isn't on this slate; the caller renders an
+  // "Unknown game" state for that, so produce nothing rather than throwing.
+  if (!game) return [];
   const rng = new Rng(hashString(gameId));
   const wx = ds.weatherSnapshots.find((w) => w.gameId === gameId);
-  const game = gameById(ds, gameId)!;
   const crew = ds.officials.find((o) => o.id === game.officialCrewId);
   return FACTOR_NAMES.map((factor) => {
     const effect = Math.round(rng.normal(0, 1.1) * 10) / 10;
@@ -201,6 +205,9 @@ export default function GameLab() {
           tone="accent"
         />
       </section>
+
+      {/* Research predictions from the external analytical engine (opt-in). */}
+      <ResearchPanel gameId={game.id} />
 
       {/* Distributions */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">

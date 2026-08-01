@@ -69,6 +69,28 @@ export default function Settings() {
       </Card>
 
       <Card>
+        <CardHeader title="Analytical engine (research mode)" />
+        <div className="space-y-2 p-4">
+          <label className="block text-xs text-ink-muted">
+            Engine URL — leave blank to disable research mode
+            <input
+              type="url"
+              placeholder="http://localhost:8000"
+              value={settings.researchApiUrl ?? ''}
+              onChange={(e) => store.updateSettings({ researchApiUrl: e.target.value || undefined })}
+              className={`${inputCls} mt-1 w-full`}
+            />
+          </label>
+          <p className="text-[11px] leading-relaxed text-ink-faint">
+            When connected, Game Lab shows research-grade predictions from the Python engine under the
+            banner “RESEARCH MODE — MODEL NOT APPROVED FOR REAL-MONEY DECISIONS”. If the engine is
+            unreachable, screens show DATA INCOMPLETE — demo numbers are never substituted for research
+            numbers, and research mode never changes paper-betting behavior.
+          </p>
+        </div>
+      </Card>
+
+      <Card>
         <CardHeader
           title="Application mode"
           right={<Pill tone={settings.mode === 'PAPER' ? 'accent' : 'warn'}>{settings.mode === 'PAPER' ? 'PAPER MODE' : 'REAL TRACKING MODE'}</Pill>}

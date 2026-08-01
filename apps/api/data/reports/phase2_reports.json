@@ -1,0 +1,1086 @@
+{
+  "generated_at": "2026-08-01T13:40:45.703702+00:00",
+  "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+  "dependency_lock_hash": "955525cd6ac3d1bf9de3dfbeb60396283a2f9338e209e5f9fcb3044890aec182",
+  "research_banner": "RESEARCH MODE \u2014 MODEL NOT APPROVED FOR REAL-MONEY DECISIONS",
+  "1_data_coverage": {
+    "by_season": [
+      {
+        "season": 2018,
+        "games": 267,
+        "games_with_results": 267,
+        "team_game_stat_rows": 534,
+        "closing_odds_rows": 1602,
+        "roster_rows": 3141
+      },
+      {
+        "season": 2019,
+        "games": 267,
+        "games_with_results": 267,
+        "team_game_stat_rows": 534,
+        "closing_odds_rows": 1602,
+        "roster_rows": 3113
+      },
+      {
+        "season": 2020,
+        "games": 269,
+        "games_with_results": 269,
+        "team_game_stat_rows": 538,
+        "closing_odds_rows": 1614,
+        "roster_rows": 3067
+      },
+      {
+        "season": 2021,
+        "games": 285,
+        "games_with_results": 285,
+        "team_game_stat_rows": 570,
+        "closing_odds_rows": 1710,
+        "roster_rows": 2960
+      },
+      {
+        "season": 2022,
+        "games": 284,
+        "games_with_results": 284,
+        "team_game_stat_rows": 568,
+        "closing_odds_rows": 1704,
+        "roster_rows": 3133
+      },
+      {
+        "season": 2023,
+        "games": 285,
+        "games_with_results": 285,
+        "team_game_stat_rows": 570,
+        "closing_odds_rows": 1710,
+        "roster_rows": 3089
+      },
+      {
+        "season": 2024,
+        "games": 285,
+        "games_with_results": 285,
+        "team_game_stat_rows": 570,
+        "closing_odds_rows": 1710,
+        "roster_rows": 3215
+      },
+      {
+        "season": 2025,
+        "games": 285,
+        "games_with_results": 285,
+        "team_game_stat_rows": 570,
+        "closing_odds_rows": 1710,
+        "roster_rows": 3133
+      }
+    ],
+    "players": 7924
+  },
+  "2_missingness": {
+    "structurally_unavailable": {
+      "market_consensus_spread": "no licensed historical multi-book odds; nflverse closing lines are evaluation-only",
+      "market_consensus_total": "no licensed historical multi-book odds; nflverse closing lines are evaluation-only",
+      "market_no_vig_win_prob": "requires pre-close consensus quotes (adapter contract exists, no feed)",
+      "market_line_movement": "requires opening + intraweek line history (no source)",
+      "market_spread_dispersion": "requires multi-book quotes (no source)",
+      "market_price_dispersion": "requires multi-book quotes (no source)",
+      "market_quote_age": "requires timestamped quotes (manual-entry or feed only, forward capture)",
+      "market_eligible_books": "requires multi-book quotes (no source)",
+      "player_active_probability": "no reliable point-in-time historical injury feed; forward capture only",
+      "player_expected_snap_share": "participation backfill pending; would be retrospective otherwise",
+      "player_restriction_probability": "no point-in-time injury designations historically",
+      "player_replacement_quality": "requires per-player valuation model (later phase)",
+      "position_group_continuity": "requires weekly depth charts with observation instants",
+      "weather_temp_forecast": "NWS serves forward forecasts only; historical pregame forecasts unavailable",
+      "weather_wind_forecast": "NWS serves forward forecasts only",
+      "weather_gust_forecast": "NWS serves forward forecasts only",
+      "weather_precip_prob": "NWS serves forward forecasts only",
+      "referee_crew_effect": "insufficient per-crew sample for unshrunk effects; excluded from v1 by policy"
+    },
+    "count_unavailable": 18,
+    "note": "Every listed feature has a defined contract and interface but no defensible point-in-time historical source in this phase. They are reported as unavailable rather than backfilled with retrospective knowledge."
+  },
+  "3_leakage_tests": {
+    "suite": "apps/api/tests/test_leakage.py",
+    "checks": [
+      "future observation rejected by assert_no_lookahead",
+      "timezone-naive timestamps rejected (ambiguous comparison)",
+      "records with unknown provenance treated as future, never as safely-past",
+      "replay clock refuses to rewind",
+      "a game's own stats can never enter its own features",
+      "future-week results excluded at every horizon",
+      "snapshot build aborts if a result is already observable at the cutoff",
+      "CLOSING_CAPTURE excluded from prediction horizons (evaluation only)",
+      "earlier horizons see no more data than later horizons",
+      "train/validation/test season sets disjoint and ordered",
+      "isotonic calibration refused below minimum sample size"
+    ],
+    "status": "all passing"
+  },
+  "4_to_7_model_performance_by_scope": {
+    "test:2024:PREGAME": [
+      {
+        "model": "market-residual-v1",
+        "sample_size": 285,
+        "n": 285,
+        "n_win_scored": 285,
+        "log_loss": 0.5935364574592119,
+        "log_loss_ci90": [
+          0.5573559480516797,
+          0.6308789127040947
+        ],
+        "brier": 0.20283001077972085,
+        "calibration_intercept": -0.1664475180548395,
+        "calibration_slope": 1.489546478208516,
+        "crps_margin": 7.125300886554876,
+        "crps_total": 7.026648321877604,
+        "margin_mae": 9.718351196601901,
+        "total_mae": 9.78513641531295,
+        "win_rate_observed": 0.5473684210526316
+      },
+      {
+        "model": "market-benchmark-v1",
+        "sample_size": 285,
+        "n": 285,
+        "n_win_scored": 285,
+        "log_loss": 0.5937890450588952,
+        "log_loss_ci90": [
+          0.5626039730892884,
+          0.6280544437074448
+        ],
+        "brier": 0.20308287915941112,
+        "calibration_intercept": -0.02457601067445148,
+        "calibration_slope": 1.5198721682139298,
+        "crps_margin": 7.131098290137394,
+        "crps_total": 7.001826220294347,
+        "margin_mae": 9.71589640970259,
+        "total_mae": 9.749913710044574,
+        "win_rate_observed": 0.5473684210526316
+      },
+      {
+        "model": "glm-ridge-v1",
+        "sample_size": 285,
+        "n": 285,
+        "n_win_scored": 285,
+        "log_loss": 0.6201729773208264,
+        "log_loss_ci90": [
+          0.5838217826496972,
+          0.6585869396960448
+        ],
+        "brier": 0.21490381069215528,
+        "calibration_intercept": -0.1806499646771625,
+        "calibration_slope": 1.3026647373902953,
+        "crps_margin": 7.3305516493062095,
+        "crps_total": 7.24863376278075,
+        "margin_mae": 10.024561992095807,
+        "total_mae": 9.964287887356233,
+        "win_rate_observed": 0.5473684210526316
+      },
+      {
+        "model": "team-ratings-v1",
+        "sample_size": 285,
+        "n": 285,
+        "n_win_scored": 285,
+        "log_loss": 0.6214827783686157,
+        "log_loss_ci90": [
+          0.5913980978899084,
+          0.654539573363896
+        ],
+        "brier": 0.2158905902667402,
+        "calibration_intercept": -0.12018002601476949,
+        "calibration_slope": 1.3561551299400156,
+        "crps_margin": 7.391999049893967,
+        "crps_total": 7.2483896831237775,
+        "margin_mae": 10.159306083905557,
+        "total_mae": 10.0473502048404,
+        "win_rate_observed": 0.5473684210526316
+      },
+      {
+        "model": "naive-rolling-v1",
+        "sample_size": 285,
+        "n": 285,
+        "n_win_scored": 285,
+        "log_loss": 0.6575168107875916,
+        "log_loss_ci90": [
+          0.6247297660045031,
+          0.6917300362225745
+        ],
+        "brier": 0.23191181031209224,
+        "calibration_intercept": 0.06263915852132673,
+        "calibration_slope": 0.842705072498858,
+        "crps_margin": 7.634911458704776,
+        "crps_total": 7.443840749326331,
+        "margin_mae": 10.499075056379635,
+        "total_mae": 10.33157894736842,
+        "win_rate_observed": 0.5473684210526316
+      },
+      {
+        "model": "naive-homefield-v1",
+        "sample_size": 285,
+        "n": 285,
+        "n_win_scored": 285,
+        "log_loss": 0.6886763892152552,
+        "log_loss_ci90": [
+          0.6788359801811298,
+          0.6983424621978495
+        ],
+        "brier": 0.24776787724156232,
+        "calibration_intercept": 3.8118764906143223,
+        "calibration_slope": -20.546013912232215,
+        "crps_margin": 8.095536232198594,
+        "crps_total": 7.34841948659322,
+        "margin_mae": 11.168836091435589,
+        "total_mae": 10.122468210356912,
+        "win_rate_observed": 0.5473684210526316
+      }
+    ],
+    "test:2025:PREGAME": [
+      {
+        "model": "market-benchmark-v1",
+        "sample_size": 285,
+        "n": 285,
+        "n_win_scored": 284,
+        "log_loss": 0.6083000804547437,
+        "log_loss_ci90": [
+          0.5833527556097606,
+          0.6364971515951388
+        ],
+        "brier": 0.2112749898709179,
+        "calibration_intercept": -0.028328107568289945,
+        "calibration_slope": 1.1737104023435028,
+        "crps_margin": 6.907924308722787,
+        "crps_total": 7.452618430973855,
+        "margin_mae": 9.671950602562017,
+        "total_mae": 10.404979493016786,
+        "win_rate_observed": 0.5352112676056338
+      },
+      {
+        "model": "market-residual-v1",
+        "sample_size": 285,
+        "n": 285,
+        "n_win_scored": 284,
+        "log_loss": 0.6149349764531822,
+        "log_loss_ci90": [
+          0.5856718983037041,
+          0.645394801166256
+        ],
+        "brier": 0.21377909625771452,
+        "calibration_intercept": -0.034794194873975066,
+        "calibration_slope": 1.0246344761298984,
+        "crps_margin": 7.036898324002685,
+        "crps_total": 7.499917551250876,
+        "margin_mae": 9.818124010770877,
+        "total_mae": 10.495305857234191,
+        "win_rate_observed": 0.5352112676056338
+      },
+      {
+        "model": "naive-rolling-v1",
+        "sample_size": 285,
+        "n": 285,
+        "n_win_scored": 284,
+        "log_loss": 0.6129775898784547,
+        "log_loss_ci90": [
+          0.5877004873307993,
+          0.6386409247039059
+        ],
+        "brier": 0.21232283100834226,
+        "calibration_intercept": -0.13407869566658454,
+        "calibration_slope": 1.448810478964403,
+        "crps_margin": 7.243881834751143,
+        "crps_total": 7.736766519344598,
+        "margin_mae": 10.032060274269607,
+        "total_mae": 10.838947368421053,
+        "win_rate_observed": 0.5352112676056338
+      },
+      {
+        "model": "team-ratings-v1",
+        "sample_size": 285,
+        "n": 285,
+        "n_win_scored": 284,
+        "log_loss": 0.6334932496153032,
+        "log_loss_ci90": [
+          0.599567837182048,
+          0.6700286153145092
+        ],
+        "brier": 0.221923568382995,
+        "calibration_intercept": -0.11284430459884344,
+        "calibration_slope": 0.9608650882698042,
+        "crps_margin": 7.248845198625203,
+        "crps_total": 7.552679097513793,
+        "margin_mae": 10.162320568293946,
+        "total_mae": 10.601412108838785,
+        "win_rate_observed": 0.5352112676056338
+      },
+      {
+        "model": "glm-ridge-v1",
+        "sample_size": 285,
+        "n": 285,
+        "n_win_scored": 284,
+        "log_loss": 0.6514433986884365,
+        "log_loss_ci90": [
+          0.6120226628356157,
+          0.6884285279808838
+        ],
+        "brier": 0.22951238918516295,
+        "calibration_intercept": -0.006958046329392882,
+        "calibration_slope": 0.8426419136668046,
+        "crps_margin": 7.480008434313063,
+        "crps_total": 7.552645698573967,
+        "margin_mae": 10.412679197813864,
+        "total_mae": 10.528649791245508,
+        "win_rate_observed": 0.5352112676056338
+      },
+      {
+        "model": "naive-homefield-v1",
+        "sample_size": 285,
+        "n": 285,
+        "n_win_scored": 284,
+        "log_loss": 0.690932628138768,
+        "log_loss_ci90": [
+          0.6812776415646455,
+          0.7013661613855546
+        ],
+        "brier": 0.24889276372349917,
+        "calibration_intercept": -2.131364886644297,
+        "calibration_slope": 12.122778074663032,
+        "crps_margin": 7.970907784263998,
+        "crps_total": 7.821875292898206,
+        "margin_mae": 11.00444649213146,
+        "total_mae": 11.002668617991942,
+        "win_rate_observed": 0.5352112676056338
+      }
+    ]
+  },
+  "8_calibration": {
+    "artifacts": [
+      {
+        "id": "cal_beta_val2023",
+        "method": "beta",
+        "target": "spread_cover_prob",
+        "fitted_on": "val OOF season 2023",
+        "parameters": {
+          "c": 12.666556303231888,
+          "a": 9.50987347588865,
+          "b": -8.6056288981597
+        },
+        "sample_size": 271
+      },
+      {
+        "id": "cal_beta_val2024",
+        "method": "beta",
+        "target": "spread_cover_prob",
+        "fitted_on": "val OOF season 2024",
+        "parameters": {
+          "c": 18.85190508067744,
+          "a": 14.506272656153179,
+          "b": -12.407294766605032
+        },
+        "sample_size": 281
+      }
+    ],
+    "policy": "Candidates (none/platt/beta, isotonic only with n>=800) are fitted on prior out-of-fold validation predictions and selected by log loss there. The identity (no-calibration) comparison is always reported. Calibration is never fitted on the test period, and is applied only to the target it was fitted for (spread cover)."
+  },
+  "9_model_vs_market": {
+    "test:2024:PREGAME": {
+      "market_benchmark": {
+        "model": "market-benchmark-v1",
+        "sample_size": 285,
+        "n": 285,
+        "n_win_scored": 285,
+        "log_loss": 0.5937890450588952,
+        "log_loss_ci90": [
+          0.5626039730892884,
+          0.6280544437074448
+        ],
+        "brier": 0.20308287915941112,
+        "calibration_intercept": -0.02457601067445148,
+        "calibration_slope": 1.5198721682139298,
+        "crps_margin": 7.131098290137394,
+        "crps_total": 7.001826220294347,
+        "margin_mae": 9.71589640970259,
+        "total_mae": 9.749913710044574,
+        "win_rate_observed": 0.5473684210526316
+      },
+      "deltas_vs_market": [
+        {
+          "model": "market-residual-v1",
+          "d_log_loss": -0.0003,
+          "d_crps_margin": -0.0058,
+          "d_margin_mae": 0.0025,
+          "beats_market_on_crps": true
+        },
+        {
+          "model": "glm-ridge-v1",
+          "d_log_loss": 0.0264,
+          "d_crps_margin": 0.1995,
+          "d_margin_mae": 0.3087,
+          "beats_market_on_crps": false
+        },
+        {
+          "model": "team-ratings-v1",
+          "d_log_loss": 0.0277,
+          "d_crps_margin": 0.2609,
+          "d_margin_mae": 0.4434,
+          "beats_market_on_crps": false
+        },
+        {
+          "model": "naive-rolling-v1",
+          "d_log_loss": 0.0637,
+          "d_crps_margin": 0.5038,
+          "d_margin_mae": 0.7832,
+          "beats_market_on_crps": false
+        },
+        {
+          "model": "naive-homefield-v1",
+          "d_log_loss": 0.0949,
+          "d_crps_margin": 0.9644,
+          "d_margin_mae": 1.4529,
+          "beats_market_on_crps": false
+        }
+      ]
+    },
+    "test:2025:PREGAME": {
+      "market_benchmark": {
+        "model": "market-benchmark-v1",
+        "sample_size": 285,
+        "n": 285,
+        "n_win_scored": 284,
+        "log_loss": 0.6083000804547437,
+        "log_loss_ci90": [
+          0.5833527556097606,
+          0.6364971515951388
+        ],
+        "brier": 0.2112749898709179,
+        "calibration_intercept": -0.028328107568289945,
+        "calibration_slope": 1.1737104023435028,
+        "crps_margin": 6.907924308722787,
+        "crps_total": 7.452618430973855,
+        "margin_mae": 9.671950602562017,
+        "total_mae": 10.404979493016786,
+        "win_rate_observed": 0.5352112676056338
+      },
+      "deltas_vs_market": [
+        {
+          "model": "market-residual-v1",
+          "d_log_loss": 0.0066,
+          "d_crps_margin": 0.129,
+          "d_margin_mae": 0.1462,
+          "beats_market_on_crps": false
+        },
+        {
+          "model": "naive-rolling-v1",
+          "d_log_loss": 0.0047,
+          "d_crps_margin": 0.336,
+          "d_margin_mae": 0.3601,
+          "beats_market_on_crps": false
+        },
+        {
+          "model": "team-ratings-v1",
+          "d_log_loss": 0.0252,
+          "d_crps_margin": 0.3409,
+          "d_margin_mae": 0.4904,
+          "beats_market_on_crps": false
+        },
+        {
+          "model": "glm-ridge-v1",
+          "d_log_loss": 0.0431,
+          "d_crps_margin": 0.5721,
+          "d_margin_mae": 0.7407,
+          "beats_market_on_crps": false
+        },
+        {
+          "model": "naive-homefield-v1",
+          "d_log_loss": 0.0826,
+          "d_crps_margin": 1.063,
+          "d_margin_mae": 1.3325,
+          "beats_market_on_crps": false
+        }
+      ]
+    }
+  },
+  "10_to_12_betting_by_run_and_market": {
+    "bt_4cfbc3643125": {
+      "config": {
+        "test_season": 2024,
+        "horizon": "PREGAME",
+        "half_life_grid": [
+          180.0,
+          365.0
+        ],
+        "ridge_alpha_grid": [
+          10.0,
+          25.0,
+          60.0
+        ],
+        "ratings_k_grid": [
+          0.08,
+          0.12,
+          0.18
+        ],
+        "candidate_edge_grid": [
+          0.03,
+          0.05,
+          0.08
+        ],
+        "seed": 20260801,
+        "execution": {
+          "manual_delay_minutes": 3.0,
+          "price_deterioration_cents": 5,
+          "halfpoint_deterioration_prob": 0.25,
+          "no_fill_prob": 0.02,
+          "suspended_prob": 0.005,
+          "seed": 20260801
+        }
+      },
+      "status": "finished",
+      "statuses": {
+        "PASS": 1083,
+        "WATCH": 53,
+        "RESEARCH_CANDIDATE": 4
+      },
+      "by_market": {
+        "SPREAD": {
+          "n": 4,
+          "pnl": -0.09523809523809534,
+          "wins": 2,
+          "losses": 2,
+          "pushes": 0
+        }
+      },
+      "bankroll_curve_units": [
+        {
+          "week": "2024-w42",
+          "cumulative_units": 0.9524
+        },
+        {
+          "week": "2024-w43",
+          "cumulative_units": -0.0476
+        },
+        {
+          "week": "2024-w44",
+          "cumulative_units": -1.0476
+        },
+        {
+          "week": "2024-w51",
+          "cumulative_units": -0.0952
+        }
+      ],
+      "max_drawdown_units": 2.0,
+      "clv": "unavailable \u2014 see limitations"
+    },
+    "bt_0df40f7df767": {
+      "config": {
+        "test_season": 2025,
+        "horizon": "PREGAME",
+        "half_life_grid": [
+          180.0,
+          365.0
+        ],
+        "ridge_alpha_grid": [
+          10.0,
+          25.0,
+          60.0
+        ],
+        "ratings_k_grid": [
+          0.08,
+          0.12,
+          0.18
+        ],
+        "candidate_edge_grid": [
+          0.03,
+          0.05,
+          0.08
+        ],
+        "seed": 20260801,
+        "execution": {
+          "manual_delay_minutes": 3.0,
+          "price_deterioration_cents": 5,
+          "halfpoint_deterioration_prob": 0.25,
+          "no_fill_prob": 0.02,
+          "suspended_prob": 0.005,
+          "seed": 20260801
+        }
+      },
+      "status": "finished",
+      "statuses": {
+        "PASS": 867,
+        "WATCH": 169,
+        "RESEARCH_CANDIDATE": 104
+      },
+      "by_market": {
+        "SPREAD": {
+          "n": 52,
+          "pnl": 2.019217542582027,
+          "wins": 28,
+          "losses": 24,
+          "pushes": 0
+        },
+        "TOTAL": {
+          "n": 52,
+          "pnl": -2.129767418939417,
+          "wins": 26,
+          "losses": 26,
+          "pushes": 0
+        }
+      },
+      "bankroll_curve_units": [
+        {
+          "week": "2025-w35",
+          "cumulative_units": 2.6652
+        },
+        {
+          "week": "2025-w36",
+          "cumulative_units": 5.4136
+        },
+        {
+          "week": "2025-w37",
+          "cumulative_units": 8.0933
+        },
+        {
+          "week": "2025-w38",
+          "cumulative_units": 12.7984
+        },
+        {
+          "week": "2025-w39",
+          "cumulative_units": 10.6599
+        },
+        {
+          "week": "2025-w40",
+          "cumulative_units": 12.2671
+        },
+        {
+          "week": "2025-w41",
+          "cumulative_units": 14.0199
+        },
+        {
+          "week": "2025-w42",
+          "cumulative_units": 11.0199
+        },
+        {
+          "week": "2025-w43",
+          "cumulative_units": 7.9545
+        },
+        {
+          "week": "2025-w44",
+          "cumulative_units": 8.61
+        },
+        {
+          "week": "2025-w45",
+          "cumulative_units": 5.4715
+        },
+        {
+          "week": "2025-w46",
+          "cumulative_units": 4.4715
+        },
+        {
+          "week": "2025-w47",
+          "cumulative_units": 4.2897
+        },
+        {
+          "week": "2025-w48",
+          "cumulative_units": 5.1078
+        },
+        {
+          "week": "2025-w49",
+          "cumulative_units": 6.8351
+        },
+        {
+          "week": "2025-w50",
+          "cumulative_units": 4.4061
+        },
+        {
+          "week": "2025-w51",
+          "cumulative_units": 4.2276
+        },
+        {
+          "week": "2026-w00",
+          "cumulative_units": 1.1367
+        },
+        {
+          "week": "2026-w01",
+          "cumulative_units": 1.0458
+        },
+        {
+          "week": "2026-w02",
+          "cumulative_units": -0.0196
+        },
+        {
+          "week": "2026-w03",
+          "cumulative_units": 0.8895
+        },
+        {
+          "week": "2026-w05",
+          "cumulative_units": -0.1105
+        }
+      ],
+      "max_drawdown_units": 14.1305,
+      "clv": "unavailable \u2014 see limitations"
+    }
+  },
+  "13_clv": {
+    "status": "unavailable",
+    "reason": "Only closing prices exist historically, and simulated fills are at-or-worse-than close, so CLV would be a tautology (<= 0 by construction). Reporting it would be misleading; it becomes measurable once pre-close quotes are captured forward."
+  },
+  "14_ingestion_provenance": {
+    "runs": [
+      {
+        "version_id": "20260801T125403341745Z-32e68976",
+        "provider": "nflverse",
+        "dataset": "games",
+        "params": {
+          "scope": "all"
+        },
+        "payload_sha256": "32e68976d23d5b1c662130722e7076505b5f73bcaf0fbc6119714b035ebd5f6d",
+        "status": "success",
+        "schema_version": "nflverse-games-v1",
+        "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+        "ingested_at": "2026-08-01T12:54:03.341745"
+      },
+      {
+        "version_id": "20260801T125454000816Z-2e6f2dce",
+        "provider": "nflverse",
+        "dataset": "pbp",
+        "params": {
+          "season": 2018
+        },
+        "payload_sha256": "2e6f2dce7c7ebd46e985cabe0c17eb72b39a77f98cb4478409294f50b5820150",
+        "status": "success",
+        "schema_version": "nflverse-pbp-v1",
+        "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+        "ingested_at": "2026-08-01T12:54:54.000816"
+      },
+      {
+        "version_id": "20260801T125454362864Z-259532b0",
+        "provider": "nflverse",
+        "dataset": "rosters",
+        "params": {
+          "season": 2018
+        },
+        "payload_sha256": "259532b0bd2f68e01db949023e9f001878c9da9d2c912fef5352324d08b9df07",
+        "status": "success",
+        "schema_version": "nflverse-rosters-v1",
+        "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+        "ingested_at": "2026-08-01T12:54:54.362864"
+      },
+      {
+        "version_id": "20260801T125456439013Z-60c30670",
+        "provider": "nflverse",
+        "dataset": "pbp",
+        "params": {
+          "season": 2019
+        },
+        "payload_sha256": "60c3067017db2d28a78f66a79b657268be8578d9a5288e6a827efdcd7fe42540",
+        "status": "success",
+        "schema_version": "nflverse-pbp-v1",
+        "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+        "ingested_at": "2026-08-01T12:54:56.439013"
+      },
+      {
+        "version_id": "20260801T125456780880Z-8aeee315",
+        "provider": "nflverse",
+        "dataset": "rosters",
+        "params": {
+          "season": 2019
+        },
+        "payload_sha256": "8aeee315dbf27fc07d5a41a65ac0be0cb00bd63c4a4a23298e0b15228cedd49f",
+        "status": "success",
+        "schema_version": "nflverse-rosters-v1",
+        "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+        "ingested_at": "2026-08-01T12:54:56.780880"
+      },
+      {
+        "version_id": "20260801T125458893309Z-73b7dbf6",
+        "provider": "nflverse",
+        "dataset": "pbp",
+        "params": {
+          "season": 2020
+        },
+        "payload_sha256": "73b7dbf66fa8cb9356f58bf6b1f15a0fee197ecc10cf4983b640cb9679b15cb4",
+        "status": "success",
+        "schema_version": "nflverse-pbp-v1",
+        "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+        "ingested_at": "2026-08-01T12:54:58.893309"
+      },
+      {
+        "version_id": "20260801T125459241782Z-f511f31f",
+        "provider": "nflverse",
+        "dataset": "rosters",
+        "params": {
+          "season": 2020
+        },
+        "payload_sha256": "f511f31fe0472c0d0bca87583240c68ca7dc1294f9b7975f5793655bd4598948",
+        "status": "success",
+        "schema_version": "nflverse-rosters-v1",
+        "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+        "ingested_at": "2026-08-01T12:54:59.241782"
+      },
+      {
+        "version_id": "20260801T125501290940Z-333ad343",
+        "provider": "nflverse",
+        "dataset": "pbp",
+        "params": {
+          "season": 2021
+        },
+        "payload_sha256": "333ad34378e5339d5172717cc83378e908daf02c8699416ab3e17c2ec10f78d8",
+        "status": "success",
+        "schema_version": "nflverse-pbp-v1",
+        "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+        "ingested_at": "2026-08-01T12:55:01.290940"
+      },
+      {
+        "version_id": "20260801T125501623136Z-62015270",
+        "provider": "nflverse",
+        "dataset": "rosters",
+        "params": {
+          "season": 2021
+        },
+        "payload_sha256": "6201527093636f44ac74d94f88d57b65bc48c3818c65854ee092b742d6ae6e47",
+        "status": "success",
+        "schema_version": "nflverse-rosters-v1",
+        "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+        "ingested_at": "2026-08-01T12:55:01.623136"
+      },
+      {
+        "version_id": "20260801T125503680900Z-931121d8",
+        "provider": "nflverse",
+        "dataset": "pbp",
+        "params": {
+          "season": 2022
+        },
+        "payload_sha256": "931121d8897779d7944e2a293e92ed8799c8e5cceef84096ac42339003fedc09",
+        "status": "success",
+        "schema_version": "nflverse-pbp-v1",
+        "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+        "ingested_at": "2026-08-01T12:55:03.680900"
+      },
+      {
+        "version_id": "20260801T125504032573Z-1d8e7987",
+        "provider": "nflverse",
+        "dataset": "rosters",
+        "params": {
+          "season": 2022
+        },
+        "payload_sha256": "1d8e7987d2b07f510fdce9977354a960041064fdc4a51816cb51540f7835e193",
+        "status": "success",
+        "schema_version": "nflverse-rosters-v1",
+        "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+        "ingested_at": "2026-08-01T12:55:04.032573"
+      },
+      {
+        "version_id": "20260801T125506074830Z-bd348473",
+        "provider": "nflverse",
+        "dataset": "pbp",
+        "params": {
+          "season": 2023
+        },
+        "payload_sha256": "bd3484731408def6b0ec93225bba2bd7b2c65769ca707a2b9444d891abdc6776",
+        "status": "success",
+        "schema_version": "nflverse-pbp-v1",
+        "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+        "ingested_at": "2026-08-01T12:55:06.074830"
+      },
+      {
+        "version_id": "20260801T125506425489Z-66dcb7d0",
+        "provider": "nflverse",
+        "dataset": "rosters",
+        "params": {
+          "season": 2023
+        },
+        "payload_sha256": "66dcb7d0e203c41b49e997b93eb55ed77bcc960e5dd0774b7e2426a87cef3c90",
+        "status": "success",
+        "schema_version": "nflverse-rosters-v1",
+        "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+        "ingested_at": "2026-08-01T12:55:06.425489"
+      },
+      {
+        "version_id": "20260801T125508477222Z-6d432dd4",
+        "provider": "nflverse",
+        "dataset": "pbp",
+        "params": {
+          "season": 2024
+        },
+        "payload_sha256": "6d432dd4308329bfddaef633309ea119f9ca46d52cbb3c09f47172a2e8efcd01",
+        "status": "success",
+        "schema_version": "nflverse-pbp-v1",
+        "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+        "ingested_at": "2026-08-01T12:55:08.477222"
+      },
+      {
+        "version_id": "20260801T125508802999Z-bd38dbe7",
+        "provider": "nflverse",
+        "dataset": "rosters",
+        "params": {
+          "season": 2024
+        },
+        "payload_sha256": "bd38dbe785728c6b4ddc0b56b7d4fee69a8337595db3b631528d284253c04aaf",
+        "status": "success",
+        "schema_version": "nflverse-rosters-v1",
+        "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+        "ingested_at": "2026-08-01T12:55:08.802999"
+      },
+      {
+        "version_id": "20260801T125510991924Z-3730c4db",
+        "provider": "nflverse",
+        "dataset": "pbp",
+        "params": {
+          "season": 2025
+        },
+        "payload_sha256": "3730c4db2ab99d2dfc4017de975b7610c46c35301b9280b65c03de1b1c74265a",
+        "status": "success",
+        "schema_version": "nflverse-pbp-v1",
+        "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+        "ingested_at": "2026-08-01T12:55:10.991924"
+      },
+      {
+        "version_id": "20260801T125511307667Z-902904a0",
+        "provider": "nflverse",
+        "dataset": "rosters",
+        "params": {
+          "season": 2025
+        },
+        "payload_sha256": "902904a0500f066f02ef23f7857e3db35060517e50ffcfe36cc1bc5c6d230f70",
+        "status": "success",
+        "schema_version": "nflverse-rosters-v1",
+        "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+        "ingested_at": "2026-08-01T12:55:11.307667"
+      }
+    ],
+    "count": 17
+  },
+  "15_16_limitations": {
+    "data": [
+      "No licensed historical multi-book odds. nflverse carries CLOSING lines only, used as the evaluation benchmark and residualization baseline \u2014 never as features for earlier horizons.",
+      "No line-movement, cross-book dispersion, or quote-age history exists in this phase.",
+      "No point-in-time historical injury/participation/depth-chart feed; those features are declared unavailable rather than backfilled from retrospective knowledge.",
+      "Weather forecasts are forward-only from NWS; historical pregame forecasts cannot be reconstructed without lookahead, so weather features are unavailable for replay.",
+      "Result-availability instants are approximated as kickoff + 4h30m; the source records no publication timestamp.",
+      "Horizon cutoffs are fixed offsets from kickoff, identical for every game, because no intra-week observation timeline exists in the source."
+    ],
+    "models": [
+      "All artifacts are research_only. No model is approved for real-money decisions.",
+      "Margin and total are modeled as independent Normals; real NFL margins concentrate on key numbers (3, 7) more than a Normal does.",
+      "The market-residual model is fitted against CLOSING lines, so its 'edge' is measured versus a price a bettor could not have obtained earlier in the week.",
+      "Backtest fills are at-or-worse-than close by construction; closing-line value is therefore structurally unavailable and is reported as such, never fabricated.",
+      "Per-QB efficiency uses team dropback aggregates as a proxy; no per-passer model yet.",
+      "Sample sizes are small (roughly 285 games per test season): reported ROI confidence intervals are wide and consistent with zero edge."
+    ]
+  },
+  "data_quality_events": [
+    {
+      "severity": "WARN",
+      "scope": "rosters-load",
+      "message": "1 roster rows without GSIS id skipped (never joined by name)"
+    },
+    {
+      "severity": "WARN",
+      "scope": "rosters-load",
+      "message": "1 roster rows without GSIS id skipped (never joined by name)"
+    },
+    {
+      "severity": "WARN",
+      "scope": "rosters-load",
+      "message": "1 roster rows without GSIS id skipped (never joined by name)"
+    },
+    {
+      "severity": "WARN",
+      "scope": "rosters-load",
+      "message": "1 roster rows without GSIS id skipped (never joined by name)"
+    },
+    {
+      "severity": "WARN",
+      "scope": "rosters-load",
+      "message": "1 roster rows without GSIS id skipped (never joined by name)"
+    },
+    {
+      "severity": "WARN",
+      "scope": "rosters-load",
+      "message": "1 roster rows without GSIS id skipped (never joined by name)"
+    },
+    {
+      "severity": "WARN",
+      "scope": "rosters-load",
+      "message": "1 roster rows without GSIS id skipped (never joined by name)"
+    },
+    {
+      "severity": "WARN",
+      "scope": "rosters-load",
+      "message": "4 roster rows without GSIS id skipped (never joined by name)"
+    }
+  ],
+  "registry": [
+    {
+      "id": "naive-homefield-v1",
+      "approval_status": "research_only",
+      "feature_set": null,
+      "calibration_version": null,
+      "artifact_hash": "3e19da1e7477064770386c7cad99fc79f708a9fc15f1160a7cc5060d89b5d75e",
+      "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+      "dependency_lock_hash": "955525cd6ac3d1bf9de3dfbeb60396283a2f9338e209e5f9fcb3044890aec182",
+      "train_window": "seasons<= 2023",
+      "validation_window": "season 2024",
+      "test_window": "season 2025",
+      "random_seed": 20260801
+    },
+    {
+      "id": "naive-rolling-v1",
+      "approval_status": "research_only",
+      "feature_set": null,
+      "calibration_version": null,
+      "artifact_hash": "01b46e5a889bd75c003d2f4444e8b320c235353f77c03c6119d1a00124de5eca",
+      "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+      "dependency_lock_hash": "955525cd6ac3d1bf9de3dfbeb60396283a2f9338e209e5f9fcb3044890aec182",
+      "train_window": "seasons<= 2023",
+      "validation_window": "season 2024",
+      "test_window": "season 2025",
+      "random_seed": 20260801
+    },
+    {
+      "id": "market-benchmark-v1",
+      "approval_status": "research_only",
+      "feature_set": null,
+      "calibration_version": null,
+      "artifact_hash": "c28ea742a1cae9f7bb937c1e219df5f33f03e06e231690efb6e272a3ce98ffca",
+      "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+      "dependency_lock_hash": "955525cd6ac3d1bf9de3dfbeb60396283a2f9338e209e5f9fcb3044890aec182",
+      "train_window": "seasons<= 2023",
+      "validation_window": "season 2024",
+      "test_window": "season 2025",
+      "random_seed": 20260801
+    },
+    {
+      "id": "team-ratings-v1",
+      "approval_status": "research_only",
+      "feature_set": null,
+      "calibration_version": null,
+      "artifact_hash": "1ad358bf8464b07a2fe8ac6687f62c401bd42c299c4f30b31b32313970cdda8f",
+      "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+      "dependency_lock_hash": "955525cd6ac3d1bf9de3dfbeb60396283a2f9338e209e5f9fcb3044890aec182",
+      "train_window": "seasons<= 2023",
+      "validation_window": "season 2024",
+      "test_window": "season 2025",
+      "random_seed": 20260801
+    },
+    {
+      "id": "glm-ridge-v1",
+      "approval_status": "research_only",
+      "feature_set": "nfl-core-v1",
+      "calibration_version": null,
+      "artifact_hash": "51ea1332f4edc6dbe310a96add4a4982c6d52b978a78a95e47a10a8865b8eddb",
+      "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+      "dependency_lock_hash": "955525cd6ac3d1bf9de3dfbeb60396283a2f9338e209e5f9fcb3044890aec182",
+      "train_window": "seasons<= 2023",
+      "validation_window": "season 2024",
+      "test_window": "season 2025",
+      "random_seed": 20260801
+    },
+    {
+      "id": "market-residual-v1",
+      "approval_status": "research_only",
+      "feature_set": "nfl-core-v1",
+      "calibration_version": "cal_beta_val2024",
+      "artifact_hash": "7fd7c355acb3feb3700df62daba3f0d3346b02577e76d8abe6b51298f4047967",
+      "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+      "dependency_lock_hash": "955525cd6ac3d1bf9de3dfbeb60396283a2f9338e209e5f9fcb3044890aec182",
+      "train_window": "seasons<= 2023",
+      "validation_window": "season 2024",
+      "test_window": "season 2025",
+      "random_seed": 20260801
+    }
+  ]
+}

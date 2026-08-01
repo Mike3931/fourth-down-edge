@@ -24,5 +24,16 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    proxy: {
+      // Dev convenience: point the analytical-engine URL at "/research-api" in
+      // Settings and requests become same-origin, so no CORS round-trip is
+      // needed while developing. Production deployments talk to the engine's
+      // real URL directly (the client accepts any base URL).
+      '/research-api': {
+        target: process.env.FDE_RESEARCH_API ?? 'http://127.0.0.1:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/research-api/, ''),
+      },
+    },
   },
 });
