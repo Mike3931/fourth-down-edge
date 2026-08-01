@@ -384,6 +384,8 @@ class TestOutcomeDomainSeparation:
         assert {d.value for d in DomainState} == {
             "COMPLETE", "DATA_INCOMPLETE", "NOT_YET_AVAILABLE", "NOT_APPLICABLE",
             "STALE", "SUPPRESSED", "NO_ELIGIBLE_RECORDS",
+            # Migration-only; live handlers may never emit it.
+            "UNKNOWN_LEGACY",
         }
 
     def test_data_states_are_not_execution_outcomes(self) -> None:

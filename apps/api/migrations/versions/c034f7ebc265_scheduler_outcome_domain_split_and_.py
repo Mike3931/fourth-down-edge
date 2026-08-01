@@ -23,6 +23,7 @@ def upgrade() -> None:
     op.create_table('migration_audit',
     sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
     sa.Column('revision', sa.String(length=48), nullable=False),
+    sa.Column('migration_cycle', sa.Integer(), nullable=False, server_default='1'),
     sa.Column('table_name', sa.String(length=64), nullable=False),
     sa.Column('record_id', sa.String(length=96), nullable=False),
     sa.Column('original_value', sa.String(length=48), nullable=True),
@@ -31,7 +32,9 @@ def upgrade() -> None:
     sa.Column('mapping_rule', sa.String(length=120), nullable=False),
     sa.Column('exact', sa.Boolean(), nullable=False),
     sa.Column('migrated_at', fde_api.db.models.UtcDateTime(timezone=True), nullable=False),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('revision', 'migration_cycle', 'table_name', 'record_id',
+                        name='uq_migration_audit_identity')
     )
     op.create_index(op.f('ix_migration_audit_revision'), 'migration_audit', ['revision'], unique=False)
     op.add_column('scheduled_job_runs', sa.Column('job_outcome', sa.String(length=24), nullable=True))
@@ -74,27 +77,45 @@ def upgrade() -> None:
 # rule_name, exact). `exact` is False when the domain state is a conservative
 # default rather than something the legacy row actually recorded.
 LEGACY_STATE_MAP: dict[str, tuple[str, str, str, bool]] = {
-    # Historical JobStatus vocabulary actually written by the scheduler.
-    "finished": ("SUCCESS", "COMPLETE", "finished->SUCCESS/COMPLETE", True),
-    "running": ("RUNNING", "NOT_YET_AVAILABLE", "running->RUNNING/NOT_YET_AVAILABLE", True),
-    "queued": ("RUNNING", "NOT_YET_AVAILABLE", "queued->RUNNING/NOT_YET_AVAILABLE", True),
-    "failed": ("RETRYABLE_FAILURE", "DATA_INCOMPLETE", "failed->RETRYABLE/DATA_INCOMPLETE", True),
-    "dead_letter": ("TERMINAL_FAILURE", "DATA_INCOMPLETE", "dead_letter->TERMINAL/DATA_INCOMPLETE", True),
-    "interrupted": ("INTERRUPTED", "DATA_INCOMPLETE", "interrupted->INTERRUPTED/DATA_INCOMPLETE", True),
-    "skipped": ("SKIPPED", "NO_ELIGIBLE_RECORDS", "skipped->SKIPPED/NO_ELIGIBLE_RECORDS (conservative)", False),
-    # Outcome-style values, in case any row carried them.
-    "SUCCESS": ("SUCCESS", "COMPLETE", "SUCCESS->SUCCESS/COMPLETE", True),
-    "SUCCESS_WITH_WARNINGS": ("SUCCESS_WITH_WARNINGS", "COMPLETE",
-                              "SUCCESS_WITH_WARNINGS->COMPLETE unless metadata says otherwise", False),
-    "SKIPPED": ("SKIPPED", "NO_ELIGIBLE_RECORDS", "SKIPPED->NO_ELIGIBLE_RECORDS (conservative)", False),
-    "RETRYABLE_FAILURE": ("RETRYABLE_FAILURE", "DATA_INCOMPLETE", "RETRYABLE->DATA_INCOMPLETE", True),
-    "TERMINAL_FAILURE": ("TERMINAL_FAILURE", "DATA_INCOMPLETE", "TERMINAL->DATA_INCOMPLETE", True),
-    "INTERRUPTED": ("INTERRUPTED", "DATA_INCOMPLETE", "INTERRUPTED->DATA_INCOMPLETE", True),
+    # Legacy execution status establishes the OUTCOME exactly. It does NOT
+    # establish the domain state: "finished" means the job ran, not that the
+    # data was complete. Domain state is exact only when preserved metadata
+    # records it explicitly (applied separately below).
+    "finished": ("SUCCESS", "UNKNOWN_LEGACY",
+                 "finished->SUCCESS; domain not recorded (conservative)", False),
+    "running": ("RUNNING", "UNKNOWN_LEGACY",
+                "running->RUNNING; domain not recorded (conservative)", False),
+    "queued": ("RUNNING", "UNKNOWN_LEGACY",
+               "queued->RUNNING; domain not recorded (conservative)", False),
+    "failed": ("RETRYABLE_FAILURE", "UNKNOWN_LEGACY",
+               "failed->RETRYABLE_FAILURE; domain not recorded (conservative)", False),
+    "dead_letter": ("TERMINAL_FAILURE", "UNKNOWN_LEGACY",
+                    "dead_letter->TERMINAL_FAILURE; domain not recorded (conservative)", False),
+    "interrupted": ("INTERRUPTED", "UNKNOWN_LEGACY",
+                    "interrupted->INTERRUPTED; domain not recorded (conservative)", False),
+    "skipped": ("SKIPPED", "UNKNOWN_LEGACY",
+                "skipped->SKIPPED; domain not recorded (conservative)", False),
+    # Outcome-style legacy values, if any row carried them.
+    "SUCCESS": ("SUCCESS", "UNKNOWN_LEGACY",
+                "SUCCESS->SUCCESS; domain not recorded (conservative)", False),
+    "SUCCESS_WITH_WARNINGS": ("SUCCESS_WITH_WARNINGS", "UNKNOWN_LEGACY",
+                              "SUCCESS_WITH_WARNINGS; domain not recorded (conservative)", False),
+    "SKIPPED": ("SKIPPED", "UNKNOWN_LEGACY",
+                "SKIPPED; domain not recorded (conservative)", False),
+    "RETRYABLE_FAILURE": ("RETRYABLE_FAILURE", "UNKNOWN_LEGACY",
+                          "RETRYABLE_FAILURE; domain not recorded (conservative)", False),
+    "TERMINAL_FAILURE": ("TERMINAL_FAILURE", "UNKNOWN_LEGACY",
+                         "TERMINAL_FAILURE; domain not recorded (conservative)", False),
+    "INTERRUPTED": ("INTERRUPTED", "UNKNOWN_LEGACY",
+                    "INTERRUPTED; domain not recorded (conservative)", False),
+    # These two legacy values WERE domain states misfiled as outcomes, so the
+    # domain reconstruction is exact.
     "DATA_INCOMPLETE": ("SUCCESS_WITH_WARNINGS", "DATA_INCOMPLETE",
                         "legacy DATA_INCOMPLETE was a domain state, not an outcome", True),
     "SUPPRESSED": ("SUCCESS_WITH_WARNINGS", "SUPPRESSED",
                    "legacy SUPPRESSED was a domain state, not an outcome", True),
 }
+
 
 # Domain states recoverable from the preserved error_summary text, which is
 # where the split briefly lived before it became a column.
@@ -113,6 +134,16 @@ def _split_legacy_scheduler_state() -> None:
                 "FROM scheduled_job_runs")
     ).fetchall()
     now = datetime.now(tz=UTC)
+
+    # A downgrade removes this revision's audit rows, so a re-upgrade starts a
+    # NEW cycle. Cycle number makes repeated applications distinguishable
+    # rather than silently duplicated.
+    prior = conn.execute(
+        sa.text("SELECT COALESCE(MAX(migration_cycle), 0) FROM migration_audit "
+                "WHERE revision = :r"),
+        {"r": revision},
+    ).scalar() or 0
+    cycle = int(prior) + 1
 
     for row in rows:
         run_id, legacy, summary, idem_key, slot = row[0], row[1], row[2], row[3], row[4]
@@ -140,13 +171,14 @@ def _split_legacy_scheduler_state() -> None:
         )
         conn.execute(
             sa.text(
-                "INSERT INTO migration_audit (revision, table_name, record_id, original_value, "
-                "new_outcome, new_domain_state, mapping_rule, exact, migrated_at) "
-                "VALUES (:rev, :tbl, :rec, :orig, :o, :d, :rule, :exact, :ts)"
+                "INSERT INTO migration_audit (revision, migration_cycle, table_name, "
+                "record_id, original_value, new_outcome, new_domain_state, mapping_rule, "
+                "exact, migrated_at) "
+                "VALUES (:rev, :cycle, :tbl, :rec, :orig, :o, :d, :rule, :exact, :ts)"
             ),
-            {"rev": revision, "tbl": "scheduled_job_runs", "rec": str(run_id),
-             "orig": legacy, "o": outcome, "d": domain, "rule": rule,
-             "exact": 1 if exact else 0, "ts": now},
+            {"rev": revision, "cycle": cycle, "tbl": "scheduled_job_runs",
+             "rec": str(run_id), "orig": legacy, "o": outcome, "d": domain,
+             "rule": rule, "exact": 1 if exact else 0, "ts": now},
         )
 
 

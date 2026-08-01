@@ -26,15 +26,14 @@ T0 = datetime(2026, 9, 13, 12, 0, tzinfo=UTC)
 
 # (legacy status, recorded error_summary, expected outcome, expected domain, exact?)
 LEGACY_ROWS: list[tuple[str, str | None, str, str, bool]] = [
-    ("finished", None, "SUCCESS", "COMPLETE", True),
-    ("running", None, "RUNNING", "NOT_YET_AVAILABLE", True),
-    ("failed", "provider timeout", "RETRYABLE_FAILURE", "DATA_INCOMPLETE", True),
-    ("dead_letter", "gave up", "TERMINAL_FAILURE", "DATA_INCOMPLETE", True),
-    ("interrupted", "process died", "INTERRUPTED", "DATA_INCOMPLETE", True),
-    # No metadata: the domain state cannot be reconstructed, so the mapping
-    # is conservative and flagged inexact.
-    ("skipped", None, "SKIPPED", "NO_ELIGIBLE_RECORDS", False),
-    # Metadata present: the recorded domain state wins over the default.
+    # Execution status is exact; domain state is NOT recoverable from it.
+    ("finished", None, "SUCCESS", "UNKNOWN_LEGACY", False),
+    ("running", None, "RUNNING", "UNKNOWN_LEGACY", False),
+    ("failed", "provider timeout", "RETRYABLE_FAILURE", "UNKNOWN_LEGACY", False),
+    ("dead_letter", "gave up", "TERMINAL_FAILURE", "UNKNOWN_LEGACY", False),
+    ("interrupted", "process died", "INTERRUPTED", "UNKNOWN_LEGACY", False),
+    ("skipped", None, "SKIPPED", "UNKNOWN_LEGACY", False),
+    # Metadata explicitly records the domain state -> exact reconstruction.
     ("skipped", "outcome=SKIPPED; domain_state=DATA_INCOMPLETE",
      "SKIPPED", "DATA_INCOMPLETE", True),
     ("finished", "outcome=SUCCESS_WITH_WARNINGS; domain_state=SUPPRESSED",
@@ -42,6 +41,9 @@ LEGACY_ROWS: list[tuple[str, str | None, str, str, bool]] = [
     ("finished", "outcome=SUCCESS_WITH_WARNINGS; domain_state=NOT_APPLICABLE",
      "SUCCESS", "NOT_APPLICABLE", True),
 ]
+
+EXACT_ROWS = [i for i, r in enumerate(LEGACY_ROWS) if r[4]]
+CONSERVATIVE_ROWS = [i for i, r in enumerate(LEGACY_ROWS) if not r[4]]
 
 
 def _alembic(db_url: str, *args: str) -> subprocess.CompletedProcess[str]:
@@ -194,6 +196,7 @@ class TestMigrationAudit:
             assert recorded_exact == exact, f"row {i}: {rule}"
             if not exact:
                 assert "conservative" in rule.lower()
+                assert "domain not recorded" in rule.lower()
 
     def test_metadata_refinement_is_recorded(self, legacy_db: str) -> None:
         """A domain state recovered from metadata must say so."""

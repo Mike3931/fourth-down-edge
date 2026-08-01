@@ -320,3 +320,77 @@ Catch-up policy is per job. A missed closing capture or odds poll is
 `SKIP` — replaying it later would record a price that was never
 observable at that moment. Vintages, settlements, and result ingestion
 are `RUN_ALL` because they remain correct when computed late.
+
+---
+
+## Scheduler state model (authoritative)
+
+Two independent persisted axes:
+
+| Field | Meaning |
+| --- | --- |
+| `job_outcome` | How the EXECUTION went |
+| `domain_state` | What the DATA looked like |
+
+`status` is **compatibility-only**. New scheduler logic reads
+`job_outcome` and `domain_state`; it never derives authoritative state
+from `status`, and `domain_state` is never reconstructed from `status`
+for new records. Migration code is the only place permitted to
+reconstruct the new axes from historical values.
+
+### `UNKNOWN_LEGACY`
+
+A legacy execution status establishes the OUTCOME exactly and says
+nothing about the DATA. "finished" means the job ran, not that the domain
+was complete. Rows migrated without recorded domain metadata therefore
+carry `domain_state = UNKNOWN_LEGACY`, and the audit marks the mapping
+**not exact**.
+
+`UNKNOWN_LEGACY` is migration-only. `HandlerResult.__post_init__` raises
+`IllegalDomainStateError` if live code attempts to emit it, and
+`LIVE_DOMAIN_STATES` excludes it. Completeness metrics report migrated
+unknowns as their own bucket rather than folding them into complete or
+incomplete; reliability metrics use `job_outcome`, which is always
+populated.
+
+### Final legacy mapping
+
+| Legacy `status` | `job_outcome` | `domain_state` | Exact |
+| --- | --- | --- | :--: |
+| `finished` | SUCCESS | UNKNOWN_LEGACY | no |
+| `running` / `queued` | RUNNING | UNKNOWN_LEGACY | no |
+| `failed` | RETRYABLE_FAILURE | UNKNOWN_LEGACY | no |
+| `dead_letter` | TERMINAL_FAILURE | UNKNOWN_LEGACY | no |
+| `interrupted` | INTERRUPTED | UNKNOWN_LEGACY | no |
+| `skipped` | SKIPPED | UNKNOWN_LEGACY | no |
+| legacy `DATA_INCOMPLETE` | SUCCESS_WITH_WARNINGS | DATA_INCOMPLETE | **yes** |
+| legacy `SUPPRESSED` | SUCCESS_WITH_WARNINGS | SUPPRESSED | **yes** |
+
+When the preserved `error_summary` contains an explicit
+`domain_state=<value>`, that value is used and the reconstruction is
+marked exact.
+
+## Downgrade support decision
+
+> **Downgrade is structurally supported but semantically lossy.**
+
+Downgrading across revision `c034f7ebc265` drops both authoritative
+columns. Rows survive and remain queryable, but `domain_state` cannot be
+represented by the legacy `status` column — the two are orthogonal, so
+the information is destroyed rather than compressed.
+
+Proven, not assumed: a test inserts post-upgrade rows spanning six
+outcome/domain combinations, downgrades, re-upgrades, and asserts that
+every distinct domain state returns as `UNKNOWN_LEGACY`. The execution
+axis *is* recoverable, because `status` projects it.
+
+Do not downgrade a database carrying forward-test records you intend to
+analyze. Restore from backup instead.
+
+## Migration audit
+
+`migration_audit` carries `migration_cycle` and a unique identity of
+(revision, cycle, table, record), so repeated upgrade cycles can never
+produce indistinguishable rows. A downgrade removes the revision's audit
+rows, so a re-upgrade writes a clean set. Exact and conservative mappings
+remain distinguishable across cycles. The table holds no payload content.

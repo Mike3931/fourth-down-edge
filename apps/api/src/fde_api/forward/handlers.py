@@ -82,6 +82,20 @@ class DomainState(StrEnum):
     SUPPRESSED = "SUPPRESSED"
     NO_ELIGIBLE_RECORDS = "NO_ELIGIBLE_RECORDS"
 
+    # Migrated history only. Legacy rows recorded an execution status that
+    # does not establish what the DATA looked like — "finished" says the job
+    # ran, not that the domain was complete. New runs may never emit this.
+    UNKNOWN_LEGACY = "UNKNOWN_LEGACY"
+
+
+# States a live handler is permitted to produce. UNKNOWN_LEGACY is excluded:
+# it exists solely to represent history we cannot reconstruct.
+LIVE_DOMAIN_STATES = frozenset(DomainState) - {DomainState.UNKNOWN_LEGACY}
+
+
+class IllegalDomainStateError(ValueError):
+    """Raised when live code attempts to emit a migration-only state."""
+
 
 class WeatherStatus(StrEnum):
     CAPTURED = "CAPTURED"
@@ -116,6 +130,13 @@ class HandlerResult:
     error_summary: str | None = None
     lineage: dict[str, Any] = field(default_factory=dict)
     detail: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.domain_state is DomainState.UNKNOWN_LEGACY:
+            raise IllegalDomainStateError(
+                "UNKNOWN_LEGACY represents unreconstructable migrated history; "
+                "a live handler must report an actual domain state"
+            )
 
     @property
     def warning_count(self) -> int:

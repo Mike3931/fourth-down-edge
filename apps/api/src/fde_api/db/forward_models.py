@@ -428,6 +428,9 @@ class MigrationAudit(Base):
     __tablename__ = "migration_audit"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     revision: Mapped[str] = mapped_column(String(48), index=True)
+    # Distinguishes repeated upgrade cycles (upgrade -> downgrade -> upgrade)
+    # so audit rows from different cycles are never indistinguishable.
+    migration_cycle: Mapped[int] = mapped_column(Integer, default=1)
     table_name: Mapped[str] = mapped_column(String(64))
     record_id: Mapped[str] = mapped_column(String(96))
     original_value: Mapped[str | None] = mapped_column(String(48))
@@ -436,3 +439,7 @@ class MigrationAudit(Base):
     mapping_rule: Mapped[str] = mapped_column(String(120))
     exact: Mapped[bool] = mapped_column(Boolean)
     migrated_at: Mapped[datetime] = mapped_column()
+    __table_args__ = (
+        UniqueConstraint("revision", "migration_cycle", "table_name", "record_id",
+                         name="uq_migration_audit_identity"),
+    )
