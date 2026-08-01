@@ -373,6 +373,61 @@ def run_health_checks(
         checks.append(_fail("database_readiness", Severity.CRITICAL,
                             f"database unreachable: {e}", "restore connectivity", now))
 
+    # ---- authoritative-state and lineage integrity ---------------------- #
+    from fde_api.forward.recovery import blocks_automatic_recovery, lineage_violations
+    from fde_api.forward.state import detect_invalid_origin, detect_status_drift
+
+    drifts = detect_status_drift(session)
+    checks.append(
+        _ok("compatibility_status_drift", Severity.WARNING,
+            "legacy status agrees with job_outcome on every run", now)
+        if not drifts
+        else _fail("compatibility_status_drift", Severity.WARNING,
+                   f"{len(drifts)} run(s) have a legacy status that disagrees with job_outcome",
+                   "run repair_status_drift; authoritative fields are unaffected", now,
+                   status=Status.DEGRADED,
+                   detail={"drifts": [d.as_dict() for d in drifts[:10]]})
+    )
+
+    bad_origin = detect_invalid_origin(session)
+    checks.append(
+        _ok("unknown_legacy_origin", Severity.CRITICAL,
+            "UNKNOWN_LEGACY appears only on migrated rows", now)
+        if not bad_origin
+        else _fail("unknown_legacy_origin", Severity.CRITICAL,
+                   f"{len(bad_origin)} live run(s) claim UNKNOWN_LEGACY",
+                   "investigate; the database constraint should make this impossible", now,
+                   detail={"run_ids": bad_origin[:20]})
+    )
+
+    problems = lineage_violations(session)
+    by_check: dict[str, list[Any]] = {}
+    for p in problems:
+        by_check.setdefault(p["check"], []).append(p["detail"])
+    for name in (
+        "multiple_active_runs", "broken_predecessor_link", "incorrect_recovery_sequence",
+        "root_mismatch", "recovery_branch", "missing_recovery_reason",
+        "missing_override_identity", "closed_chain_reopened", "replay_decision_absent",
+        "manual_review_unresolved", "root_sequence_not_zero",
+    ):
+        hits = by_check.get(name, [])
+        sev = Severity.WARNING if name in (
+            "missing_recovery_reason", "replay_decision_absent") else Severity.CRITICAL
+        checks.append(
+            _ok(f"lineage_{name}", sev, "no violations", now) if not hits
+            else _fail(f"lineage_{name}", sev, f"{len(hits)} violation(s)",
+                       "recovery is blocked pending administrative review", now,
+                       detail={"examples": [str(x) for x in hits[:5]]})
+        )
+
+    if blocks_automatic_recovery(problems):
+        checks.append(_fail("automatic_recovery_permitted", Severity.CRITICAL,
+                            "critical lineage corruption blocks automatic recovery",
+                            "resolve the lineage violations, then retry", now))
+    else:
+        checks.append(_ok("automatic_recovery_permitted", Severity.CRITICAL,
+                          "recovery chains are structurally sound", now))
+
     suppressing = [c for c in checks if c.suppresses_candidates and c.status is not Status.OK]
     return {
         "generated_at": now.isoformat(),
