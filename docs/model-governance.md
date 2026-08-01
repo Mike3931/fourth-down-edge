@@ -33,3 +33,95 @@
 | monte-carlo-simulator | 0.1.0 | **PLACEHOLDER** | 0 |
 | calibration-layer | 0.6.0 | APPROVED_DEMO | 0.11 |
 | fde-ensemble | 0.3.0-demo | APPROVED_DEMO | — |
+
+The table above is the **demo tier inside the TypeScript app**, operating on
+synthetic demonstration data. It is unrelated to the analytical-engine
+registry below.
+
+---
+
+# Phase 2 analytical-engine governance
+
+Registry: `apps/api` (`fde_api.registry`). Frozen at tag
+`phase-2-research-engine-v1`.
+
+## Registered artifacts
+
+Every artifact below is `research_only`. This status is written from a
+single hardcoded constant (`registry.RESEARCH_ONLY`); no API input,
+configuration value, environment variable, or URL can change it, and no
+code path in the repository sets any other approval status.
+
+| Model version | Approval | Seed | Artifact hash |
+| --- | --- | ---: | --- |
+| naive-homefield-v1 | `research_only` | 20260801 | `3e19da1e7477` |
+| naive-rolling-v1 | `research_only` | 20260801 | `01b46e5a889b` |
+| market-benchmark-v1 | `research_only` | 20260801 | `c28ea742a1ca` |
+| team-ratings-v1 | `research_only` | 20260801 | `1ad358bf8464` |
+| glm-ridge-v1 | `research_only` | 20260801 | `51ea1332f4ed` |
+| market-residual-v1 | `research_only` | 20260801 | `7fd7c355acb3` |
+
+## Burned evaluation periods — binding constraint
+
+**Seasons 2024 and 2025 have been inspected and are no longer untouched
+test sets.** Their results were read, compared across six models, and
+reported. Any future model-selection decision that consults those
+numbers — even indirectly, by choosing a direction because of what they
+showed — is selection on seen data.
+
+Consequences, binding from this tag forward:
+
+1. Neither 2024 nor 2025 may be presented as an out-of-sample test result
+   for any model developed or selected after 2026-08-01.
+2. Reusing them for tuning, feature selection, threshold setting,
+   calibration choice, or ensemble weighting produces an optimistically
+   biased estimate that must not be reported as clean.
+3. A model developed after this date needs a genuinely untouched period —
+   the 2026 season, or a forward-collected holdout — to support any
+   out-of-sample claim.
+4. Re-running the existing pipeline unchanged for reproducibility is
+   fine. Iterating against these seasons and reporting the improvement as
+   out-of-sample is not.
+
+What was inspected: log loss, Brier, CRPS (margin and total), margin and
+total MAE, calibration intercept/slope, reliability bins, and the
+simulated-betting ledger for test seasons 2024 and 2025 at the PREGAME
+horizon, across all six artifacts. Selection inputs (decay half-life,
+ridge alpha, ratings `k`, calibration method, edge threshold) were chosen
+on the preceding validation season only, so the 2024/2025 figures were
+honest when produced — they are burned by the act of reading them, not by
+how they were generated.
+
+## Real-money controls (verified at freeze)
+
+The analytical engine has **no `BET` state**. Its only statuses are
+`RESEARCH_CANDIDATE`, `WATCH`, `PASS`, `DATA_INCOMPLETE`; the string
+`BET` does not appear anywhere in `apps/api/src`. Verified at freeze:
+
+* Approval status is written in exactly one place, as a constant.
+* No endpoint accepts or mutates approval status; API references are
+  read-only serialization.
+* `services/generate.py` refuses to serve any status outside
+  `research_only` / `approved`, and nothing in the repository produces
+  `approved`.
+* The web app reads no query string or hash fragment; the only route
+  parameter is `:gameId`, and an unknown value renders "Unknown game".
+* Both bet-recording call sites pass the literal `'PAPER'`.
+* Outside the research client, the app makes no `fetch`, `XMLHttpRequest`,
+  or `axios` call — it has no capability to transmit a wager anywhere.
+* The research path never constructs a `Recommendation` and never calls
+  `placePaperBet`; it is display-only.
+
+### Open finding (not corrected during the freeze)
+
+`REAL_TRACKING` mode can be enabled through the gated Settings flow, but
+both bet-recording call sites hardcode `'PAPER'`, so ledger entries are
+recorded as `PAPER` regardless of mode. The mode therefore changes only
+the header pill and the Settings copy.
+
+This is **fail-safe** — it errs toward paper and cannot produce a
+real-money-labeled record — so it was deliberately left unchanged at this
+checkpoint rather than "fixed" in a direction that would widen the
+real-money surface. It is recorded here for a deliberate product decision
+in a later phase: either wire the mode through to the recording path, or
+remove the mode and its Settings flow.
