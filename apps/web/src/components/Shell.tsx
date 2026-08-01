@@ -9,7 +9,7 @@ import ErrorBoundary from './ErrorBoundary';
 import { fmtAgo, fmtMoney, fmtPct } from '../lib/format';
 
 const NAV = (firstGameId: string | undefined) => [
-  { to: '/', label: 'Command Center', icon: '◧' },
+  { to: '/', label: "Today's Picks", icon: '★' },
   { to: '/slate', label: 'Weekly Slate', icon: '▤' },
   { to: firstGameId ? `/game/${firstGameId}` : '/slate', label: 'Game Lab', icon: '⚗' },
   { to: '/injuries', label: 'Injury Center', icon: '✚' },

@@ -3,7 +3,7 @@ import { LoadingState } from '@fde/ui';
 import { useAuth } from './lib/auth';
 import Shell from './components/Shell';
 import SignIn from './pages/SignIn';
-import CommandCenter from './pages/CommandCenter';
+import TodaysPicks from './pages/TodaysPicks';
 import WeeklySlate from './pages/WeeklySlate';
 import GameLab from './pages/GameLab';
 import InjuryCenter from './pages/InjuryCenter';
@@ -36,7 +36,7 @@ export default function App() {
   return (
     <Routes>
       <Route element={<Shell />}>
-        <Route path="/" element={<CommandCenter />} />
+        <Route path="/" element={<TodaysPicks />} />
         <Route path="/slate" element={<WeeklySlate />} />
         <Route path="/game/:gameId" element={<GameLab />} />
         <Route path="/injuries" element={<InjuryCenter />} />

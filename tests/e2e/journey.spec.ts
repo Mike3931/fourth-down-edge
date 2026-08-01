@@ -15,9 +15,9 @@ test.describe('Fourth Down Edge core journey', () => {
     await page.getByRole('button', { name: /enter local demo session/i }).click();
     await expect(page.getByText('DEMONSTRATION DATA — NOT FOR REAL-MONEY DECISIONS').first()).toBeVisible();
 
-    // 2) Command Center shows summary metrics and recommendations.
-    await expect(page.getByText('Games on slate')).toBeVisible();
-    await expect(page.getByText('Priority queue')).toBeVisible();
+    // 2) Today's Picks (the home page) shows the simple top-picks list.
+    await expect(page.getByRole('heading', { name: "Today's Top Picks" })).toBeVisible();
+    await expect(page.getByText('Full analysis →').first()).toBeVisible();
 
     // 3) Weekly slate renders and links into Game Lab.
     await page.getByRole('link', { name: 'Weekly Slate' }).click();
