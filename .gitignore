@@ -28,3 +28,4 @@ apps/api/data/*.db
 # Captured forward data (reproducible from providers; the frozen POLICY
 # artifacts under data/policies/ are deliberately committed).
 apps/api/data/weather/
+apps/api/data/policies/test-*.json
