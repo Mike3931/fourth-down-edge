@@ -66,7 +66,10 @@ KICK = datetime(2026, 9, 13, 17, 0, tzinfo=UTC)
 
 
 @pytest.fixture()
-def fsession() -> Session:
+def fsession(tmp_path, monkeypatch) -> Session:
+    from fde_api.config import settings
+
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
     engine = create_engine("sqlite://", future=True)
 
     @event.listens_for(engine, "connect")

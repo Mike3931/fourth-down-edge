@@ -73,7 +73,13 @@ def _csv(*rows: str) -> bytes:
 
 
 @pytest.fixture()
-def factory():
+def factory(tmp_path, monkeypatch):
+    # Never write policy or capture artifacts into the real data directory.
+    from fde_api.config import settings
+
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    monkeypatch.setattr(settings, "artifacts_dir", tmp_path / "artifacts")
+    monkeypatch.setattr(settings, "reports_dir", tmp_path / "reports")
     engine = create_engine("sqlite://", future=True)
     Base.metadata.create_all(engine)
     f = sessionmaker(bind=engine, future=True)
