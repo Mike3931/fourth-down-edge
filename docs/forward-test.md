@@ -252,3 +252,71 @@ so replaying a payload writes only genuinely new records.
 * No forward sample exists yet. Every metric surface is built and tested,
   but until games are played there is nothing to report — and nothing
   about the model's quality can be claimed.
+
+---
+
+## Checkpoint corrections (recorded, not rewritten)
+
+Two errors in the earlier Phase 3B report are corrected here rather than
+by amending the commit that carried them.
+
+**1. File count.** The commit `95db21e` report said "four files changed"
+while naming five. The correct count is **five**: `venues.py`,
+`schedule.py`, `quota.py`, `test_international_slate.py`, and
+`test_quota.py`.
+
+**2. Closing-capture language.** The earlier wording said closing
+captures are protected "unconditionally". That overstated the guarantee.
+The accurate statement, which now appears in `quota.budget_report()` and
+is asserted by a test:
+
+> Closing captures receive the highest scheduling and quota priority,
+> with reserved credits, but remain subject to provider availability,
+> connectivity, rate limits, and remaining subscription credits.
+
+**3. International slate.** The Phase 3 report claimed eight
+international games. The published 2026 schedule has **nine games across
+eight stadiums** (Tottenham hosts two). The miscount came from detecting
+international games via the source's `location` flag, which reads "Home"
+for a club's designated home game played abroad. Detection is now
+venue-driven. See the regression tests in `test_international_slate.py`.
+
+## Cohorts
+
+| Cohort | Purpose | Enters official evaluation |
+| --- | --- | --- |
+| `fixture` | Deterministic test payloads | Never |
+| `demo` | Synthetic demonstration data | Never |
+| `burn_in` | Operational validation against the real provider | Never |
+| `official_forward_test` | The 2026 forward test under `ftp-2026-v1` | Yes |
+
+Cohort membership is immutable. Cross-cohort aggregation requires an
+explicit administrative call that demands an operator and a reason and
+returns a warning with the figure. Operational defects found during
+burn-in may be fixed; **model logic, parameters, calibration,
+thresholds, and selection rules may not be changed based on burn-in
+outcomes.**
+
+## Provider modes
+
+`FIXTURE`, `SANDBOX`, `LIVE`, `UNAVAILABLE`, `KEY_MISSING`,
+`QUOTA_EXHAUSTED`. The mode travels with every captured record. Fixture
+output is never stored or described as live-provider output.
+
+## Scheduler
+
+Thirteen jobs with cadence declared once in `scheduler.JOB_CADENCE`, from
+which the quota forecast is generated — a test asserts the two cannot
+drift apart.
+
+Idempotency and locking are the same operation: each run derives a
+deterministic key from (job, cohort, logical slot), and that key is
+UNIQUE in the database, so a retry, a second worker, or a restart
+mid-flight loses the insert race and is skipped rather than duplicating
+captures, vintages, or settlements. Failed attempts are retained as
+history rather than overwritten.
+
+Catch-up policy is per job. A missed closing capture or odds poll is
+`SKIP` — replaying it later would record a price that was never
+observable at that moment. Vintages, settlements, and result ingestion
+are `RUN_ALL` because they remain correct when computed late.

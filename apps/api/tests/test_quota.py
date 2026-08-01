@@ -136,5 +136,6 @@ class TestBudget:
         b = budget_report()
         assert b["credits_per_request"] == 3
         assert b["monthly_requirement_credits"] > b["monthly_base_credits"]
-        assert b["minimum_viable_plan"]
-        assert "closing captures" in b["compromise"]
+        assert b["minimum_viable_plan_credits"] == 20_000
+        assert "missing close" in b["compromise"]
+        assert b["tiers"], "forecast must be generated from cadence tiers"

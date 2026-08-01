@@ -215,32 +215,40 @@ def record_usage(
     return row
 
 
-def budget_report(cfg: QuotaConfig | None = None) -> dict[str, Any]:
-    """The documented budget behind the configured ceilings."""
+def forecast_from_cadence(
+    tiers: list[tuple[str, float, int]], cfg: QuotaConfig | None = None
+) -> dict[str, Any]:
+    """Generate the credit forecast from a cadence table.
+
+    Derived from the scheduler's own configuration rather than a
+    hand-maintained constant, so the two cannot drift apart.
+    `tiers` is (label, window_hours, interval_minutes).
+    """
     cfg = cfg or QuotaConfig()
     c = cfg.credits_per_request
-    lifecycle_requests = 84 + 144 + 72 + 54 + 45  # by cadence tier
-    weekly = lifecycle_requests * c
+    rows = []
+    total_requests = 0.0
+    for label, hours, interval in tiers:
+        reqs = hours * 60.0 / interval
+        total_requests += reqs
+        rows.append({
+            "tier": label, "window_hours": hours, "interval_minutes": interval,
+            "requests": round(reqs, 1), "credits": round(reqs * c, 1),
+        })
+    weekly = total_requests * c
     monthly = weekly * 4.5
     return {
         "credits_per_request": c,
         "cost_model": "1 credit per region x market; us + h2h/spreads/totals",
-        "requests_per_slate_lifecycle": lifecycle_requests,
-        "week_1_credits": weekly,
-        "regular_season_credits": weekly * 18,
-        "peak_day_credits": int((6 * 60 / 15 + 4.5 * 60 / 5 + 1.5 * 60 / 2) * c),
-        "monthly_base_credits": int(monthly),
-        "retry_reserve_credits": int(monthly * 0.10),
-        "outage_recovery_reserve_credits": int(monthly * 0.15),
-        "monthly_requirement_credits": int(monthly * 1.25),
-        "minimum_viable_plan": "20,000 credits/month (covers ~6,700 required with headroom)",
-        "compromise": (
-            "The ideal cadence costs ~6,700 credits/month. On a 20k plan it fits with "
-            "headroom. On a smaller plan the scheduler degrades distant-game cadence "
-            "first (4x) and protects closing captures unconditionally, because a missing "
-            "close permanently destroys CLV for that game while a stale 6-day-out price "
-            "costs nothing."
-        ),
+        "tiers": rows,
+        "requests_per_slate_lifecycle": round(total_requests, 1),
+        "week_1_credits": round(weekly),
+        "regular_season_credits": round(weekly * 18),
+        "monthly_base_credits": round(monthly),
+        "retry_reserve_credits": round(monthly * 0.10),
+        "outage_recovery_reserve_credits": round(monthly * 0.15),
+        "monthly_requirement_credits": round(monthly * 1.25),
+        "minimum_viable_plan_credits": 20_000,
         "configured": {
             "monthly_plan_credits": cfg.monthly_plan_credits,
             "daily_ceiling_credits": cfg.daily_ceiling_credits,
@@ -248,4 +256,35 @@ def budget_report(cfg: QuotaConfig | None = None) -> dict[str, Any]:
             "warn_at_remaining": cfg.warn_at_remaining,
             "critical_at_remaining": cfg.critical_at_remaining,
         },
+        "compromise": (
+            "The ideal cadence costs roughly 6,700 credits/month including reserves. "
+            "On a 20,000-credit plan it fits with headroom. On a smaller plan the "
+            "scheduler sheds distant-game cadence first (4x, then 2x) and preserves "
+            "near-kickoff polling, because a stale six-day-out price costs nothing "
+            "while a missing close permanently destroys CLV for that game."
+        ),
+        "closing_capture_note": (
+            "Closing captures receive the highest scheduling and quota priority, with "
+            "reserved credits, but remain subject to provider availability, "
+            "connectivity, rate limits, and remaining subscription credits."
+        ),
     }
+
+
+def scheduler_cadence_tiers() -> list[tuple[str, float, int]]:
+    """The polling tiers the odds-capture job actually applies.
+
+    Single source of truth shared by the scheduler and the forecast.
+    """
+    return [
+        ("> 7 days", 21 * 24.0, 360),
+        ("7d-24h", 144.0, 60),
+        ("24h-6h", 18.0, 15),
+        ("6h-90m", 4.5, 5),
+        ("final 90m", 1.5, 2),
+    ]
+
+
+def budget_report(cfg: QuotaConfig | None = None) -> dict[str, Any]:
+    """The documented budget, generated from the scheduler cadence."""
+    return forecast_from_cadence(scheduler_cadence_tiers(), cfg)
