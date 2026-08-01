@@ -6,6 +6,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from fde_api.config import settings
+import fde_api.db  # noqa: F401  (registers Phase 3 tables on Base.metadata)
 from fde_api.db.models import Base
 
 config = context.config

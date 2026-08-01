@@ -25,3 +25,6 @@ apps/api/data/raw/
 apps/api/data/artifacts/
 apps/api/data/*.db
 .hypothesis/
+# Captured forward data (reproducible from providers; the frozen POLICY
+# artifacts under data/policies/ are deliberately committed).
+apps/api/data/weather/
