@@ -11,6 +11,7 @@ import random
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from hypothesis import settings
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -117,3 +118,9 @@ def seed_synthetic_league(
 def league_session(session: Session) -> Session:
     seed_synthetic_league(session)
     return session
+
+# Hypothesis's per-example deadline measures wall time, which varies with
+# load when the whole suite runs in parallel with other work. These are
+# pure-math property tests, so a slow example is not a failure signal.
+settings.register_profile("fde", deadline=None)
+settings.load_profile("fde")

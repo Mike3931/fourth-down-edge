@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from dataclasses import field as dc_field
 from datetime import datetime
 from typing import Any, Literal
 
@@ -35,6 +36,21 @@ from fde_api.forward.policy import ForwardTestPolicy
 from fde_api.util import utc_now
 
 Status = Literal["RESEARCH_CANDIDATE", "WATCH", "PASS", "DATA_INCOMPLETE"]
+
+
+@dataclass(frozen=True)
+class HealthGate:
+    """Data Health verdict passed into the evaluation service."""
+
+    suppressed: bool
+    reasons: list[str] = dc_field(default_factory=list)
+
+    @classmethod
+    def from_report(cls, report: dict[str, Any]) -> HealthGate:
+        return cls(
+            suppressed=bool(report.get("candidates_suppressed")),
+            reasons=list(report.get("suppression_reasons", [])),
+        )
 
 
 @dataclass
@@ -100,10 +116,24 @@ def evaluate_candidate(
     policy: ForwardTestPolicy,
     data_completeness: float,
     extra_reasons: list[str] | None = None,
+    health_gate: HealthGate | None = None,
 ) -> CandidateEvaluation:
-    """Apply the frozen research-candidate rules to one price."""
+    """Apply the frozen research-candidate rules to one price.
+
+    `health_gate` is enforced HERE, in the domain service, so a direct API
+    call cannot obtain a RESEARCH CANDIDATE while Data Health is critical.
+    Suppressing candidates only in the UI would leave the API a bypass.
+    """
     reasons = list(extra_reasons or [])
     be = break_even_prob(american)
+
+    if health_gate is not None and health_gate.suppressed:
+        reasons.extend(health_gate.reasons[:3])
+        reasons.append("RESEARCH CANDIDATE suppressed by Data Health")
+        return CandidateEvaluation(
+            market, selection, line, american, price_source, price_age_seconds,
+            model_probability, None, be, None, None, None, None, "DATA_INCOMPLETE", reasons,
+        )
 
     if model_probability is None:
         reasons.append("no model probability at this cutoff")

@@ -275,6 +275,27 @@ class Scheduler:
             return None
         return run_id
 
+    def _recovery_key(self, key: str) -> str:
+        """Return a fresh key when the prior run for this slot was interrupted.
+
+        Without this, a post-crash retry loses the UNIQUE-insert race against
+        its own abandoned row and is skipped, leaving no record of the
+        recovery attempt.
+        """
+        with self._session() as s:
+            prior = s.scalars(
+                select(ScheduledJobRun)
+                .where(ScheduledJobRun.idempotency_key.like(f"{key}%"))
+                .order_by(ScheduledJobRun.created_at.desc())
+            ).all()
+            if not prior:
+                return key
+            latest = prior[0]
+            if latest.status != JobStatus.INTERRUPTED.value:
+                return key
+            recoveries = sum(1 for p in prior if "#recovery" in p.idempotency_key)
+        return f"{key}#recovery{recoveries + 1}"
+
     def already_completed(self, key: str) -> bool:
         with self._session() as s:
             row = s.scalars(
@@ -303,6 +324,12 @@ class Scheduler:
         if self.already_completed(key):
             return {"job": job_name, "status": "skipped", "reason": "idempotency key already completed",
                     "idempotency_key": key}
+
+        # A slot whose previous run was INTERRUPTED (process died) is eligible
+        # for recovery under a distinct key, so the retry is recorded rather
+        # than silently skipped. Domain-level idempotency — not the run key —
+        # is what prevents duplicate records on that retry.
+        key = self._recovery_key(key)
 
         last_error: str | None = None
         for attempt in range(1, job.retry.max_attempts + 1):
