@@ -86,8 +86,29 @@ deliberately, and the ignore-list above removed when it is.
 `react-router` / `react-router-dom` carry two **moderate** advisories
 (open redirect via backslash in `<Link>`/`useNavigate`; arbitrary
 constructor injection in `deserializeErrors()` during SSR hydration).
-They sit below the blocking `high` threshold and a fix is available.
-The SSR hydration issue does not apply — the app is a static SPA build
-with no server-side rendering — but the open-redirect one is worth taking
-in a routine dependency bump, which carries no policy-freeze implications
-on the JavaScript side.
+They sit below the blocking `high` threshold. The SSR hydration issue does
+not apply — the app is a static SPA build with no server-side rendering.
+The open redirect is the one that could apply, since `<Link>` is used
+throughout.
+
+**This is not a routine bump.** The vulnerable range is `6.0.0 - 7.17.0`
+with no patched 6.x release, and the app declares `^6.28.1`. The fix
+therefore requires a React Router **v6 → v7 major migration**, not a patch
+within the existing range. It carries no policy-freeze implications (that
+constraint is Python-side only), but it does need every route re-verified
+and the end-to-end journey re-run.
+
+**Current exposure, verified rather than assumed.** The exploit path is a
+backslash-prefixed target reaching `<Link>` or `useNavigate` from
+untrusted input. In this app:
+
+* `useNavigate` is not used anywhere.
+* Every `<Link to=>` resolves to either a static route constant
+  (`Shell.tsx`) or the template `` `/game/${gameId}` ``, where `gameId`
+  comes from the app's own dataset, never from user input, a query string,
+  or a hash fragment.
+
+So the vulnerability is real in the dependency but currently unreachable
+in this codebase. That is a reason to schedule the migration deliberately
+rather than to rush it — and a reason not to introduce user-controlled
+navigation targets before it lands.
