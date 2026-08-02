@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from fde_api.canonical.team_map import canonical_team_code
 from fde_api.db.forward_models import OddsQuote, ProviderQuotaUsage
+from fde_api.forward.cohort import ProviderMode, assert_capturable
 from fde_api.forward.modes import DataMode
 from fde_api.util import utc_now
 
@@ -221,6 +222,7 @@ def capture_odds(
     request_id: str | None = None,
     quota_remaining: int | None = None,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
+    provider_mode: ProviderMode,
     observed_at: datetime | None = None,
 ) -> OddsCaptureResult:
     """Persist a provider payload as immutable timestamped quotes.
@@ -228,7 +230,13 @@ def capture_odds(
     Idempotent: re-processing the same payload writes nothing new, because
     a quote's identity is (game, book, market, selection, line, price,
     provider timestamp).
+
+    `provider_mode` records where the payload came from and is stored on
+    every quote. It has no default on purpose: a fixture payload and a live
+    one are structurally identical, so only the caller knows, and a default
+    of LIVE would silently mislabel every caller that forgot.
     """
+    assert_capturable(provider_mode)
     observed_at = observed_at or utc_now()
     res = OddsCaptureResult(provider=provider, request_id=request_id, quota_remaining=quota_remaining)
 
@@ -269,6 +277,7 @@ def capture_odds(
                         game_id=game_id,
                         home_code=home_code,
                         provider=provider,
+                        provider_mode=provider_mode,
                         provider_event_id=event.get("id"),
                         sportsbook=book_key,
                         market=canonical_market,
@@ -303,6 +312,7 @@ def _write_quote(
     game_id: str,
     home_code: str,
     provider: str,
+    provider_mode: ProviderMode,
     provider_event_id: str | None,
     sportsbook: str,
     market: str,
@@ -377,6 +387,7 @@ def _write_quote(
             data_mode=data_mode.value,
             canonical_game_id=game_id,
             provider=provider,
+            provider_mode=provider_mode.value,
             provider_event_id=provider_event_id,
             sportsbook=sportsbook,
             market=market,

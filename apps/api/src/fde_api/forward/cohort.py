@@ -42,6 +42,17 @@ class ProviderMode(StrEnum):
     UNAVAILABLE = "UNAVAILABLE"  # configured, but the request failed
     KEY_MISSING = "KEY_MISSING"  # no credential configured
     QUOTA_EXHAUSTED = "QUOTA_EXHAUSTED"
+    MIXED = "MIXED"  # derived record built from sources of differing provenance
+    UNKNOWN_LEGACY = "UNKNOWN_LEGACY"  # written before provenance was recorded
+
+
+# Modes a newly captured record may legitimately carry. MIXED is derivable
+# but never captured; UNKNOWN_LEGACY is reachable only through migration.
+CAPTURABLE_PROVIDER_MODES = frozenset({
+    ProviderMode.FIXTURE,
+    ProviderMode.SANDBOX,
+    ProviderMode.LIVE,
+})
 
 
 # Cohorts whose records may enter live research evaluation at all.
@@ -57,6 +68,8 @@ PROVIDER_MODE_LABELS: dict[ProviderMode, str] = {
     ProviderMode.UNAVAILABLE: "Provider unavailable — no current quotes",
     ProviderMode.KEY_MISSING: "Provider key not configured — no market data",
     ProviderMode.QUOTA_EXHAUSTED: "Provider quota exhausted — no new quotes",
+    ProviderMode.MIXED: "Mixed provenance — derived from sources of differing origin, not live market data",
+    ProviderMode.UNKNOWN_LEGACY: "Provenance not recorded — predates provider-mode capture",
 }
 
 
@@ -134,6 +147,39 @@ def may_influence_official_evaluation(cohort: Cohort) -> bool:
 def is_live_provider_data(mode: ProviderMode) -> bool:
     """Fixture and sandbox output is never live data."""
     return mode is ProviderMode.LIVE
+
+
+def combine_provider_modes(modes: Iterable[str | ProviderMode]) -> ProviderMode:
+    """Provenance of a record derived from several sources.
+
+    A derived record is only as live as its least-live input. One fixture
+    quote in a consensus makes that consensus fixture-derived; anything
+    more generous would let test payloads launder themselves into records
+    that read as live market data.
+
+    Empty input is UNKNOWN_LEGACY rather than LIVE: absence of evidence
+    about provenance is not evidence of live provenance.
+    """
+    distinct = {ProviderMode(m) for m in modes}
+    if not distinct:
+        return ProviderMode.UNKNOWN_LEGACY
+    if len(distinct) == 1:
+        return distinct.pop()
+    if ProviderMode.UNKNOWN_LEGACY in distinct:
+        return ProviderMode.UNKNOWN_LEGACY
+    return ProviderMode.MIXED
+
+
+def assert_capturable(mode: ProviderMode) -> ProviderMode:
+    """Guard the write path. MIXED and UNKNOWN_LEGACY are conclusions, not
+    origins; capturing one directly would mean a caller invented provenance
+    rather than observing it."""
+    if mode not in CAPTURABLE_PROVIDER_MODES:
+        raise CohortViolationError(
+            f"provider mode {mode.value} may not be written by a capture; "
+            f"capturable modes are {sorted(m.value for m in CAPTURABLE_PROVIDER_MODES)}"
+        )
+    return mode
 
 
 def provider_mode_from_env(api_key: str | None, *, use_fixtures: bool) -> ProviderMode:

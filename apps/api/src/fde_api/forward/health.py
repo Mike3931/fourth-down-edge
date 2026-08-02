@@ -100,6 +100,97 @@ def _fail(
     )
 
 
+
+def _provenance_checks(
+    session: Session, *, provider_mode: ProviderMode,
+    data_mode: DataMode, now: datetime,
+) -> list[HealthCheck]:
+    """Is every stored market record honest about where it came from?
+
+    Three distinct failures are possible and they need separate names,
+    because the remediation differs:
+
+      * a record claims LIVE while the service is running on fixtures
+      * a record has no recorded provenance at all
+      * an official-cohort record was built from non-live data
+
+    The last is the one that would actually corrupt a published result.
+    """
+    checks: list[HealthCheck] = []
+
+    combined: dict[str, int] = {}
+    for column, model in (
+        (OddsQuote.provider_mode, OddsQuote),
+        (ConsensusSnapshot.provider_mode, ConsensusSnapshot),
+    ):
+        rows = session.execute(
+            select(column, func.count(model.id)).group_by(column)
+        ).all()
+        for mode, count in rows:
+            combined[mode] = combined.get(mode, 0) + count
+
+    # 1. Live claims while the service is not on a live provider.
+    live_rows = combined.get(ProviderMode.LIVE.value, 0)
+    if provider_mode is not ProviderMode.LIVE and live_rows:
+        checks.append(_fail(
+            "provenance_live_claim_without_live_provider", Severity.CRITICAL,
+            f"{live_rows} record(s) claim LIVE provenance while the service "
+            f"is running in {provider_mode.value} mode",
+            "investigate before reporting any result; a fixture payload may "
+            "have been captured as live market data", now,
+            detail={"counts": combined},
+        ))
+    else:
+        checks.append(_ok(
+            "provenance_live_claim_without_live_provider", Severity.CRITICAL,
+            "no record claims live provenance the service could not have obtained", now,
+        ))
+
+    # 2. Records with no recorded provenance.
+    unknown = combined.get(ProviderMode.UNKNOWN_LEGACY.value, 0)
+    if unknown:
+        checks.append(_fail(
+            "provenance_unrecorded", Severity.WARNING,
+            f"{unknown} record(s) predate provenance capture and are UNKNOWN_LEGACY",
+            "these may not back any provenance claim; exclude them or re-capture", now,
+            status=Status.DEGRADED, detail={"count": unknown},
+        ))
+    else:
+        checks.append(_ok(
+            "provenance_unrecorded", Severity.WARNING,
+            "every market record carries recorded provenance", now,
+        ))
+
+    # 3. Non-live data present in a live-research analysis mode.
+    #
+    # Deliberately a non-suppressing WARNING. Burn-in exists precisely to
+    # run the live-research pipeline on fixture payloads, so suppressing
+    # candidates here would defeat the cohort's purpose. It is also not
+    # this function's call to make: it receives data_mode and provider_mode
+    # but never the cohort, so it cannot tell burn-in from official. It
+    # reports the mixture and leaves the gate to whoever knows the cohort.
+    non_live = {
+        m: c for m, c in combined.items()
+        if m != ProviderMode.LIVE.value and c
+    }
+    if data_mode is DataMode.LIVE_RESEARCH and non_live:
+        checks.append(_fail(
+            "provenance_non_live_in_live_research", Severity.WARNING,
+            f"live-research mode contains {sum(non_live.values())} record(s) "
+            f"of non-live provenance: {sorted(non_live)}",
+            "expected during burn-in; results built on these records must "
+            "not be described as live forward-test output", now,
+            status=Status.DEGRADED, suppress=False, detail={"counts": non_live},
+        ))
+    else:
+        checks.append(_ok(
+            "provenance_non_live_in_live_research", Severity.WARNING,
+            "no non-live record is present in a live-research cohort", now,
+        ))
+
+    return checks
+
+
 def run_health_checks(
     session: Session,
     *,
@@ -388,6 +479,10 @@ def run_health_checks(
                    status=Status.DEGRADED,
                    detail={"drifts": [d.as_dict() for d in drifts[:10]]})
     )
+
+    checks.extend(_provenance_checks(
+        session, provider_mode=provider_mode, data_mode=data_mode, now=now
+    ))
 
     bad_origin = detect_invalid_origin(session)
     checks.append(

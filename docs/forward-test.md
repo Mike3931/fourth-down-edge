@@ -257,8 +257,8 @@ so replaying a payload writes only genuinely new records.
 
 ## Checkpoint corrections (recorded, not rewritten)
 
-Two errors in the earlier Phase 3B report are corrected here rather than
-by amending the commit that carried them.
+Errors in earlier reports and documentation are corrected here rather
+than by amending the commits that carried them.
 
 **1. File count.** The commit `95db21e` report said "four files changed"
 while naming five. The correct count is **five**: `venues.py`,
@@ -281,6 +281,18 @@ international games via the source's `location` flag, which reads "Home"
 for a club's designated home game played abroad. Detection is now
 venue-driven. See the regression tests in `test_international_slate.py`.
 
+**4. Provider-mode storage.** This document previously stated that the
+provider mode "travels with every captured record". It did not. Neither
+`odds_quotes` nor `consensus_snapshots` had a `provider_mode` column, so
+a fixture payload and a live provider response produced byte-identical
+rows and nothing downstream could tell them apart. The claim was
+aspirational, not implemented.
+
+It is implemented now — see **Provider modes** above — but the earlier
+statement was wrong when written, and any record captured before
+migration `d41a9c72b8e5` carries `UNKNOWN_LEGACY` and cannot retroactively
+support a provenance claim in either direction.
+
 ## Cohorts
 
 | Cohort | Purpose | Enters official evaluation |
@@ -300,8 +312,76 @@ outcomes.**
 ## Provider modes
 
 `FIXTURE`, `SANDBOX`, `LIVE`, `UNAVAILABLE`, `KEY_MISSING`,
-`QUOTA_EXHAUSTED`. The mode travels with every captured record. Fixture
-output is never stored or described as live-provider output.
+`QUOTA_EXHAUSTED`, plus two that describe a conclusion rather than an
+origin: `MIXED` and `UNKNOWN_LEGACY`.
+
+Fixture output is never stored or described as live-provider output.
+
+### Where provenance is stored
+
+`odds_quotes.provider_mode` and `consensus_snapshots.provider_mode`, both
+indexed and both constrained to the vocabulary above by a database CHECK.
+
+A fixture payload and a live provider response are structurally identical.
+Only the caller knows which it holds, so `capture_odds` takes
+`provider_mode` as a **required** argument with no default — a default of
+`LIVE` would silently mislabel every caller that forgot, which is the
+exact failure the column exists to prevent.
+
+### How derived records inherit it
+
+`combine_provider_modes()` decides the provenance of anything built from
+several sources:
+
+| inputs | result | why |
+| --- | --- | --- |
+| all one mode | that mode | nothing to reconcile |
+| any `UNKNOWN_LEGACY` | `UNKNOWN_LEGACY` | one unrecorded input makes the whole conclusion unrecorded |
+| otherwise differing | `MIXED` | a derived record is only as live as its least-live input |
+| none | `UNKNOWN_LEGACY` | absence of evidence about provenance is not evidence of live provenance |
+
+So one fixture quote in a consensus makes that consensus fixture-derived.
+Anything more generous would let test payloads launder themselves into
+records that read as live market data.
+
+`MIXED` and `UNKNOWN_LEGACY` are refused by `assert_capturable()` on the
+write path: they are conclusions, not origins, and capturing one directly
+would mean a caller invented provenance rather than observing it.
+
+### Health checks
+
+| check | severity | gates candidates |
+| --- | --- | --- |
+| `provenance_live_claim_without_live_provider` | CRITICAL | yes |
+| `provenance_unrecorded` | WARNING | no |
+| `provenance_non_live_in_live_research` | WARNING | no |
+
+The first is the alarming one: rows claim `LIVE` while the service is
+running on fixtures, meaning a test payload was captured as live market
+data.
+
+The third is deliberately **not** a gate. Burn-in exists to run the
+live-research pipeline on fixture payloads, so suppressing candidates
+there would defeat the cohort's purpose. It is also not that function's
+call to make — `run_health_checks` receives `data_mode` and
+`provider_mode` but never the cohort, so it cannot distinguish burn-in
+from official. It reports the mixture and leaves the gate to whoever
+knows the cohort.
+
+### Migration
+
+`d41a9c72b8e5` adds both columns with `server_default='UNKNOWN_LEGACY'`.
+Pre-existing rows are backfilled to `UNKNOWN_LEGACY`, not `LIVE`: their
+true provenance is genuinely unknown, and guessing `LIVE` would
+manufacture exactly the false claim the column exists to prevent. This
+mirrors the `UNKNOWN_LEGACY` treatment already used for scheduler domain
+state.
+
+The migration uses `batch_alter_table` because SQLite cannot add a CHECK
+constraint in place. The downgrade is structurally supported but
+semantically lossy in the same way as the scheduler-state downgrade:
+dropping the column discards the provenance of every record captured after
+the upgrade, and a re-upgrade backfills them all to `UNKNOWN_LEGACY`.
 
 ## Scheduler
 

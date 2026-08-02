@@ -62,6 +62,16 @@ from fde_api.forward.vintages import (
 )
 from fde_api.pit.guards import LookaheadError
 
+
+def _capture(session, payload, **kw):
+    """Every payload in this module is a hand-built fixture, so provenance
+    is stated once here rather than repeated at each call site."""
+    from fde_api.forward.cohort import ProviderMode
+
+    kw.setdefault("provider_mode", ProviderMode.FIXTURE)
+    return capture_odds(session, payload, **kw)
+
+
 KICK = datetime(2026, 9, 13, 17, 0, tzinfo=UTC)
 
 
@@ -320,34 +330,34 @@ class TestOdds:
     def test_valid_quotes_written(self, fsession: Session) -> None:
         _seed_game(fsession)
         obs = KICK - timedelta(days=1)
-        r = capture_odds(fsession, _event(obs.isoformat(), [("draftkings", -2.5, -110, -110)]), observed_at=obs)
+        r = _capture(fsession, _event(obs.isoformat(), [("draftkings", -2.5, -110, -110)]), observed_at=obs)
         assert r.quotes_written == 2 and r.unmapped_events == []
 
     def test_duplicate_quote_not_rewritten(self, fsession: Session) -> None:
         _seed_game(fsession)
         obs = KICK - timedelta(days=1)
         payload = _event(obs.isoformat(), [("draftkings", -2.5, -110, -110)])
-        capture_odds(fsession, payload, observed_at=obs)
-        r2 = capture_odds(fsession, payload, observed_at=obs)
+        _capture(fsession, payload, observed_at=obs)
+        r2 = _capture(fsession, payload, observed_at=obs)
         assert r2.quotes_written == 0 and r2.duplicates_skipped == 2
 
     def test_invalid_price_rejected(self, fsession: Session) -> None:
         _seed_game(fsession)
         obs = KICK - timedelta(days=1)
-        r = capture_odds(fsession, _event(obs.isoformat(), [("draftkings", -2.5, 5, -110)]), observed_at=obs)
+        r = _capture(fsession, _event(obs.isoformat(), [("draftkings", -2.5, 5, -110)]), observed_at=obs)
         assert r.invalid_skipped >= 1
 
     def test_unmapped_event_recorded_not_guessed(self, fsession: Session) -> None:
         _seed_game(fsession)
         payload = _event((KICK - timedelta(days=1)).isoformat(), [("draftkings", -2.5, -110, -110)])
         payload[0]["home_team"] = "Springfield Atoms"
-        r = capture_odds(fsession, payload)
+        r = _capture(fsession, payload)
         assert r.quotes_written == 0 and r.unmapped_events
 
     def test_spread_line_stored_home_relative(self, fsession: Session) -> None:
         gid = _seed_game(fsession)
         obs = KICK - timedelta(days=1)
-        capture_odds(fsession, _event(obs.isoformat(), [("draftkings", -2.5, -110, -110)]), observed_at=obs)
+        _capture(fsession, _event(obs.isoformat(), [("draftkings", -2.5, -110, -110)]), observed_at=obs)
         rows = fsession.scalars(
             select(OddsQuote).where(OddsQuote.canonical_game_id == gid)
         ).all()
@@ -357,7 +367,7 @@ class TestOdds:
 class TestConsensus:
     def _capture(self, fsession: Session, obs: datetime, books: list[tuple[str, float, int, int]]) -> str:
         gid = _seed_game(fsession)
-        capture_odds(fsession, _event(obs.isoformat(), books), observed_at=obs)
+        _capture(fsession, _event(obs.isoformat(), books), observed_at=obs)
         return gid
 
     def test_no_vig_normalizes(self) -> None:
@@ -430,7 +440,7 @@ class TestConsensus:
         gid = _seed_game(fsession)
         for mins, line in ((120, -2.5), (20, -3.5), (5, -4.0)):
             obs = KICK - timedelta(minutes=mins)
-            capture_odds(fsession, _event(obs.isoformat(), [
+            _capture(fsession, _event(obs.isoformat(), [
                 ("draftkings", line, -110, -110), ("fanduel", line, -110, -110),
                 ("betmgm", line, -110, -110)]), observed_at=obs)
             build_consensus(fsession, canonical_game_id=gid, market="SPREAD",
@@ -442,7 +452,7 @@ class TestConsensus:
     def test_closing_capture_excluded_from_prediction_inputs(self, fsession: Session) -> None:
         gid = _seed_game(fsession)
         obs = KICK - timedelta(minutes=10)
-        capture_odds(fsession, _event(obs.isoformat(), [
+        _capture(fsession, _event(obs.isoformat(), [
             ("draftkings", -6.0, -110, -110), ("fanduel", -6.0, -110, -110),
             ("betmgm", -6.0, -110, -110)]), observed_at=obs)
         build_consensus(fsession, canonical_game_id=gid, market="SPREAD", as_of_at=obs,
@@ -741,7 +751,7 @@ class TestModeSeparation:
     def test_consensus_query_is_mode_scoped(self, fsession: Session) -> None:
         gid = _seed_game(fsession)
         obs = KICK - timedelta(hours=2)
-        capture_odds(fsession, _event(obs.isoformat(), [
+        _capture(fsession, _event(obs.isoformat(), [
             ("draftkings", -2.5, -110, -110), ("fanduel", -2.5, -110, -110),
             ("betmgm", -2.5, -110, -110)]), observed_at=obs, data_mode=DataMode.LIVE_RESEARCH)
         build_consensus(fsession, canonical_game_id=gid, market="SPREAD",

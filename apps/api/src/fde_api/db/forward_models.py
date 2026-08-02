@@ -87,6 +87,12 @@ class OddsQuote(Base):
     data_mode: Mapped[str] = mapped_column(String(16), index=True)
     canonical_game_id: Mapped[str] = mapped_column(String(32), index=True)
     provider: Mapped[str] = mapped_column(String(32))
+    # Where this quote actually came from. Without it a fixture payload is
+    # indistinguishable from live market data at the row level, and no
+    # downstream consumer can honour "fixture output is never live output".
+    provider_mode: Mapped[str] = mapped_column(
+        String(16), index=True, server_default="UNKNOWN_LEGACY"
+    )
     provider_event_id: Mapped[str | None] = mapped_column(String(64))
     sportsbook: Mapped[str] = mapped_column(String(48))
     market: Mapped[str] = mapped_column(String(16))  # SPREAD|TOTAL|MONEYLINE
@@ -113,6 +119,11 @@ class OddsQuote(Base):
             name="uq_odds_quote_identity",
         ),
         Index("ix_odds_game_market_observed", "canonical_game_id", "market", "observed_at"),
+        CheckConstraint(
+            "provider_mode IN ('FIXTURE', 'SANDBOX', 'LIVE', 'UNAVAILABLE', "
+            "'KEY_MISSING', 'QUOTA_EXHAUSTED', 'MIXED', 'UNKNOWN_LEGACY')",
+            name="ck_odds_quotes_provider_mode_vocabulary",
+        ),
     )
 
 
@@ -126,6 +137,11 @@ class ConsensusSnapshot(Base):
     canonical_game_id: Mapped[str] = mapped_column(String(32), index=True)
     market: Mapped[str] = mapped_column(String(16))
     method_version: Mapped[str] = mapped_column(String(32))
+    # Derived from the constituent quotes, not supplied by the caller: a
+    # consensus is only as live as its least-live input.
+    provider_mode: Mapped[str] = mapped_column(
+        String(16), index=True, server_default="UNKNOWN_LEGACY"
+    )
     median_line: Mapped[float | None] = mapped_column(Float)
     home_price_american: Mapped[int | None] = mapped_column(Integer)
     away_price_american: Mapped[int | None] = mapped_column(Integer)
@@ -143,6 +159,11 @@ class ConsensusSnapshot(Base):
     observed_at: Mapped[datetime] = mapped_column(index=True)
     __table_args__ = (
         Index("ix_consensus_game_market_observed", "canonical_game_id", "market", "observed_at"),
+        CheckConstraint(
+            "provider_mode IN ('FIXTURE', 'SANDBOX', 'LIVE', 'UNAVAILABLE', "
+            "'KEY_MISSING', 'QUOTA_EXHAUSTED', 'MIXED', 'UNKNOWN_LEGACY')",
+            name="ck_consensus_snapshots_provider_mode_vocabulary",
+        ),
     )
 
 

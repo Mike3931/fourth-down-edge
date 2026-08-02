@@ -294,7 +294,8 @@ def odds_capture(ctx: JobContext) -> JobResult:
 
     res = capture_odds(
         ctx.session, payload, request_id=ctx.idempotency_key,
-        data_mode=ctx.data_mode, observed_at=ctx.now(),
+        data_mode=ctx.data_mode, provider_mode=ctx.provider_mode,
+        observed_at=ctx.now(),
     )
     warnings = list(res.warnings)
     if res.unmapped_events:

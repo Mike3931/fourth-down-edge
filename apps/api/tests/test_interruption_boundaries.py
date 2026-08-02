@@ -32,6 +32,17 @@ from fde_api.forward.scheduler import FrozenClock, JobSkipped, Scheduler
 from fde_api.forward.state import Outcome
 from fde_api.forward.venues import seed_venues
 
+
+def _capture(session, payload, **kw):
+    """Every payload in this module is a hand-built fixture, so provenance
+    is stated once here rather than repeated at each call site."""
+    from fde_api.forward.cohort import ProviderMode
+    from fde_api.forward.odds import capture_odds
+
+    kw.setdefault("provider_mode", ProviderMode.FIXTURE)
+    return capture_odds(session, payload, **kw)
+
+
 KICK = datetime(2026, 9, 13, 17, 0, tzinfo=UTC)
 NOW = KICK - timedelta(days=3)
 
@@ -133,9 +144,8 @@ class TestBoundary3_RollbackDiscardsUncommitted:
         s = _sched(factory)
 
         def write_then_die(ctx):
-            from fde_api.forward.odds import capture_odds
 
-            capture_odds(ctx.session, _payload(NOW), request_id=ctx.idempotency_key,
+            _capture(ctx.session, _payload(NOW), request_id=ctx.idempotency_key,
                          data_mode=ctx.data_mode, observed_at=ctx.now())
             # The rows exist in this transaction...
             assert ctx.session.scalar(select(func.count(OddsQuote.id))) > 0
@@ -151,9 +161,8 @@ class TestBoundary3_RollbackDiscardsUncommitted:
         s = _sched(factory)
 
         def write_then_die(ctx):
-            from fde_api.forward.odds import capture_odds
 
-            capture_odds(ctx.session, _payload(NOW), request_id=ctx.idempotency_key,
+            _capture(ctx.session, _payload(NOW), request_id=ctx.idempotency_key,
                          data_mode=ctx.data_mode, observed_at=ctx.now())
             raise RuntimeError("crash before commit")
 

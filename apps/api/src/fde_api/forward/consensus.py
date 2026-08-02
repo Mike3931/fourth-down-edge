@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fde_api.db.forward_models import ConsensusSnapshot, OddsQuote
+from fde_api.forward.cohort import combine_provider_modes
 from fde_api.forward.modes import DataMode
 from fde_api.util import utc_now
 
@@ -216,6 +217,9 @@ def build_consensus(
         canonical_game_id=canonical_game_id,
         market=market,
         method_version=CONSENSUS_METHOD_VERSION,
+        # Derived, never supplied: a consensus is only as live as its
+        # least-live constituent quote.
+        provider_mode=combine_provider_modes(q.provider_mode for q in eligible).value,
         median_line=median_line,
         home_price_american=home_price,
         away_price_american=away_price,
