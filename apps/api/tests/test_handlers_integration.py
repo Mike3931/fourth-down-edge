@@ -251,7 +251,10 @@ class TestPartialWriteRecovery:
         with factory() as sess:
             quotes_before = sess.scalar(select(func.count(OddsQuote.id)))
             run = sess.scalars(select(ScheduledJobRun)).one()
-            run.status = JobStatus.RUNNING.value  # simulate termination mid-finalize
+            # A real crash leaves the run mid-flight: authoritative outcome
+            # still RUNNING, no completion timestamp.
+            run.job_outcome = Outcome.RUNNING.value
+            run.status = "running"
             run.completed_at = None
             sess.commit()
 

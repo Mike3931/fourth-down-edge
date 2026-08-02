@@ -185,14 +185,17 @@ class TestRestartRecovery:
             sess.add(ScheduledJobRun(
                 id="run_crashed", job_kind="odds_capture", idempotency_key="odds_capture:burn_in:X",
                 data_mode="LIVE_RESEARCH", scheduled_for=T0, started_at=T0,
-                status=JobStatus.RUNNING.value, retry_count=0, provider_calls=0,
+                status=JobStatus.RUNNING.value, job_outcome="RUNNING",
+                state_origin="LIVE", root_run_id="run_crashed", recovery_sequence=0,
+                administrative_override=False, retry_count=0, provider_calls=0,
                 records_received=0, records_written=0, code_commit="abc", created_at=T0))
             sess.commit()
         out = s.reconcile_startup()
         assert out["count"] == 1
         with factory() as sess:
             row = sess.get(ScheduledJobRun, "run_crashed")
-        assert row.status == JobStatus.INTERRUPTED.value
+        assert row.job_outcome == "INTERRUPTED"
+        assert row.status == JobStatus.INTERRUPTED.value  # projection follows
         assert "terminated" in row.error_summary
 
     def test_restart_does_not_duplicate_completed_work(self, factory) -> None:

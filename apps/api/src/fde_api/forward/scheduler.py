@@ -284,12 +284,17 @@ class Scheduler:
         finished and never silently re-execute under the same key."""
         reconciled: list[str] = []
         with self._session() as s:
+            # Query the AUTHORITATIVE axis, and write through apply_state so
+            # the compatibility column is projected rather than set by hand.
             rows = s.scalars(
-                select(ScheduledJobRun).where(ScheduledJobRun.status == JobStatus.RUNNING.value)
+                select(ScheduledJobRun).where(
+                    ScheduledJobRun.job_outcome == Outcome.RUNNING.value
+                )
             ).all()
             for r in rows:
-                r.status = JobStatus.INTERRUPTED.value
+                apply_state(r, outcome=Outcome.INTERRUPTED)
                 r.completed_at = self.clock.now()
+                r.reconciled_at = self.clock.now()
                 r.error_summary = "process terminated before completion; reconciled at startup"
                 reconciled.append(r.idempotency_key)
         log.info("startup reconciliation", extra={"interrupted": len(reconciled)})
@@ -309,14 +314,22 @@ class Scheduler:
         finally:
             s.close()
 
-    def _claim(self, key: str, job: JobDefinition, slot: datetime, attempt: int) -> str | None:
+    def _claim(
+        self, key: str, job: JobDefinition, slot: datetime, attempt: int,
+        lineage: dict[str, Any] | None = None,
+    ) -> str | None:
         """Atomically claim a slot. Returns the run id, or None if another
         worker already holds it (UNIQUE constraint on idempotency_key)."""
         run_id = f"run_{uuid.uuid4().hex[:16]}"
         # Lineage is populated immediately, not lazily when something fails:
         # an initial run is a complete chain of one, and leaving the fields
         # null until an interruption makes the chain unqueryable.
-        lineage = self._initial_lineage(run_id, key, slot)
+        # A recovery carries its predecessor's chain; a fresh run is its own root.
+        if lineage is not None:
+            lineage = {**lineage, "root_run_id": lineage["root_run_id"]}
+            lineage.pop("idempotency_key", None)
+        else:
+            lineage = self._initial_lineage(run_id, key, slot)
         try:
             with self._session() as s:
                 run = ScheduledJobRun(
@@ -358,36 +371,93 @@ class Scheduler:
             "override_reason": None,
         }
 
-    def _recovery_key(self, key: str) -> str:
-        """Return a fresh key when the prior run for this slot was interrupted.
+    def _plan_recovery(
+        self, job: JobDefinition, key: str, *, reason: str,
+        administrative_override: bool = False,
+        override_operator: str | None = None,
+        override_reason: str | None = None,
+    ) -> tuple[str, dict[str, Any] | None]:
+        """Decide whether this slot is a fresh run or a recovery.
 
-        Without this, a post-crash retry loses the UNIQUE-insert race against
-        its own abandoned row and is skipped, leaving no record of the
-        recovery attempt.
+        Returns (idempotency_key, lineage). A lineage of None means there is
+        nothing to recover and the original key stands. When the prior run
+        was interrupted, the domain is inspected for committed effects and
+        the resulting typed replay decision is carried on the new row — a
+        crashed process may well have committed its write before dying, and
+        only the domain can say so.
         """
+        from fde_api.forward.recovery import (
+            RecoveryError,
+            build_recovery_lineage,
+            inspect_prior_effects,
+        )
+
         with self._session() as s:
             prior = s.scalars(
                 select(ScheduledJobRun)
                 .where(ScheduledJobRun.idempotency_key.like(f"{key}%"))
-                .order_by(ScheduledJobRun.created_at.desc())
+                # Order by recovery_sequence, not created_at: members of a
+                # chain can share a timestamp (frozen clock, or two recoveries
+                # inside the same second), and then created_at ordering is
+                # arbitrary. Sequence is monotonic by construction.
+                .order_by(
+                    ScheduledJobRun.recovery_sequence.desc(),
+                    ScheduledJobRun.created_at.desc(),
+                )
             ).all()
             if not prior:
-                return key
+                return key, None
             latest = prior[0]
-            if latest.status != JobStatus.INTERRUPTED.value:
-                return key
-            recoveries = sum(1 for p in prior if "#recovery" in p.idempotency_key)
-        return f"{key}#recovery{recoveries + 1}"
+            if latest.job_outcome != Outcome.INTERRUPTED.value:
+                return key, None
+
+            root = latest.root_run_id or latest.id
+            seq = (latest.recovery_sequence or 0) + 1
+            recovery_key = f"{key}#recovery{seq}"
+
+            # Inspect using the CHAIN's stable key, not this attempt's key.
+            # Domain rows are written under the original key; a recovery whose
+            # writes were idempotent no-ops has no rows of its own, so keying
+            # off `latest.idempotency_key` would make the second recovery in a
+            # chain conclude "nothing ever happened" and replay freely. Harmless
+            # for idempotent observation jobs, wrong for terminal ones.
+            inspection = inspect_prior_effects(
+                s,
+                job_kind=job.name,
+                idempotency_key=latest.original_idempotency_key or latest.idempotency_key,
+                logical_slot=latest.logical_slot or latest.scheduled_for,
+            )
+            try:
+                lineage = build_recovery_lineage(
+                    s, latest,
+                    run_id="",  # assigned by _claim
+                    recovery_key=recovery_key,
+                    reason=reason,
+                    now=self.clock.now(),
+                    inspection=inspection,
+                    administrative_override=administrative_override,
+                    override_operator=override_operator,
+                    override_reason=override_reason,
+                )
+            except RecoveryError as e:
+                log.warning("recovery refused", extra={"job": job.name, "root": root,
+                                                       "error": str(e)})
+                raise
+            lineage["_inspection"] = inspection.as_dict()
+        return recovery_key, lineage
 
     def already_completed(self, key: str) -> bool:
         with self._session() as s:
             row = s.scalars(
                 select(ScheduledJobRun).where(ScheduledJobRun.idempotency_key == key)
             ).first()
-            return row is not None and row.status in (
-                JobStatus.FINISHED.value,
-                JobStatus.SKIPPED.value,
-                JobStatus.DEAD_LETTER.value,
+            if row is None:
+                return False
+            return row.job_outcome in (
+                Outcome.SUCCESS.value,
+                Outcome.SUCCESS_WITH_WARNINGS.value,
+                Outcome.SKIPPED.value,
+                Outcome.TERMINAL_FAILURE.value,
             )
 
     def run_job(
@@ -397,6 +467,10 @@ class Scheduler:
         slot: datetime | None = None,
         params: dict[str, Any] | None = None,
         manual: bool = False,
+        recovery_reason: str = "prior run was interrupted",
+        administrative_override: bool = False,
+        override_operator: str | None = None,
+        override_reason: str | None = None,
     ) -> dict[str, Any]:
         """Execute one job for one slot, honoring idempotency and retries."""
         job = self.jobs[job_name]
@@ -408,15 +482,37 @@ class Scheduler:
             return {"job": job_name, "status": "skipped", "reason": "idempotency key already completed",
                     "idempotency_key": key}
 
-        # A slot whose previous run was INTERRUPTED (process died) is eligible
-        # for recovery under a distinct key, so the retry is recorded rather
-        # than silently skipped. Domain-level idempotency — not the run key —
-        # is what prevents duplicate records on that retry.
-        key = self._recovery_key(key)
+        # A slot whose previous run was INTERRUPTED is eligible for recovery
+        # under a distinct key, so the attempt is recorded rather than
+        # silently skipped. The domain is inspected for committed effects and
+        # the typed replay decision travels on the recovery row.
+        from fde_api.forward.recovery import RecoveryError, ReplayDecision
+
+        try:
+            key, recovery_lineage = self._plan_recovery(
+                job, key, reason=recovery_reason,
+                administrative_override=administrative_override,
+                override_operator=override_operator,
+                override_reason=override_reason,
+            )
+        except RecoveryError as e:
+            return {"job": job_name, "status": "refused", "reason": str(e),
+                    "idempotency_key": key}
+
+        inspection = (recovery_lineage or {}).pop("_inspection", None)
+        decision = (recovery_lineage or {}).get("replay_decision")
+
+        # A decision of MANUAL_REVIEW_REQUIRED stops automatic recovery: the
+        # effects are ambiguous and a human has to reconcile them.
+        if decision == ReplayDecision.MANUAL_REVIEW_REQUIRED.value and not administrative_override:
+            self._record_blocked_recovery(job, key, slot, recovery_lineage, inspection)
+            return {"job": job_name, "status": "manual_review_required",
+                    "reason": (inspection or {}).get("reason", "ambiguous prior effects"),
+                    "idempotency_key": key, "inspection": inspection}
 
         last_error: str | None = None
         for attempt in range(1, job.retry.max_attempts + 1):
-            run_id = self._claim(key, job, slot, attempt)
+            run_id = self._claim(key, job, slot, attempt, lineage=recovery_lineage)
             if run_id is None:
                 return {"job": job_name, "status": "skipped",
                         "reason": "another worker holds this slot", "idempotency_key": key}
@@ -440,6 +536,8 @@ class Scheduler:
                 log.info("job finished", extra={"job": job_name, "key": key, "attempt": attempt})
                 return {"job": job_name, "status": "finished", "attempt": attempt,
                         "idempotency_key": key, "run_id": run_id,
+                        "replay_decision": decision,
+                        "recovery_sequence": (recovery_lineage or {}).get("recovery_sequence", 0),
                         "records_written": result.records_written,
                         "provider_calls": result.provider_calls,
                         "provider_credits": result.provider_credits,
@@ -465,6 +563,34 @@ class Scheduler:
                 # failed row is preserved as history rather than overwritten.
                 key = f"{key}#r{attempt}"
         return {"job": job_name, "status": "dead_letter", "error": last_error}
+
+    def _record_blocked_recovery(
+        self, job: JobDefinition, key: str, slot: datetime,
+        lineage: dict[str, Any] | None, inspection: dict[str, Any] | None,
+    ) -> None:
+        """Persist the fact that automatic recovery was refused.
+
+        Without this row the refusal is invisible and an operator has no
+        record of why the chain stopped.
+        """
+        if lineage is None:
+            return
+        run_id = f"run_{uuid.uuid4().hex[:16]}"
+        payload = {k: v for k, v in lineage.items() if k != "idempotency_key"}
+        with self._session() as s:
+            run = ScheduledJobRun(
+                id=run_id, job_kind=job.name, idempotency_key=key,
+                data_mode=self.data_mode.value, scheduled_for=slot,
+                started_at=self.clock.now(), completed_at=self.clock.now(),
+                retry_count=0, provider_calls=0, records_received=0, records_written=0,
+                code_commit=current_code_commit(), created_at=self.clock.now(),
+                error_summary=(inspection or {}).get("reason", "manual review required")[:2000],
+                **payload,
+            )
+            apply_state(run, outcome=Outcome.SKIPPED,
+                        domain_state=DomainState.DATA_INCOMPLETE,
+                        state_origin=StateOrigin.LIVE)
+            s.add(run)
 
     def _finish(
         self,
