@@ -30,7 +30,6 @@ from fde_api.canonical.team_map import canonical_team_code
 from fde_api.db.forward_models import OddsQuote, ProviderQuotaUsage
 from fde_api.forward.cohort import ProviderMode, assert_capturable
 from fde_api.forward.modes import DataMode
-from fde_api.util import utc_now
 
 THE_ODDS_API_BASE = "https://api.the-odds-api.com/v4"
 SPORT_KEY = "americanfootball_nfl"
@@ -223,7 +222,7 @@ def capture_odds(
     quota_remaining: int | None = None,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
     provider_mode: ProviderMode,
-    observed_at: datetime | None = None,
+    observed_at: datetime,
 ) -> OddsCaptureResult:
     """Persist a provider payload as immutable timestamped quotes.
 
@@ -235,9 +234,15 @@ def capture_odds(
     every quote. It has no default on purpose: a fixture payload and a live
     one are structurally identical, so only the caller knows, and a default
     of LIVE would silently mislabel every caller that forgot.
+
+    `observed_at` is required rather than defaulting to `utc_now()`. A
+    caller that omitted it stamped WALL-CLOCK time onto the record instead
+    of the scheduler's clock, which under a ReplayClock silently marks a
+    historical observation as having been seen now — a lookahead vector in
+    exactly the axis this engine's integrity rests on. Every real caller
+    already passes `ctx.now()`; the default only made an omission invisible.
     """
     assert_capturable(provider_mode)
-    observed_at = observed_at or utc_now()
     res = OddsCaptureResult(provider=provider, request_id=request_id, quota_remaining=quota_remaining)
 
     for event in payload:

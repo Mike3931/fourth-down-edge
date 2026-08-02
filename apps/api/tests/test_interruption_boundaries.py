@@ -40,6 +40,7 @@ def _capture(session, payload, **kw):
     from fde_api.forward.odds import capture_odds
 
     kw.setdefault("provider_mode", ProviderMode.FIXTURE)
+    kw.setdefault("observed_at", NOW)
     return capture_odds(session, payload, **kw)
 
 

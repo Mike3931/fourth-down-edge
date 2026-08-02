@@ -117,6 +117,32 @@ NWS covers US locations only, and the failure is explicit rather than a
 silent gap. Fixed domes are `weather_applicable = false`. Retractable
 roofs remain weather-relevant because the roof state is itself uncertain.
 
+## Observation time is always supplied, never invented
+
+`capture_odds`, `ingest_schedule`, and `capture_forecast_for_game` all
+take `observed_at` as a **required keyword argument**. It used to default
+to `utc_now()`.
+
+That default was a lookahead vector. A caller who omitted it stamped
+wall-clock time onto the record instead of the scheduler's clock, so
+replaying a historical week under a `ReplayClock` would mark every
+observation as having been seen *now*. It is invisible in production,
+where the scheduler runs on a `SystemClock` and `utc_now()` happens to
+equal `ctx.now()` — which is why nothing caught it.
+
+Pinned by `test_observation_time_required.py`, which asserts the parameter
+has no default, is keyword-only (so nothing lands there positionally), and
+that a scheduler on a frozen 2026 clock stamps that instant rather than
+today's date.
+
+**Removed at the same time:** `capture_forecasts_for_slate` and its
+`WeatherCaptureResult`. The function was dead — defined once, never
+called, never tested, never documented — and it duplicated the live
+`weather_capture` handler while computing both the 7-day horizon filter
+and every observation timestamp from `utc_now()` rather than the
+scheduler's clock. Dead code carrying a defect the live path avoids is a
+trap for whoever wires it up later.
+
 **Roof state** is never inferred from the result or a postgame report.
 An unobserved retractable roof stays `UNKNOWN`, which the policy converts
 to `DATA_INCOMPLETE`.

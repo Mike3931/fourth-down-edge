@@ -16,7 +16,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -42,28 +41,6 @@ class VenueNotSupported(RuntimeError):
 class NwsUnavailable(RuntimeError):
     """NWS request failed. Distinct from 'venue unsupported' so an outage
     is never mistaken for a permanent gap."""
-
-
-@dataclass
-class WeatherCaptureResult:
-    attempted: int = 0
-    captured: int = 0
-    unchanged: int = 0
-    unsupported: int = 0
-    failed: int = 0
-    not_applicable: int = 0
-    details: list[str] = field(default_factory=list)
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "attempted": self.attempted,
-            "captured": self.captured,
-            "unchanged": self.unchanged,
-            "unsupported": self.unsupported,
-            "failed": self.failed,
-            "not_applicable": self.not_applicable,
-            "details": self.details[:50],
-        }
 
 
 class NwsClient:
@@ -149,12 +126,19 @@ def capture_forecast_for_game(
     kickoff_utc: datetime,
     client: NwsClient | None = None,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
-    observed_at: datetime | None = None,
+    observed_at: datetime,
     is_gameday_observation: bool = False,
 ) -> WeatherForecastVintage | None:
     """Capture one forecast vintage. Returns None when the content is
-    identical to the newest existing vintage (no duplicate rows)."""
-    observed_at = observed_at or utc_now()
+    identical to the newest existing vintage (no duplicate rows).
+
+    `observed_at` is required rather than defaulting to `utc_now()`. A
+    caller that omitted it stamped WALL-CLOCK time onto the record instead
+    of the scheduler's clock, which under a ReplayClock silently marks a
+    historical observation as having been seen now — a lookahead vector in
+    exactly the axis this engine's integrity rests on. Every real caller
+    already passes `ctx.now()`; the default only made an omission invisible.
+    """
     if venue.country != "US":
         raise VenueNotSupported(
             f"{venue.name} is in {venue.country}; NWS covers US locations only"
@@ -228,54 +212,6 @@ def capture_forecast_for_game(
     return vintage
 
 
-def capture_forecasts_for_slate(
-    session: Session,
-    games: list[Any],
-    *,
-    client: NwsClient | None = None,
-    data_mode: DataMode = DataMode.LIVE_RESEARCH,
-    max_days_ahead: int = 7,
-) -> WeatherCaptureResult:
-    """Capture forecasts for games within the NWS forecast horizon.
-
-    NWS forecasts extend ~7 days; asking earlier yields nothing useful, so
-    distant games are skipped rather than recorded as failures.
-    """
-    res = WeatherCaptureResult()
-    client = client or NwsClient()
-    now = utc_now()
-    for g in games:
-        if g.kickoff_utc is None:
-            continue
-        if (g.kickoff_utc - now) > timedelta(days=max_days_ahead):
-            continue
-        venue = session.get(Venue, g.stadium_id) if g.stadium_id else None
-        if venue is None:
-            res.unsupported += 1
-            res.details.append(f"{g.canonical_game_id}: no governed venue")
-            continue
-        if not venue.weather_applicable:
-            res.not_applicable += 1
-            continue
-        res.attempted += 1
-        try:
-            v = capture_forecast_for_game(
-                session, canonical_game_id=g.canonical_game_id, venue=venue,
-                kickoff_utc=g.kickoff_utc, client=client, data_mode=data_mode,
-            )
-            if v is None:
-                res.unchanged += 1
-            else:
-                res.captured += 1
-        except VenueNotSupported as e:
-            res.unsupported += 1
-            res.details.append(f"{g.canonical_game_id}: {e}")
-        except NwsUnavailable as e:
-            res.failed += 1
-            res.details.append(f"{g.canonical_game_id}: {e}")
-    return res
-
-
 def forecast_as_of(
     session: Session,
     *,
@@ -308,7 +244,7 @@ def record_roof_state(
     state: str,
     source_category: str,
     source_reference: str | None = None,
-    observed_at: datetime | None = None,
+    observed_at: datetime,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
 ) -> RoofStateObservation:
     """Append a roof-state observation.

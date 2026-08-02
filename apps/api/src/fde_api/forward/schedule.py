@@ -30,7 +30,6 @@ from fde_api.canonical.team_map import canonical_team_code
 from fde_api.db.forward_models import ScheduleObservation
 from fde_api.forward.modes import DataMode
 from fde_api.forward.venues import is_international, resolve_venue
-from fde_api.util import utc_now
 
 _EASTERN = ZoneInfo("America/New_York")
 _UTC = ZoneInfo("UTC")
@@ -108,7 +107,7 @@ def ingest_schedule(
     provider: str = "nflverse",
     source_manifest_version: str | None = None,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
-    observed_at: datetime | None = None,
+    observed_at: datetime,
 ) -> ScheduleIngestResult:
     """Record the current observed schedule state for one season.
 
@@ -116,8 +115,14 @@ def ingest_schedule(
     fields differ from its latest observation, a new row is appended with
     `supersedes_id` pointing at the prior one and a human-readable
     `change_summary`.
+
+    `observed_at` is required rather than defaulting to `utc_now()`. A
+    caller that omitted it stamped WALL-CLOCK time onto the record instead
+    of the scheduler's clock, which under a ReplayClock silently marks a
+    historical observation as having been seen now — a lookahead vector in
+    exactly the axis this engine's integrity rests on. Every real caller
+    already passes `ctx.now()`; the default only made an omission invisible.
     """
-    observed_at = observed_at or utc_now()
     result = ScheduleIngestResult(season=season)
     reader = csv.DictReader(io.StringIO(payload.decode("utf-8")))
 
@@ -227,7 +232,7 @@ def record_status_change(
     new_status: str,
     reason: str,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
-    observed_at: datetime | None = None,
+    observed_at: datetime,
     new_kickoff_utc: datetime | None = None,
 ) -> ScheduleObservation:
     """Append a postponement / cancellation / kickoff change.
@@ -262,7 +267,7 @@ def record_status_change(
         season=prev.season,
         content_hash=_content_hash(fields),
         source_manifest_version=None,
-        observed_at=observed_at or utc_now(),
+        observed_at=observed_at,
         supersedes_id=prev.id,
         change_summary=f"{_describe_change(prev, fields)} ({reason})",
         **fields,

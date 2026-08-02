@@ -69,10 +69,30 @@ def _capture(session, payload, **kw):
     from fde_api.forward.cohort import ProviderMode
 
     kw.setdefault("provider_mode", ProviderMode.FIXTURE)
+    kw.setdefault("observed_at", ODDS_OBSERVED)
     return capture_odds(session, payload, **kw)
 
 
 KICK = datetime(2026, 9, 13, 17, 0, tzinfo=UTC)
+
+
+# `observed_at` is required by design - a wall-clock default would make a
+# forgotten observation time invisible - so these modules supply it once
+# here rather than repeating it at every call site.
+#
+# The schedule default must precede every explicit revision timestamp the
+# tests below use (2026-09-01, 2026-09-12), or a "revision" would sort
+# BEFORE the original observation it supersedes. Wall-clock time happened
+# to satisfy that ordering, which is exactly the kind of accident that
+# stops holding the moment anything moves.
+SCHEDULE_OBSERVED = datetime(2026, 8, 25, 12, 0, tzinfo=UTC)
+ODDS_OBSERVED = KICK - timedelta(days=3)
+
+
+def _ingest(session, payload, **kw):
+    kw.setdefault("observed_at", SCHEDULE_OBSERVED)
+    return ingest_schedule(session, payload, **kw)
+
 
 
 @pytest.fixture()
@@ -210,7 +230,7 @@ class TestModes:
 
 class TestSchedule:
     def test_new_game_recorded(self, fsession: Session) -> None:
-        r = ingest_schedule(fsession, _sched_csv(_sched_row()), season=2026)
+        r = _ingest(fsession, _sched_csv(_sched_row()), season=2026)
         assert r.new_games == 1 and r.revisions == 0
         st = current_schedule_state(fsession, "2026_02_KC_BUF")
         assert st.home_team_id == "BUF" and st.away_team_id == "KC"
@@ -219,14 +239,14 @@ class TestSchedule:
 
     def test_unchanged_reingest_writes_nothing(self, fsession: Session) -> None:
         payload = _sched_csv(_sched_row())
-        ingest_schedule(fsession, payload, season=2026)
-        r2 = ingest_schedule(fsession, payload, season=2026)
+        _ingest(fsession, payload, season=2026)
+        r2 = _ingest(fsession, payload, season=2026)
         assert r2.new_games == 0 and r2.revisions == 0 and r2.unchanged == 1
 
     def test_kickoff_revision_appends_and_preserves_original(self, fsession: Session) -> None:
-        ingest_schedule(fsession, _sched_csv(_sched_row()), season=2026)
+        _ingest(fsession, _sched_csv(_sched_row()), season=2026)
         original = current_schedule_state(fsession, "2026_02_KC_BUF").kickoff_utc
-        ingest_schedule(
+        _ingest(
             fsession, _sched_csv(_sched_row(gametime="20:20")), season=2026,
             observed_at=datetime(2026, 9, 1, tzinfo=UTC),
         )
@@ -237,7 +257,7 @@ class TestSchedule:
         assert "kickoff" in hist[1].change_summary
 
     def test_postponement_recorded_as_new_observation(self, fsession: Session) -> None:
-        ingest_schedule(fsession, _sched_csv(_sched_row()), season=2026)
+        _ingest(fsession, _sched_csv(_sched_row()), season=2026)
         record_status_change(
             fsession, canonical_game_id="2026_02_KC_BUF", new_status="POSTPONED",
             reason="weather", observed_at=datetime(2026, 9, 12, tzinfo=UTC),
@@ -246,7 +266,7 @@ class TestSchedule:
         assert schedule_history(fsession, "2026_02_KC_BUF")[0].game_status == "SCHEDULED"
 
     def test_cancellation_recorded(self, fsession: Session) -> None:
-        ingest_schedule(fsession, _sched_csv(_sched_row()), season=2026)
+        _ingest(fsession, _sched_csv(_sched_row()), season=2026)
         record_status_change(
             fsession, canonical_game_id="2026_02_KC_BUF", new_status="CANCELLED",
             reason="unplayable", observed_at=datetime(2026, 9, 12, tzinfo=UTC),
@@ -254,7 +274,7 @@ class TestSchedule:
         assert current_schedule_state(fsession, "2026_02_KC_BUF").game_status == "CANCELLED"
 
     def test_point_in_time_state_excludes_later_revision(self, fsession: Session) -> None:
-        ingest_schedule(
+        _ingest(
             fsession, _sched_csv(_sched_row()), season=2026,
             observed_at=datetime(2026, 8, 1, tzinfo=UTC),
         )
@@ -269,7 +289,7 @@ class TestSchedule:
 
     def test_neutral_site_ignores_home_stadium_id(self, fsession: Session) -> None:
         """The source puts the HOME club's stadium on international games."""
-        ingest_schedule(
+        _ingest(
             fsession,
             _sched_csv(_sched_row(location="Neutral", stadium="Wembley Stadium", stadium_id="BUF00")),
             season=2026,
@@ -281,8 +301,8 @@ class TestSchedule:
         assert st.venue_timezone == "Europe/London"
 
     def test_canonical_id_is_stable_across_revisions(self, fsession: Session) -> None:
-        ingest_schedule(fsession, _sched_csv(_sched_row()), season=2026)
-        ingest_schedule(
+        _ingest(fsession, _sched_csv(_sched_row()), season=2026)
+        _ingest(
             fsession, _sched_csv(_sched_row(gametime="16:25")), season=2026,
             observed_at=datetime(2026, 9, 2, tzinfo=UTC),
         )
@@ -302,7 +322,7 @@ class TestSchedule:
 
 
 def _seed_game(fsession: Session) -> str:
-    ingest_schedule(fsession, _sched_csv(_sched_row()), season=2026)
+    _ingest(fsession, _sched_csv(_sched_row()), season=2026)
     return "2026_02_KC_BUF"
 
 
@@ -732,9 +752,9 @@ class TestLedgerAndCandidates:
 
 class TestModeSeparation:
     def test_records_carry_mode_and_do_not_mix(self, fsession: Session) -> None:
-        ingest_schedule(fsession, _sched_csv(_sched_row()), season=2026,
+        _ingest(fsession, _sched_csv(_sched_row()), season=2026,
                         data_mode=DataMode.LIVE_RESEARCH)
-        ingest_schedule(fsession, _sched_csv(_sched_row(game_id="2026_02_DEMO_X")), season=2026,
+        _ingest(fsession, _sched_csv(_sched_row(game_id="2026_02_DEMO_X")), season=2026,
                         data_mode=DataMode.DEMO)
         live = fsession.scalars(
             select(ScheduleObservation).where(

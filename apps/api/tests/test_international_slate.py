@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import csv
 import io
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import create_engine, event
@@ -62,7 +63,7 @@ def slate_session() -> Session:
     payload = _published_schedule()
     if payload is None:
         pytest.skip("no ingested nflverse schedule artifact available")
-    ingest_schedule(s, payload, season=2026)
+    ingest_schedule(s, payload, season=2026, observed_at=datetime(2026, 9, 1, 12, 0, tzinfo=UTC))
     return s
 
 
