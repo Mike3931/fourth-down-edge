@@ -8,7 +8,7 @@ import {
   totalDistribution, totalOutcomeProbabilities,
 } from '@fde/calculations';
 import type { FactorAssessment } from '@fde/shared-types';
-import { latestSnapshot, marginToWinProb, type DemoDataset } from '@fde/api-client';
+import { latestSnapshotForDisplay, marginToWinProb, type DemoDataset } from '@fde/api-client';
 import { useDataset, useRecommendations } from '../lib/api';
 import { useStore } from '../lib/store';
 import { CoverByLineChart, DistributionChart } from '../components/charts';
@@ -105,9 +105,9 @@ export default function GameLab() {
     .filter((p) => p.gameId === gameId)
     .sort((a, b) => a.asOfAt.localeCompare(b.asOfAt));
   const rec = recs?.find((r) => r.gameId === gameId);
-  const spread = latestSnapshot(ds.oddsSnapshots, gameId, 'SPREAD');
-  const total = latestSnapshot(ds.oddsSnapshots, gameId, 'TOTAL');
-  const ml = latestSnapshot(ds.oddsSnapshots, gameId, 'MONEYLINE');
+  const spread = latestSnapshotForDisplay(ds.oddsSnapshots, gameId, 'SPREAD');
+  const total = latestSnapshotForDisplay(ds.oddsSnapshots, gameId, 'TOTAL');
+  const ml = latestSnapshotForDisplay(ds.oddsSnapshots, gameId, 'MONEYLINE');
   const components = ds.predictionComponents.filter((c) => c.predictionId === pred.id);
 
   const mDist = marginDistribution(pred.expectedMargin, pred.marginStd);

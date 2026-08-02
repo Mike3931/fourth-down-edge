@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button, Card, CardHeader, ErrorState, LoadingState, Mono, Pill, StaleBanner, Td, Th } from '@fde/ui';
 import { ageMinutes } from '@fde/calculations';
-import { latestSnapshot } from '@fde/api-client';
+import { latestSnapshotForDisplay } from '@fde/api-client';
 import type { ManualBookPrice, MarketType, SelectionSide } from '@fde/shared-types';
 import { api, useDataset, useRecommendations } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -123,10 +123,10 @@ export default function MarketMonitor() {
             <tbody>
               {ds.games.map((g) => {
                 const open = ds.oddsSnapshots.find((o) => o.gameId === g.id && o.market === 'SPREAD' && o.isOpening);
-                const cur = latestSnapshot(ds.oddsSnapshots, g.id, 'SPREAD');
+                const cur = latestSnapshotForDisplay(ds.oddsSnapshots, g.id, 'SPREAD');
                 const openT = ds.oddsSnapshots.find((o) => o.gameId === g.id && o.market === 'TOTAL' && o.isOpening);
-                const curT = latestSnapshot(ds.oddsSnapshots, g.id, 'TOTAL');
-                const curMl = latestSnapshot(ds.oddsSnapshots, g.id, 'MONEYLINE');
+                const curT = latestSnapshotForDisplay(ds.oddsSnapshots, g.id, 'TOTAL');
+                const curMl = latestSnapshotForDisplay(ds.oddsSnapshots, g.id, 'MONEYLINE');
                 const rec = recs?.find((r) => r.gameId === g.id);
                 const age = cur ? ageMinutes(cur.observedAt, ds.demoNow) : Infinity;
                 const spreadMove = cur?.line !== undefined && open?.line !== undefined ? cur.line - open.line : 0;

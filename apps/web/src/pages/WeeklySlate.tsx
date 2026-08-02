@@ -8,7 +8,7 @@ import { Card, CardHeader, ErrorState, LoadingState, Mono, RecBadge, cn } from '
 import type { Recommendation, RecommendationStatus } from '@fde/shared-types';
 import { useDataset, useRecommendations } from '../lib/api';
 import { useStore } from '../lib/store';
-import { latestSnapshot, type DemoDataset } from '@fde/api-client';
+import { latestSnapshotForDisplay, type DemoDataset } from '@fde/api-client';
 import { fmtKickoff, fmtLine, fmtOdds, fmtPct, fmtSigned, fmtUtc } from '../lib/format';
 import { modelVersionLabel, stadiumById, teamById } from '../lib/joins';
 
@@ -41,8 +41,8 @@ function buildRows(ds: DemoDataset, recs: Recommendation[]): SlateRow[] {
   return ds.games.map((g) => {
     const pred = ds.predictions.find((p) => p.gameId === g.id && p.isOfficial)!;
     const rec = recs.find((r) => r.gameId === g.id)!;
-    const spread = latestSnapshot(ds.oddsSnapshots, g.id, 'SPREAD');
-    const total = latestSnapshot(ds.oddsSnapshots, g.id, 'TOTAL');
+    const spread = latestSnapshotForDisplay(ds.oddsSnapshots, g.id, 'SPREAD');
+    const total = latestSnapshotForDisplay(ds.oddsSnapshots, g.id, 'TOTAL');
     const injuries = ds.availabilitySnapshots.filter((a) => a.gameId === g.id);
     const worstInjury = injuries.reduce((worst, a) => Math.max(worst, (1 - a.activeProbability) * a.estimatedTeamImpactPts), 0);
     const wx = ds.weatherSnapshots.find((w) => w.gameId === g.id);

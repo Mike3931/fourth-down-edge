@@ -91,3 +91,20 @@
     degradation and that it doesn't affect other games (`packages/api-client/tests/lookahead.test.ts`).
     Because the demo dataset was already generated correctly, this defect never manifested in
     practice — which is exactly why nothing before this audit had caught it.
+
+    **Follow-up: the guard is now structural, not conventional.** The fix above left the cutoff as
+    an *optional* parameter on `latestSnapshot` and `evaluateCandidates`, with a comment noting
+    that the evaluation call sites all happened to pass it. That is the same shape as the original
+    defect: correct by inspection, and invisible when wrong, because the dataset still contains
+    zero records dated after `demoNow` (asserted in `tests/cutoff-required.test.ts`).
+
+    `latestSnapshot` is now split into `latestSnapshotAsOf` (cutoff required — use anywhere the
+    result feeds a prediction or edge) and `latestSnapshotForDisplay` (explicitly unrestricted —
+    Weekly Slate, Market Monitor, Game Lab headers, which legitimately show where the market is
+    *now*). `evaluateCandidates` requires the cutoff, and the one display caller that omitted it
+    now passes `ds.demoNow`.
+
+    This changed no behaviour — with no future-dated records, filtering is a no-op — which is
+    precisely the point: the guarantee moved out of the dataset's good behaviour and into the
+    signatures. Verified by mutation: reverting the evaluation path to the unrestricted variant
+    makes `cutoff-required.test.ts` fail.

@@ -98,7 +98,7 @@ export class MockFdeApi implements FdeApi {
   }
 
   getCandidates(gameId: string): Promise<CandidateEvaluation[]> {
-    return delay(evaluateCandidates(this.ds, gameId));
+    return delay(evaluateCandidates(this.ds, gameId, this.ds.demoNow));
   }
 
   getModelVersions(): Promise<ModelVersion[]> {

@@ -57,24 +57,55 @@ export interface CandidateEvaluation {
 /** Shrink model probability toward market no-vig prob (conservatism). */
 const MARKET_SHRINK = 0.35;
 
-/**
- * Latest snapshot for a market, optionally restricted to what was actually
- * observable at a prediction cutoff. UI display call sites (Weekly Slate,
- * Market Monitor, Game Lab headers) omit cutoffAt and see the current state,
- * same as before this parameter existed. The recommendation engine's own
- * calls below always pass ds.demoNow, so odds used to price a recommendation
- * can never be a record the app hadn't actually observed yet — point-in-time
- * integrity enforced live, not just unit-tested in isolation.
- */
-export function latestSnapshot(
+function pickLatest(
   odds: OddsSnapshot[],
   gameId: string,
   market: MarketType,
-  cutoffAt?: string,
+  cutoffAt: string | undefined,
 ): OddsSnapshot | undefined {
   const inScope = odds.filter((o) => o.gameId === gameId && o.market === market);
   const usable = cutoffAt === undefined ? inScope : filterToCutoff(inScope, cutoffAt);
   return usable.sort((a, b) => a.observedAt.localeCompare(b.observedAt)).at(-1);
+}
+
+/**
+ * Latest snapshot that was actually observable at `cutoffAt`.
+ *
+ * Use this anywhere the result feeds a prediction, an edge, or a
+ * recommendation. The cutoff is required: this used to be one function with
+ * an optional `cutoffAt`, and an evaluation call site that omitted it
+ * silently priced on future data. That failure is invisible in testing
+ * because the demo dataset is generated in correct chronological order —
+ * which is precisely why the original unwired point-in-time guard went
+ * unnoticed until an audit found it (see docs/limitations.md #17).
+ *
+ * Splitting the two uses into two names means the unsafe one can only be
+ * reached by asking for it.
+ */
+export function latestSnapshotAsOf(
+  odds: OddsSnapshot[],
+  gameId: string,
+  market: MarketType,
+  cutoffAt: string,
+): OddsSnapshot | undefined {
+  return pickLatest(odds, gameId, market, cutoffAt);
+}
+
+/**
+ * Latest snapshot regardless of observation time — the current state of the
+ * market.
+ *
+ * Display only: Weekly Slate, Market Monitor, and the Game Lab headers show
+ * where the market is now, which is a legitimately different question from
+ * what was knowable at a cutoff. The result of this function must never
+ * reach a prediction or a recommendation; use `latestSnapshotAsOf` there.
+ */
+export function latestSnapshotForDisplay(
+  odds: OddsSnapshot[],
+  gameId: string,
+  market: MarketType,
+): OddsSnapshot | undefined {
+  return pickLatest(odds, gameId, market, undefined);
 }
 
 function openingSnapshot(
@@ -124,7 +155,10 @@ export function movingTowardAcceptablePrice(
   cutoffAt?: string,
 ): boolean {
   const opening = openingSnapshot(ds.oddsSnapshots, gameId, market, cutoffAt);
-  const current = latestSnapshot(ds.oddsSnapshots, gameId, market, cutoffAt);
+  // pickLatest, not latestSnapshotAsOf: this function's own cutoff is
+  // optional and mirrors openingSnapshot above, so the undefined case is
+  // handled here rather than smuggled past a required parameter.
+  const current = pickLatest(ds.oddsSnapshots, gameId, market, cutoffAt);
   if (!opening || !current || opening.id === current.id) return false;
 
   if (market === 'MONEYLINE') {
@@ -145,13 +179,19 @@ export function movingTowardAcceptablePrice(
 }
 
 /**
- * cutoffAt is optional: the web app's direct useCandidates() call omits it
- * (wants "current" candidates for display, as always). evaluateGame's own
- * internal call always passes ds.demoNow, so the odds and manual prices
- * feeding an actual recommendation can never include a record the app
- * hadn't observed yet as of that cutoff.
+ * cutoffAt is REQUIRED. It was optional, and the one caller that omitted it
+ * (the web app's useCandidates path) therefore computed displayed edges and
+ * EV from records unrestricted by any observation cutoff - numbers that look
+ * exactly like a recommendation's.
+ *
+ * Requiring it changes no behaviour today: the demo dataset contains zero
+ * records dated after ds.demoNow, so filtering to that cutoff is a no-op.
+ * That is the point. The same "correct data hides the defect" property is
+ * why the original unwired point-in-time guard survived until an audit
+ * (docs/limitations.md #17), so the guard belongs in the signature rather
+ * than in the dataset's good behaviour.
  */
-export function evaluateCandidates(ds: DemoDataset, gameId: string, cutoffAt?: string): CandidateEvaluation[] {
+export function evaluateCandidates(ds: DemoDataset, gameId: string, cutoffAt: string): CandidateEvaluation[] {
   const pred = ds.predictions.find((p) => p.gameId === gameId && p.isOfficial);
   if (!pred) return [];
   const mDist = marginDistribution(pred.expectedMargin, pred.marginStd);
@@ -189,7 +229,7 @@ export function evaluateCandidates(ds: DemoDataset, gameId: string, cutoffAt?: s
   };
 
   // SPREAD
-  const spread = latestSnapshot(ds.oddsSnapshots, gameId, 'SPREAD', cutoffAt);
+  const spread = latestSnapshotAsOf(ds.oddsSnapshots, gameId, 'SPREAD', cutoffAt);
   if (spread?.line !== undefined) {
     const { cover, push: pushP } = spreadOutcomeProbabilities(mDist, spread.line);
     const awayRes = spreadOutcomeProbabilities(mDist, spread.line); // away covers when home doesn't
@@ -202,7 +242,7 @@ export function evaluateCandidates(ds: DemoDataset, gameId: string, cutoffAt?: s
   }
 
   // TOTAL
-  const total = latestSnapshot(ds.oddsSnapshots, gameId, 'TOTAL', cutoffAt);
+  const total = latestSnapshotAsOf(ds.oddsSnapshots, gameId, 'TOTAL', cutoffAt);
   if (total?.line !== undefined && total.overAmerican !== undefined && total.underAmerican !== undefined) {
     const { over, push: pushP, under } = totalOutcomeProbabilities(tDist, total.line);
     const [overNV, underNV] = noVigProbabilities([total.overAmerican, total.underAmerican]);
@@ -213,7 +253,7 @@ export function evaluateCandidates(ds: DemoDataset, gameId: string, cutoffAt?: s
   }
 
   // MONEYLINE
-  const ml = latestSnapshot(ds.oddsSnapshots, gameId, 'MONEYLINE', cutoffAt);
+  const ml = latestSnapshotAsOf(ds.oddsSnapshots, gameId, 'MONEYLINE', cutoffAt);
   if (ml) {
     const [homeNV, awayNV] = noVigProbabilities([ml.homeAmerican, ml.awayAmerican]);
     const mHome = freshManual('MONEYLINE', 'HOME');
@@ -306,7 +346,7 @@ export function evaluateGame(
   const candidates = evaluateCandidates(ds, gameId, now);
   const best = [...candidates].sort((a, b) => b.edge - a.edge)[0];
 
-  const spreadSnap = latestSnapshot(ds.oddsSnapshots, gameId, 'SPREAD', now);
+  const spreadSnap = latestSnapshotAsOf(ds.oddsSnapshots, gameId, 'SPREAD', now);
   const priceAge = spreadSnap ? ageMinutes(spreadSnap.observedAt, now) : Infinity;
 
   const availability = filterToCutoff(ds.availabilitySnapshots.filter((a) => a.gameId === gameId), now);
