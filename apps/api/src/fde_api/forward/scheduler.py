@@ -693,6 +693,12 @@ class Scheduler:
 JOB_CADENCE: dict[str, timedelta] = {
     "schedule_refresh": timedelta(hours=12),
     "odds_capture": timedelta(minutes=5),
+    # Consensus is derived from quotes and makes no provider calls, so it
+    # tracks the capture cadence. It was previously absent from this table
+    # and silently fell back to an hourly default, meaning predictions
+    # could be built on a consensus up to an hour behind the quotes it
+    # was supposed to summarise.
+    "consensus_build": timedelta(minutes=5),
     "weather_capture": timedelta(hours=3),
     "injury_reconciliation": timedelta(hours=6),
     "availability_computation": timedelta(hours=6),

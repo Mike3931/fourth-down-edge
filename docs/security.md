@@ -33,3 +33,61 @@
   data; real deployments should prefer the Supabase-backed store.
 - The service worker never caches API data; market data staleness is computed from data timestamps and
   surfaced in the UI, so cached shells cannot silently present stale prices as current.
+  (Verified: the cache branch is extension-allowlisted — `.js|.css|.png|.svg|.woff2?` plus the
+  manifest — so an `/api/...` path cannot match it, and cross-origin requests return early.)
+
+## Dependency audit
+
+CI job **Dependency audit** gates deploys. Three checks:
+
+| check | scope | blocking |
+| --- | --- | --- |
+| `npm audit --omit=dev --audit-level=high` | what actually ships | yes |
+| `npm audit` | includes dev-only advisories | no |
+| `pip-audit` against the exported `uv.lock` | Python runtime + dev | yes, for anything not listed below |
+
+Dev-only JavaScript advisories are reported but do not gate. They are real
+and worth fixing, but a linter's transitive dependency cannot reach a user,
+and letting it block deploys trains everyone to bypass the gate that does
+matter.
+
+The Python audit runs against the **lockfile**, not the built environment:
+run against the environment, `pip-audit` tries to resolve the local
+unpublished `fde-api` package on PyPI and fails on that rather than on any
+real finding.
+
+### Outstanding advisories (acknowledged, not dismissed)
+
+These are listed by ID in the workflow rather than suppressed by lowering
+the severity threshold, so the gate still goes red for anything new.
+
+| package | current | advisories | fix in |
+| --- | --- | --- | --- |
+| `starlette` | 0.48.0 | PYSEC-2026-161, -248, -249, -1942, -2280, -2281 | up to 1.3.1 |
+| `pyarrow` | 21.0.0 | PYSEC-2026-113 | 23.0.1 |
+| `pytest` | 8.4.2 | PYSEC-2026-1845 | 9.0.3 (dev-only) |
+
+**Why the upgrade is deferred rather than applied.** `uv.lock` is hashed
+into the frozen forward-test policy `ftp-2026-v1` via
+`policy.dependency_lock_hash`, and into every model-registry entry.
+Changing the lock means the recorded hash no longer describes the running
+environment, so this is a governance decision about the frozen policy
+rather than a routine patch. `starlette` 0.48 → 1.x is also a major-version
+move underneath FastAPI.
+
+**This is an open risk, not an accepted one.** `starlette` is the ASGI
+layer the API actually serves on. The decision needed is whether to
+re-freeze the policy under an upgraded lock, or to pin the deployment
+behind a gateway that mitigates the specific advisories. It should be made
+deliberately, and the ignore-list above removed when it is.
+
+### JavaScript production advisories
+
+`react-router` / `react-router-dom` carry two **moderate** advisories
+(open redirect via backslash in `<Link>`/`useNavigate`; arbitrary
+constructor injection in `deserializeErrors()` during SSR hydration).
+They sit below the blocking `high` threshold and a fix is available.
+The SSR hydration issue does not apply — the app is a static SPA build
+with no server-side rendering — but the open-redirect one is worth taking
+in a routine dependency bump, which carries no policy-freeze implications
+on the JavaScript side.

@@ -49,6 +49,21 @@ export interface PlaceBetInput {
 }
 
 export function placeBet(state: LedgerState, input: PlaceBetInput): LedgerState {
+  // Paper mode is mandatory, and until now that rested entirely on both UI
+  // call sites happening to pass the literal 'PAPER'. A third call site, or
+  // one edit to an existing one, would have silently recorded a bet marked
+  // REAL_TRACKING. The invariant belongs here, where it cannot be bypassed.
+  //
+  // This does NOT resolve the open product question of whether the mode
+  // should be wired through or removed (see docs/model-governance.md); it
+  // only makes the current fail-safe behaviour enforced rather than
+  // accidental. Whichever way that question is decided, it should be
+  // decided by changing this guard deliberately.
+  if (input.mode !== 'PAPER') {
+    throw new RangeError(
+      `Refusing to record a bet in ${input.mode} mode: this build records paper bets only.`,
+    );
+  }
   if (input.stake <= 0) throw new RangeError('Stake must be positive.');
   if (input.stake > state.bankrollBalance) {
     throw new RangeError('Stake exceeds available bankroll.');

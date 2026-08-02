@@ -293,6 +293,24 @@ statement was wrong when written, and any record captured before
 migration `d41a9c72b8e5` carries `UNKNOWN_LEGACY` and cannot retroactively
 support a provenance claim in either direction.
 
+**5. Scheduler cadence.** This document previously said "Thirteen jobs
+with cadence declared once in `scheduler.JOB_CADENCE`, from which the
+quota forecast is generated — a test asserts the two cannot drift apart."
+Three things were wrong:
+
+* There are **fourteen** registered jobs, not thirteen.
+* The quota forecast was never generated from `JOB_CADENCE`. It is built
+  from `quota.scheduler_cadence_tiers()`, an independent table.
+* No such test existed.
+
+The tables had in fact already drifted: `consensus_build` had no entry in
+`JOB_CADENCE` and silently inherited an hourly fallback, so a consensus
+could be up to an hour behind quotes refreshing every five minutes, and
+any vintage built in that window summarised a stale market. `register_all`
+now raises rather than defaulting, `consensus_build` is declared at five
+minutes to match capture, and `test_cadence_governance.py` supplies the
+assertions the claim required.
+
 ## Cohorts
 
 | Cohort | Purpose | Enters official evaluation |
@@ -385,9 +403,21 @@ the upgrade, and a re-upgrade backfills them all to `UNKNOWN_LEGACY`.
 
 ## Scheduler
 
-Thirteen jobs with cadence declared once in `scheduler.JOB_CADENCE`, from
-which the quota forecast is generated — a test asserts the two cannot
-drift apart.
+Fourteen jobs, each with a cadence declared in `scheduler.JOB_CADENCE`.
+`register_all()` raises if a registered handler has no entry, so a job
+cannot acquire a cadence by silent default.
+
+The quota forecast is **not** generated from `JOB_CADENCE`. It comes from
+`quota.scheduler_cadence_tiers()`, a separate kickoff-relative table:
+`JOB_CADENCE` says how often a job is offered a slot, the tiers model how
+often a poll is actually spent as kickoff approaches. They answer
+different questions and are not a single source of truth.
+
+What is enforced instead (`test_cadence_governance.py`) is the relation
+that matters for safety: the finest forecast tier is never coarser than
+the `odds_capture` interval, so the budget cannot understate real credit
+use. `consensus_build` is also asserted to be no slower than
+`odds_capture`.
 
 Idempotency and locking are the same operation: each run derives a
 deterministic key from (job, cohort, logical slot), and that key is

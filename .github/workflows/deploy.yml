@@ -103,9 +103,70 @@ jobs:
       - name: Tests
         run: uv run pytest tests -m "not network"
 
+  dependencies:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # Gate on what actually ships. Production dependencies at high or
+      # critical severity block the build; a vulnerability in the runtime
+      # bundle is a vulnerability in the product.
+      - name: Audit production dependencies (blocking)
+        run: npm audit --omit=dev --audit-level=high
+
+      # Dev-only advisories are reported but do not gate. They are real and
+      # worth fixing, but a linter's transitive dependency cannot reach a
+      # user, and letting it block deploys trains everyone to bypass the
+      # gate that does matter.
+      - name: Audit all dependencies (informational)
+        run: npm audit || true
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Audit the LOCKFILE, not the built environment: pip-audit run against
+      # the environment tries to look up the local unpublished fde-api
+      # package on PyPI and fails on that rather than on any real finding.
+      #
+      # Known advisories are listed explicitly rather than suppressed by
+      # lowering the severity threshold. The gate stays red for anything
+      # NEW, which is the property worth having; each exception below is a
+      # deliberate, reviewable decision recorded in docs/security.md.
+      #
+      # These are NOT dismissed as harmless. They are outstanding, and the
+      # upgrade is deferred because uv.lock is hashed into the frozen
+      # forward-test policy ftp-2026-v1 (see policy.dependency_lock_hash),
+      # so bumping them is a governance decision, not a routine patch.
+      - name: Audit locked Python dependencies (blocking on new findings)
+        working-directory: apps/api
+        run: |
+          uv export --no-emit-project --format requirements-txt --no-hashes -o /tmp/req.txt
+          uv run --with pip-audit pip-audit --strict -r /tmp/req.txt \
+            --ignore-vuln PYSEC-2026-161 \
+            --ignore-vuln PYSEC-2026-248 \
+            --ignore-vuln PYSEC-2026-249 \
+            --ignore-vuln PYSEC-2026-1942 \
+            --ignore-vuln PYSEC-2026-2281 \
+            --ignore-vuln PYSEC-2026-2280 \
+            --ignore-vuln PYSEC-2026-113 \
+            --ignore-vuln PYSEC-2026-1845
+
   deploy:
     name: Deploy to GitHub Pages
-    needs: [test, api]
+    needs: [test, api, dependencies]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     permissions:

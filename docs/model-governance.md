@@ -125,3 +125,20 @@ checkpoint rather than "fixed" in a direction that would widen the
 real-money surface. It is recorded here for a deliberate product decision
 in a later phase: either wire the mode through to the recording path, or
 remove the mode and its Settings flow.
+
+**Update — the fail-safe is now enforced, not merely observed.** As
+originally written, the guarantee rested entirely on both call sites
+happening to pass the literal `'PAPER'`, a fact verifiable only by
+reading the code. A third call site, or one edit to an existing one,
+would have silently recorded a bet marked `REAL_TRACKING`.
+
+`placeBet` in `packages/calculations/src/ledger.ts` now rejects any mode
+other than `PAPER` before touching the ledger, and
+`tests/paper-mode-mandatory.test.ts` pins the behaviour — including that
+the mode is checked *before* the stake, so a real-money attempt can never
+be reported as a mere staking error.
+
+This does not resolve the product question above; it only converts the
+current behaviour from convention into construction. Whichever way that
+question is decided, it should be decided by changing this guard
+deliberately.

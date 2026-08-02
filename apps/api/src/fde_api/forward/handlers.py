@@ -779,8 +779,20 @@ def register_all(scheduler: Any) -> None:
         JobDefinition,
     )
 
+    missing = sorted(set(HANDLERS) - set(JOB_CADENCE))
+    if missing:
+        # Previously this silently fell back to an hourly default, which is
+        # how consensus_build ran an order of magnitude slower than the
+        # quotes it summarises without anything reporting a problem. A job
+        # with no declared cadence is a configuration error, not a job with
+        # an hourly cadence.
+        raise ValueError(
+            f"jobs registered with no declared cadence: {missing}; "
+            "add them to scheduler.JOB_CADENCE"
+        )
+
     for name, handler in HANDLERS.items():
-        cadence = JOB_CADENCE.get(name, timedelta(hours=1))
+        cadence = JOB_CADENCE[name]
         scheduler.register(
             JobDefinition(
                 name=name,
