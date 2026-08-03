@@ -27,6 +27,38 @@
 | Environments | Separate dev/prod Supabase projects recommended; config via env vars only |
 | Data rights | Settings screen: one-click JSON export and full local deletion; DB-side deletion via `on delete cascade` from `users` |
 | Engine API auth | Bearer token via `FDE_API_TOKEN`, compared with `secrets.compare_digest`. Fails **closed**: an unset token returns 503 on every `/v1/*` endpoint unless `FDE_ALLOW_UNAUTHENTICATED=1` is set deliberately. See docs/deployment.md. |
+| Global recommendations | Readable only by authenticated sessions (migration `0004`). The original policy left `user_id IS NULL` rows anonymously readable — see below. |
+
+### Anonymous read of global recommendations (found and fixed)
+
+`recommendations.user_id` is nullable: a recommendation produced for the
+whole slate rather than one user has `user_id IS NULL`. The original
+policy from `0002` was:
+
+```sql
+for select using (user_id is null or auth.uid() = user_id)
+```
+
+The first branch does not reference auth at all, so it is `TRUE` for an
+**anonymous** session. Anyone holding the public anon key could read every
+global recommendation — status, edge, EV, stake breakdown, target price,
+invalidation price. Every shared research table those are derived from
+already required `auth.role() = 'authenticated'`, so the conclusions were
+more exposed than the underlying data.
+
+Migration `0004_recommendations_require_authentication.sql` requires
+authentication on both branches. INSERT never needed fixing: `with check
+(auth.uid() = user_id)` evaluates to `NULL` rather than `TRUE` for an
+anonymous session, so writes were already denied.
+
+No rows were affected — recommendations are computed live and never
+persisted today (docs/limitations.md), so the table is empty. The hole is
+closed before the analytical engine starts writing to it.
+
+Both directions are now covered by `npm run test:db`: an anonymous session
+sees zero global recommendations, and an authenticated one still sees
+them. The failing test was written first and confirmed to fail against the
+old policy.
 | Credential redaction | The odds provider takes its key as a URL query parameter, so transport errors carry it. The adapter raises only scrubbed `OddsProviderError`, and `redact_secrets()` is applied again where `error_summary` is persisted. See below. |
 
 ### Credential leak through transport errors (found and fixed)
@@ -58,6 +90,38 @@ Pinned by `apps/api/tests/test_odds_key_never_leaks.py`, including a test
 that runs a deliberately leaking handler through the real scheduler and
 asserts the key never reaches the database. Verified by mutation:
 disabling redaction fails 14 of those tests.
+
+#### Checking a deployment for historical exposure
+
+The fix is forward-looking — rows written before it keep whatever was
+written. To find out whether it actually happened somewhere:
+
+```bash
+python -m fde_api.forward.secret_audit
+```
+
+Exit codes are distinct so this can gate a deploy without treating "could
+not tell" as a pass:
+
+| code | meaning |
+| --- | --- |
+| 0 | clean — either no row carries an error summary at all, or no configured secret appears in any of them |
+| 1 | inconclusive — rows carry error summaries but no secret is configured here, so there was nothing to match against |
+| 2 | exposed — a configured secret was found in at least one row |
+
+`--redact` rewrites affected rows. It reports presence, never values.
+
+The **inconclusive** case is the one to take seriously: a credential that
+leaked and was subsequently rotated leaves rows this tool cannot match, so
+it reports what it does not know rather than calling that clean.
+
+**Status in this repository:** run on 2026-08-02 against
+`apps/api/data/fde.db` — 0 scheduled job runs, 0 error summaries, no raw
+odds artifacts, no log files, and `FDE_ODDS_API_KEY` has never been
+configured here. The leak was real in the code but **never triggered on
+this machine**, because live capture was never run. That is a conclusive
+clean, not an inconclusive one. It says nothing about any other
+deployment — run the audit there.
 
 ## Residual risks / notes
 

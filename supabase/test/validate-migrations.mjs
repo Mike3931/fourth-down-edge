@@ -41,7 +41,12 @@ create or replace function auth.role() returns text language sql stable as $$
 $$;
 `;
 
-const MIGRATIONS = ['0001_initial_schema.sql', '0002_row_level_security.sql', '0003_append_only_guards.sql'];
+const MIGRATIONS = [
+  '0001_initial_schema.sql',
+  '0002_row_level_security.sql',
+  '0003_append_only_guards.sql',
+  '0004_recommendations_require_authentication.sql',
+];
 
 const db = new PGlite({ extensions: { pgcrypto } });
 let allOk = true;
@@ -130,6 +135,15 @@ if (allOk) {
     insert into users (id, email) values ('${USER_B}', 'userb@example.com');
     insert into manual_book_prices (id, user_id, game_id, sportsbook, market, selection, american, price_observed_at, entered_at, confirmed_visible)
       values (gen_random_uuid(), '11111111-1111-1111-1111-111111111111', 'g1', 'bet365 (manual entry)', 'SPREAD', 'HOME', -110, now(), now(), true);
+    -- A GLOBAL recommendation: user_id IS NULL, i.e. not owned by anyone.
+    -- This is what an unauthenticated session must not be able to read.
+    insert into recommendations (id,user_id,game_id,prediction_id,market,selection,american,status)
+      values ('rec_global', null, 'g1', 'p1', 'SPREAD', 'HOME', -110, 'WATCH');
+    -- A fresh PENDING bet owned by user A, used only to test that the
+    -- UPDATE policy's implicit WITH CHECK stops reassignment.
+    insert into bets (id,user_id,bankroll_account_id,game_id,market,selection,american,stake,mode,placed_at,result)
+      values ('55555555-5555-5555-5555-555555555555','11111111-1111-1111-1111-111111111111',
+        '22222222-2222-2222-2222-222222222222','g1','SPREAD','AWAY',-110,25,'PAPER',now(),'PENDING');
   `);
 
   async function checkRls(label, expectOk, fn) {
@@ -147,6 +161,22 @@ if (allOk) {
     set role authenticated;
     select set_config('request.jwt.claim.sub', '${USER_B}', false);
     select set_config('request.jwt.claim.role', 'authenticated', false);
+  `);
+
+  // bankroll_accounts has no immutability trigger, so this isolates the
+  // RLS behaviour itself: the UPDATE policies specify USING with no
+  // WITH CHECK, and PostgreSQL then reuses USING as the WITH CHECK. If
+  // that ever stopped holding, a user could hand their account to someone
+  // else. Asserted rather than assumed.
+  await db.exec(`
+    select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+  `);
+  await checkRls('RLS: the owner cannot UPDATE a bankroll account to another user', false, async () => {
+    await db.query(`update bankroll_accounts set user_id = '${USER_B}' where user_id = '11111111-1111-1111-1111-111111111111'`);
+    return true;
+  });
+  await db.exec(`
+    select set_config('request.jwt.claim.sub', '${USER_B}', false);
   `);
   await checkRls('RLS: a different authenticated user sees ZERO of another user\'s manual_book_prices rows', true, async () => {
     const r = await db.query(`select count(*)::int as n from manual_book_prices`);
@@ -167,6 +197,31 @@ if (allOk) {
     return r.rows[0].n === 2;
   });
 
+  // The UPDATE policies specify USING with no WITH CHECK. PostgreSQL then
+  // reuses USING as the WITH CHECK, so the NEW row must also belong to the
+  // caller. If that ever stopped holding, a user could reassign their own
+  // bet to someone else, or pull one out of another account. Asserted
+  // rather than assumed.
+  // Run as the OWNER of the bet. Running as anyone else would match zero
+  // rows and succeed trivially, which proves nothing.
+  await db.exec(`
+    select set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', false);
+  `);
+  await checkRls('GUARD: the owner cannot UPDATE a bet to reassign it (immutability trigger fires first)', false, async () => {
+    await db.query(`update bets set user_id = '${USER_B}' where id = '55555555-5555-5555-5555-555555555555'`);
+    return true;
+  });
+  await db.exec(`
+    select set_config('request.jwt.claim.sub', '${USER_B}', false);
+  `);
+
+  // The fix must not over-restrict: a signed-in user still needs the
+  // slate-wide recommendations, which is the whole point of user_id NULL.
+  await checkRls('RLS: an authenticated user CAN read global recommendations', true, async () => {
+    const r = await db.query(`select count(*)::int as n from recommendations where user_id is null`);
+    return r.rows[0].n === 1;
+  });
+
   await db.exec(`
     set role anon;
     select set_config('request.jwt.claim.sub', '', false);
@@ -174,6 +229,14 @@ if (allOk) {
   `);
   await checkRls('RLS: an unauthenticated session sees ZERO user-owned manual_book_prices rows', true, async () => {
     const r = await db.query(`select count(*)::int as n from manual_book_prices`);
+    return r.rows[0].n === 0;
+  });
+
+  // A global recommendation (user_id IS NULL) is the product's core output:
+  // edge, EV, stake, target price. Every shared research table it derives
+  // from requires auth.role() = 'authenticated'; this must too.
+  await checkRls('RLS: an unauthenticated session sees ZERO global recommendations', true, async () => {
+    const r = await db.query(`select count(*)::int as n from recommendations where user_id is null`);
     return r.rows[0].n === 0;
   });
 

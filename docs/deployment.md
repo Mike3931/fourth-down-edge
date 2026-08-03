@@ -80,6 +80,19 @@ that the service is misconfigured — and distinguishes all three states:
 It never echoes the token value. Behaviour pinned by
 `apps/api/tests/test_api_auth.py`.
 
+### Post-deploy check
+
+Run once against each environment that has ever performed live capture:
+
+```bash
+python -m fde_api.forward.secret_audit
+```
+
+Exit 0 clean, 1 inconclusive, 2 exposed. It looks for configured secrets
+in persisted `error_summary` rows — see docs/security.md for why that
+matters and what each outcome means. Not useful in CI (no database with
+real history); this is an operational check.
+
 ## PWA install verification checklist
 
 - Open the HTTPS URL in Chrome/Edge → DevTools → Application → Manifest: no warnings, installability
