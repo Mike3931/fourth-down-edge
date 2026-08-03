@@ -173,18 +173,22 @@ def sequential_ratings_moments(
     """Predict-then-observe over games in observation order on a forward-only
     clock — the only honest way to evaluate an in-season-updating model.
 
-    The correctness of this loop rests on results becoming visible strictly
-    AFTER the kickoff they belong to. `ReplayClock.can_see` is inclusive
-    (`observed_at <= now`), so a result stamped exactly at its own kickoff
-    would be observed while that same game was being predicted — the model
-    would be told the answer first.
+    Three independent layers keep a game's own outcome out of its own
+    prediction. None of them relies on `RESULT_AVAILABILITY_OFFSET`:
 
-    Today nothing like that reaches here, because the loader stamps
-    `result_observed_at = kickoff + 4h30m`. That is a constant in a
-    different module, and this loop silently depends on it. So the
-    invariant is checked here instead of assumed: a violation is a
-    lookahead, and it fails loudly rather than quietly inflating the
-    model's measured skill.
+    1. STRICT VISIBILITY. Results are tested with `can_see_result`
+       (`observed_at < now`), not the inclusive `can_see`. At `now` equal
+       to a game's kickoff, a result stamped at that same instant is not
+       visible. This alone defeats a zero offset.
+    2. EXPLICIT SELF-EXCLUSION. The game about to be predicted is skipped
+       by id, regardless of any timestamp.
+    3. INVARIANT VALIDATION. A record whose result is stamped at or before
+       its own kickoff is malformed; it raises rather than being silently
+       tolerated, because such a row means the ingestion guard was bypassed.
+
+    A leak here would not crash or look implausible. It would quietly
+    inflate the measured skill of the ratings model on the test season -
+    the one number the walk-forward exists to produce, measured once.
     """
     for g in games:
         if g.result_observed_at is not None and g.result_observed_at <= g.kickoff:
@@ -196,15 +200,34 @@ def sequential_ratings_moments(
 
     clock = ReplayClock(min(g.kickoff for g in games))
     out: dict[str, PredictedMoments] = {}
-    pending = sorted(games, key=lambda g: g.kickoff)
+
+    # Ordering is part of the result, not an implementation detail.
+    # `observe_game` mutates the ratings and is NOT commutative, so two
+    # games sharing a kickoff instant are absorbed in whatever order they
+    # are iterated - and every later prediction inherits that state. Sorting
+    # by kickoff alone is stable, which means input list order leaked into
+    # the output: the same games in a different order produced different
+    # predictions for subsequent games.
+    #
+    # Both orders below are therefore total and derived only from the data:
+    # prediction order by (kickoff, id), observation order by
+    # (result_observed_at, id). The replay is now a pure function of the
+    # game set, independent of how it was handed in.
+    pending = sorted(games, key=lambda g: (g.kickoff, g.id))
+    observable = sorted(
+        (g for g in games if g.result_observed_at is not None),
+        key=lambda g: (g.result_observed_at, g.id),  # type: ignore[arg-type,return-value]
+    )
     observed: set[str] = set()
     for g in pending:
         clock.advance_to(g.kickoff)
         # observe any game whose result became visible before this kickoff
-        for o in pending:
+        for o in observable:
             if o.id == g.id:
-                continue  # never the game about to be predicted
-            if o.id not in observed and o.result_observed_at and clock.can_see(o.result_observed_at):
+                continue  # layer 2: never the game about to be predicted
+            # layer 1: strict, so a result stamped at this instant is not
+            # yet visible - including a simultaneous kickoff's result.
+            if o.id not in observed and o.result_observed_at and clock.can_see_result(o.result_observed_at):
                 ratings.observe_game(o)
                 observed.add(o.id)
         out[g.id] = ratings.predict(g, None)

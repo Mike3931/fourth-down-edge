@@ -1,0 +1,635 @@
+{
+  "counts_after": {
+    "calibrations": 2,
+    "evaluations": 12,
+    "models": 6,
+    "predictions": 3420,
+    "recommendations": 2280,
+    "runs": 2
+  },
+  "counts_before": {
+    "calibrations": 2,
+    "evaluations": 12,
+    "models": 6,
+    "predictions": 3420,
+    "recommendations": 2280,
+    "runs": 2
+  },
+  "difference_count": 5634,
+  "differences": {
+    "evaluations": [
+      {
+        "after": 0.21590023953100435,
+        "before": 0.2158905902667402,
+        "delta": 9.649264264138813e-06,
+        "kind": "numeric",
+        "path": "team-ratings-v1|test:2024:PREGAME.metrics.brier"
+      },
+      {
+        "after": -0.12016021641269653,
+        "before": -0.12018002601476949,
+        "delta": 1.9809602072956567e-05,
+        "kind": "numeric",
+        "path": "team-ratings-v1|test:2024:PREGAME.metrics.calibration_intercept"
+      },
+      {
+        "after": 1.3561321283060497,
+        "before": 1.3561551299400156,
+        "delta": -2.300163396595778e-05,
+        "kind": "numeric",
+        "path": "team-ratings-v1|test:2024:PREGAME.metrics.calibration_slope"
+      },
+      {
+        "after": 7.392150850084551,
+        "before": 7.391999049893967,
+        "delta": 0.00015180019058380623,
+        "kind": "numeric",
+        "path": "team-ratings-v1|test:2024:PREGAME.metrics.crps_margin"
+      },
+      {
+        "after": 0.6215017958014554,
+        "before": 0.6214827783686157,
+        "delta": 1.9017432839718573e-05,
+        "kind": "numeric",
+        "path": "team-ratings-v1|test:2024:PREGAME.metrics.log_loss"
+      },
+      {
+        "after": 0.591441259684758,
+        "before": 0.5913980978899084,
+        "delta": 4.316179484964433e-05,
+        "kind": "numeric",
+        "path": "team-ratings-v1|test:2024:PREGAME.metrics.log_loss_ci90[0]"
+      },
+      {
+        "after": 0.6545510868834389,
+        "before": 0.654539573363896,
+        "delta": 1.151351954287172e-05,
+        "kind": "numeric",
+        "path": "team-ratings-v1|test:2024:PREGAME.metrics.log_loss_ci90[1]"
+      },
+      {
+        "after": 10.159634615089859,
+        "before": 10.159306083905557,
+        "delta": 0.00032853118430153927,
+        "kind": "numeric",
+        "path": "team-ratings-v1|test:2024:PREGAME.metrics.margin_mae"
+      },
+      {
+        "after": 0.22192644753074933,
+        "before": 0.221923568382995,
+        "delta": 2.879147754319966e-06,
+        "kind": "numeric",
+        "path": "team-ratings-v1|test:2025:PREGAME.metrics.brier"
+      },
+      {
+        "after": -0.1128158958010666,
+        "before": -0.11284430459884344,
+        "delta": 2.8408797776838246e-05,
+        "kind": "numeric",
+        "path": "team-ratings-v1|test:2025:PREGAME.metrics.calibration_intercept"
+      },
+      {
+        "after": 0.9607344060069791,
+        "before": 0.9608650882698042,
+        "delta": -0.0001306822628250881,
+        "kind": "numeric",
+        "path": "team-ratings-v1|test:2025:PREGAME.metrics.calibration_slope"
+      },
+      {
+        "after": 7.248987889259427,
+        "before": 7.248845198625203,
+        "delta": 0.0001426906342238965,
+        "kind": "numeric",
+        "path": "team-ratings-v1|test:2025:PREGAME.metrics.crps_margin"
+      },
+      {
+        "after": 0.6335073640110067,
+        "before": 0.6334932496153032,
+        "delta": 1.411439570353501e-05,
+        "kind": "numeric",
+        "path": "team-ratings-v1|test:2025:PREGAME.metrics.log_loss"
+      },
+      {
+        "after": 0.5995790998805032,
+        "before": 0.599567837182048,
+        "delta": 1.1262698455194453e-05,
+        "kind": "numeric",
+        "path": "team-ratings-v1|test:2025:PREGAME.metrics.log_loss_ci90[0]"
+      },
+      {
+        "after": 0.670020640752483,
+        "before": 0.6700286153145092,
+        "delta": -7.97456202616953e-06,
+        "kind": "numeric",
+        "path": "team-ratings-v1|test:2025:PREGAME.metrics.log_loss_ci90[1]"
+      },
+      {
+        "after": 10.162845286740145,
+        "before": 10.162320568293946,
+        "delta": 0.0005247184461989463,
+        "kind": "numeric",
+        "path": "team-ratings-v1|test:2025:PREGAME.metrics.margin_mae"
+      }
+    ],
+    "predictions": [
+      {
+        "after": 2.167953888646409,
+        "before": 2.1684016994519477,
+        "delta": -0.0004478108055385732,
+        "kind": "numeric",
+        "path": "pred_2024_01_LA_DET_team-ratings-v1_PREGAME.outputs.components.hfa"
+      },
+      {
+        "after": 23.07723696687247,
+        "before": 23.0770130614697,
+        "delta": 0.0002239054027697307,
+        "kind": "numeric",
+        "path": "pred_2024_01_LA_DET_team-ratings-v1_PREGAME.outputs.expected_away_points"
+      },
+      {
+        "after": 26.251025602467735,
+        "before": 26.251249507870504,
+        "delta": -0.0002239054027697307,
+        "kind": "numeric",
+        "path": "pred_2024_01_LA_DET_team-ratings-v1_PREGAME.outputs.expected_home_points"
+      },
+      {
+        "after": 3.173788635595267,
+        "before": 3.1742364464008057,
+        "delta": -0.0004478108055385732,
+        "kind": "numeric",
+        "path": "pred_2024_01_LA_DET_team-ratings-v1_PREGAME.outputs.expected_margin"
+      },
+      {
+        "after": 0.5827801304037544,
+        "before": 0.5827916412701112,
+        "delta": -1.1510866356756466e-05,
+        "kind": "numeric",
+        "path": "pred_2024_01_LA_DET_team-ratings-v1_PREGAME.outputs.home_win_prob"
+      },
+      {
+        "after": -16.275758091996302,
+        "before": -16.275310281190762,
+        "delta": -0.0004478108055394614,
+        "kind": "numeric",
+        "path": "pred_2024_01_LA_DET_team-ratings-v1_PREGAME.outputs.margin_p10"
+      },
+      {
+        "after": 22.623335363186833,
+        "before": 22.623783173992372,
+        "delta": -0.0004478108055394614,
+        "kind": "numeric",
+        "path": "pred_2024_01_LA_DET_team-ratings-v1_PREGAME.outputs.margin_p90"
+      },
+      {
+        "after": 0.4390900882332236,
+        "before": 0.43910172227512556,
+        "delta": -1.1634041901964487e-05,
+        "kind": "numeric",
+        "path": "pred_2024_01_LA_DET_team-ratings-v1_PREGAME.outputs.spread_cover_prob"
+      },
+      {
+        "after": 0.026092461390900074,
+        "before": 0.026092553989463457,
+        "delta": -9.259856338303396e-08,
+        "kind": "numeric",
+        "path": "pred_2024_01_LA_DET_team-ratings-v1_PREGAME.outputs.spread_push_prob"
+      },
+      {
+        "after": 2.1954881003892184,
+        "before": 2.195896078470879,
+        "delta": -0.00040797808166059824,
+        "kind": "numeric",
+        "path": "pred_2024_01_NYJ_SF_team-ratings-v1_PREGAME.outputs.components.hfa"
+      },
+      {
+        "after": 16.08130144393145,
+        "before": 16.081097454890624,
+        "delta": 0.00020398904082696845,
+        "kind": "numeric",
+        "path": "pred_2024_01_NYJ_SF_team-ratings-v1_PREGAME.outputs.expected_away_points"
+      },
+      {
+        "after": 25.880041075490446,
+        "before": 25.880245064531273,
+        "delta": -0.00020398904082696845,
+        "kind": "numeric",
+        "path": "pred_2024_01_NYJ_SF_team-ratings-v1_PREGAME.outputs.expected_home_points"
+      },
+      {
+        "after": 9.798739631558991,
+        "before": 9.799147609640652,
+        "delta": -0.0004079780816610423,
+        "kind": "numeric",
+        "path": "pred_2024_01_NYJ_SF_team-ratings-v1_PREGAME.outputs.expected_margin"
+      },
+      {
+        "after": 0.7406333512725997,
+        "before": 0.7406420551259449,
+        "delta": -8.70385334528212e-06,
+        "kind": "numeric",
+        "path": "pred_2024_01_NYJ_SF_team-ratings-v1_PREGAME.outputs.home_win_prob"
+      },
+      {
+        "after": -9.650807096032576,
+        "before": -9.650399117950915,
+        "delta": -0.0004079780816610423,
+        "kind": "numeric",
+        "path": "pred_2024_01_NYJ_SF_team-ratings-v1_PREGAME.outputs.margin_p10"
+      },
+      {
+        "after": 29.24828635915056,
+        "before": 29.24869433723222,
+        "delta": -0.0004079780816610423,
+        "kind": "numeric",
+        "path": "pred_2024_01_NYJ_SF_team-ratings-v1_PREGAME.outputs.margin_p90"
+      },
+      {
+        "after": 0.6609402970726611,
+        "before": 0.6609501364439822,
+        "delta": -9.839371321040957e-06,
+        "kind": "numeric",
+        "path": "pred_2024_01_NYJ_SF_team-ratings-v1_PREGAME.outputs.spread_cover_prob"
+      },
+      {
+        "after": -3.086878869498138,
+        "before": -3.088569387405132,
+        "delta": 0.001690517906994149,
+        "kind": "numeric",
+        "path": "pred_2024_02_ATL_PHI_team-ratings-v1_PREGAME.outputs.components.away_rating"
+      },
+      {
+        "after": 2.057519906217588,
+        "before": 2.0582738788462804,
+        "delta": -0.0007539726286922566,
+        "kind": "numeric",
+        "path": "pred_2024_02_ATL_PHI_team-ratings-v1_PREGAME.outputs.components.hfa"
+      },
+      {
+        "after": 21.069448558765547,
+        "before": 21.068226313497703,
+        "delta": 0.0012222452678436468,
+        "kind": "numeric",
+        "path": "pred_2024_02_ATL_PHI_team-ratings-v1_PREGAME.outputs.expected_away_points"
+      },
+      {
+        "after": 26.267257034974843,
+        "before": 26.268479280242687,
+        "delta": -0.0012222452678436468,
+        "kind": "numeric",
+        "path": "pred_2024_02_ATL_PHI_team-ratings-v1_PREGAME.outputs.expected_home_points"
+      },
+      {
+        "after": 5.197808476209294,
+        "before": 5.200252966744981,
+        "delta": -0.0024444905356864055,
+        "kind": "numeric",
+        "path": "pred_2024_02_ATL_PHI_team-ratings-v1_PREGAME.outputs.expected_margin"
+      },
+      {
+        "after": 0.6339387031477501,
+        "before": 0.63399926984463,
+        "delta": -6.056669687981575e-05,
+        "kind": "numeric",
+        "path": "pred_2024_02_ATL_PHI_team-ratings-v1_PREGAME.outputs.home_win_prob"
+      },
+      {
+        "after": -14.251738251382273,
+        "before": -14.249293760846587,
+        "delta": -0.0024444905356855173,
+        "kind": "numeric",
+        "path": "pred_2024_02_ATL_PHI_team-ratings-v1_PREGAME.outputs.margin_p10"
+      },
+      {
+        "after": 24.647355203800863,
+        "before": 24.649799694336547,
+        "delta": -0.002444490535683741,
+        "kind": "numeric",
+        "path": "pred_2024_02_ATL_PHI_team-ratings-v1_PREGAME.outputs.margin_p90"
+      },
+      {
+        "after": 0.4920568959267629,
+        "before": 0.4921211409702041,
+        "delta": -6.42450434412134e-05,
+        "kind": "numeric",
+        "path": "pred_2024_02_ATL_PHI_team-ratings-v1_PREGAME.outputs.spread_cover_prob"
+      },
+      {
+        "after": 4.169943762535539,
+        "before": 4.170853041767255,
+        "delta": -0.0009092792317160203,
+        "kind": "numeric",
+        "path": "pred_2024_02_BUF_MIA_team-ratings-v1_PREGAME.outputs.components.away_rating"
+      },
+      {
+        "after": 2.2018906211261005,
+        "before": 2.2022977832515975,
+        "delta": -0.00040716212549707365,
+        "kind": "numeric",
+        "path": "pred_2024_02_BUF_MIA_team-ratings-v1_PREGAME.outputs.components.hfa"
+      },
+      {
+        "after": 1.6470573054279976,
+        "before": 1.6523186391643454,
+        "delta": -0.005261333736347851,
+        "kind": "numeric",
+        "path": "pred_2024_02_BUF_MIA_team-ratings-v1_PREGAME.outputs.components.home_rating"
+      },
+      {
+        "after": 24.550955150585676,
+        "before": 24.548575542270612,
+        "delta": 0.002379608315063564,
+        "kind": "numeric",
+        "path": "pred_2024_02_BUF_MIA_team-ratings-v1_PREGAME.outputs.expected_away_points"
+      },
+      {
+        "after": 24.229959314604233,
+        "before": 24.232338922919297,
+        "delta": -0.002379608315063564,
+        "kind": "numeric",
+        "path": "pred_2024_02_BUF_MIA_team-ratings-v1_PREGAME.outputs.expected_home_points"
+      },
+      {
+        "after": -0.32099583598144044,
+        "before": -0.31623661935131153,
+        "delta": -0.004759216630128904,
+        "kind": "numeric",
+        "path": "pred_2024_02_BUF_MIA_team-ratings-v1_PREGAME.outputs.expected_margin"
+      },
+      {
+        "after": 0.4915672732418186,
+        "before": 0.4916922821153971,
+        "delta": -0.00012500887357852486,
+        "kind": "numeric",
+        "path": "pred_2024_02_BUF_MIA_team-ratings-v1_PREGAME.outputs.home_win_prob"
+      },
+      {
+        "after": -19.77054256357301,
+        "before": -19.76578334694288,
+        "delta": -0.00475921663013068,
+        "kind": "numeric",
+        "path": "pred_2024_02_BUF_MIA_team-ratings-v1_PREGAME.outputs.margin_p10"
+      },
+      {
+        "after": 19.128550891610125,
+        "before": 19.133310108240256,
+        "delta": -0.00475921663013068,
+        "kind": "numeric",
+        "path": "pred_2024_02_BUF_MIA_team-ratings-v1_PREGAME.outputs.margin_p90"
+      },
+      {
+        "after": 0.42627004041897254,
+        "before": 0.42639300560747634,
+        "delta": -0.00012296518850379856,
+        "kind": "numeric",
+        "path": "pred_2024_02_BUF_MIA_team-ratings-v1_PREGAME.outputs.spread_cover_prob"
+      },
+      {
+        "after": -0.8157778314046592,
+        "before": -0.8170288668907516,
+        "delta": 0.0012510354860924,
+        "kind": "numeric",
+        "path": "pred_2024_02_CHI_HOU_team-ratings-v1_PREGAME.outputs.components.away_rating"
+      },
+      {
+        "after": 2.0090954872944793,
+        "before": 2.0098361569578156,
+        "delta": -0.0007406696633363019,
+        "kind": "numeric",
+        "path": "pred_2024_02_CHI_HOU_team-ratings-v1_PREGAME.outputs.components.hfa"
+      },
+      {
+        "after": -0.2774410624575462,
+        "before": -0.2827129399488768,
+        "delta": 0.005271877491330623,
+        "kind": "numeric",
+        "path": "pred_2024_02_CHI_HOU_team-ratings-v1_PREGAME.outputs.components.home_rating"
+      },
+      {
+        "after": 20.973132041789274,
+        "before": 20.974772127960225,
+        "delta": -0.0016400861709513492,
+        "kind": "numeric",
+        "path": "pred_2024_02_CHI_HOU_team-ratings-v1_PREGAME.outputs.expected_away_points"
+      },
+      {
+        "after": 23.520564298030866,
+        "before": 23.518924211859915,
+        "delta": 0.0016400861709513492,
+        "kind": "numeric",
+        "path": "pred_2024_02_CHI_HOU_team-ratings-v1_PREGAME.outputs.expected_home_points"
+      },
+      {
+        "after": 2.547432256241592,
+        "before": 2.5441520838996903,
+        "delta": 0.0032801723419018103,
+        "kind": "numeric",
+        "path": "pred_2024_02_CHI_HOU_team-ratings-v1_PREGAME.outputs.expected_margin"
+      },
+      {
+        "after": 0.5666147342948831,
+        "before": 0.5665297587232401,
+        "delta": 8.497557164299785e-05,
+        "kind": "numeric",
+        "path": "pred_2024_02_CHI_HOU_team-ratings-v1_PREGAME.outputs.home_win_prob"
+      },
+      {
+        "after": -16.902114471349975,
+        "before": -16.905394643691878,
+        "delta": 0.0032801723419026985,
+        "kind": "numeric",
+        "path": "pred_2024_02_CHI_HOU_team-ratings-v1_PREGAME.outputs.margin_p10"
+      },
+      {
+        "after": 21.99697898383316,
+        "before": 21.993698811491257,
+        "delta": 0.0032801723419026985,
+        "kind": "numeric",
+        "path": "pred_2024_02_CHI_HOU_team-ratings-v1_PREGAME.outputs.margin_p90"
+      },
+      {
+        "after": 0.3972626036484886,
+        "before": 0.39717925619349376,
+        "delta": 8.334745499483098e-05,
+        "kind": "numeric",
+        "path": "pred_2024_02_CHI_HOU_team-ratings-v1_PREGAME.outputs.spread_cover_prob"
+      },
+      {
+        "after": 0.025610856228487845,
+        "before": 0.025609596854800326,
+        "delta": 1.2593736875184114e-06,
+        "kind": "numeric",
+        "path": "pred_2024_02_CHI_HOU_team-ratings-v1_PREGAME.outputs.spread_push_prob"
+      },
+      {
+        "after": 0.37294612766161817,
+        "before": 0.3736185568421353,
+        "delta": -0.0006724291805171312,
+        "kind": "numeric",
+        "path": "pred_2024_02_CIN_KC_team-ratings-v1_PREGAME.outputs.components.away_rating"
+      },
+      {
+        "after": 2.1605326127980633,
+        "before": 2.1609302564903,
+        "delta": -0.0003976436922368265,
+        "kind": "numeric",
+        "path": "pred_2024_02_CIN_KC_team-ratings-v1_PREGAME.outputs.components.hfa"
+      },
+      {
+        "after": 18.51538537762829,
+        "before": 18.51552277037243,
+        "delta": -0.0001373927441399303,
+        "kind": "numeric",
+        "path": "pred_2024_02_CIN_KC_team-ratings-v1_PREGAME.outputs.expected_away_points"
+      }
+    ],
+    "runs": [
+      {
+        "after": "bt_25962c7fc4ce",
+        "before": "bt_4cfbc3643125",
+        "kind": "exact",
+        "path": "test_season=2024.metrics.run_id"
+      },
+      {
+        "after": 7.575478575133302,
+        "before": 7.575424303176482,
+        "delta": 5.427195682017327e-05,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.selection.ratings.val_crps_margin"
+      },
+      {
+        "after": 0.21590023953100435,
+        "before": 0.2158905902667402,
+        "delta": 9.649264264138813e-06,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.test_metrics.team-ratings-v1.brier"
+      },
+      {
+        "after": -0.12016021641269653,
+        "before": -0.12018002601476949,
+        "delta": 1.9809602072956567e-05,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.test_metrics.team-ratings-v1.calibration_intercept"
+      },
+      {
+        "after": 1.3561321283060497,
+        "before": 1.3561551299400156,
+        "delta": -2.300163396595778e-05,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.test_metrics.team-ratings-v1.calibration_slope"
+      },
+      {
+        "after": 7.392150850084551,
+        "before": 7.391999049893967,
+        "delta": 0.00015180019058380623,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.test_metrics.team-ratings-v1.crps_margin"
+      },
+      {
+        "after": 0.6215017958014554,
+        "before": 0.6214827783686157,
+        "delta": 1.9017432839718573e-05,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.test_metrics.team-ratings-v1.log_loss"
+      },
+      {
+        "after": 0.591441259684758,
+        "before": 0.5913980978899084,
+        "delta": 4.316179484964433e-05,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.test_metrics.team-ratings-v1.log_loss_ci90[0]"
+      },
+      {
+        "after": 0.6545510868834389,
+        "before": 0.654539573363896,
+        "delta": 1.151351954287172e-05,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.test_metrics.team-ratings-v1.log_loss_ci90[1]"
+      },
+      {
+        "after": 10.159634615089859,
+        "before": 10.159306083905557,
+        "delta": 0.00032853118430153927,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.test_metrics.team-ratings-v1.margin_mae"
+      },
+      {
+        "after": "bt_ae29bb505c2c",
+        "before": "bt_0df40f7df767",
+        "kind": "exact",
+        "path": "test_season=2025.metrics.run_id"
+      },
+      {
+        "after": 7.384202734325762,
+        "before": 7.384115642705275,
+        "delta": 8.70916204869232e-05,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.selection.ratings.val_crps_margin"
+      },
+      {
+        "after": 0.22192644753074933,
+        "before": 0.221923568382995,
+        "delta": 2.879147754319966e-06,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.test_metrics.team-ratings-v1.brier"
+      },
+      {
+        "after": -0.1128158958010666,
+        "before": -0.11284430459884344,
+        "delta": 2.8408797776838246e-05,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.test_metrics.team-ratings-v1.calibration_intercept"
+      },
+      {
+        "after": 0.9607344060069791,
+        "before": 0.9608650882698042,
+        "delta": -0.0001306822628250881,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.test_metrics.team-ratings-v1.calibration_slope"
+      },
+      {
+        "after": 7.248987889259427,
+        "before": 7.248845198625203,
+        "delta": 0.0001426906342238965,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.test_metrics.team-ratings-v1.crps_margin"
+      },
+      {
+        "after": 0.6335073640110067,
+        "before": 0.6334932496153032,
+        "delta": 1.411439570353501e-05,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.test_metrics.team-ratings-v1.log_loss"
+      },
+      {
+        "after": 0.5995790998805032,
+        "before": 0.599567837182048,
+        "delta": 1.1262698455194453e-05,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.test_metrics.team-ratings-v1.log_loss_ci90[0]"
+      },
+      {
+        "after": 0.670020640752483,
+        "before": 0.6700286153145092,
+        "delta": -7.97456202616953e-06,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.test_metrics.team-ratings-v1.log_loss_ci90[1]"
+      },
+      {
+        "after": 10.162845286740145,
+        "before": 10.162320568293946,
+        "delta": 0.0005247184461989463,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.test_metrics.team-ratings-v1.margin_mae"
+      }
+    ]
+  },
+  "float_tolerance": 1e-09,
+  "identical": false,
+  "post_fix_snapshot_sha256": "f02ebd4f1c4236af59379a67d83a1d163bc1086a9cf18c51a72cd5dd6452c8fe",
+  "pre_fix_snapshot_sha256": "d2db249026305a5bd117d31eb486e68af36fd97d9ac60edbd22382588cc4c38e",
+  "reran_test_seasons": [
+    2024,
+    2025
+  ]
+}

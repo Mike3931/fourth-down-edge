@@ -1,0 +1,31 @@
+{
+  "before_kickoff": 0,
+  "completed_games": 2227,
+  "conflicting_results": 0,
+  "duplicate_game_ids": 0,
+  "equal_to_kickoff": 0,
+  "games_scanned": 2227,
+  "max_offset_game": "2018_01_ATL_PHI",
+  "max_offset_seconds": 16200.0,
+  "min_offset_game": "2018_01_ATL_PHI",
+  "min_offset_seconds": 16200.0,
+  "missing_kickoff": 0,
+  "missing_result_time": 0,
+  "naive_after_load": 0,
+  "naive_after_orm_decode": 0,
+  "passes": true,
+  "raw_without_tz_designator": 2227,
+  "rejected": 0,
+  "rejected_ids": [],
+  "required_condition": "result_observed_at > kickoff_utc for every completed game",
+  "seasons": {
+    "2018": 267,
+    "2019": 267,
+    "2020": 269,
+    "2021": 285,
+    "2022": 284,
+    "2023": 285,
+    "2024": 285,
+    "2025": 285
+  }
+}

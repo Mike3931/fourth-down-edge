@@ -67,4 +67,25 @@ class ReplayClock:
         self.now = instant
 
     def can_see(self, observed_at: datetime | None) -> bool:
+        """Inclusive visibility: an observation made AT this instant counts.
+
+        Correct for observation vintages — an odds snapshot, injury report,
+        or weather forecast stamped exactly at the cutoff was genuinely
+        available at the cutoff. Not correct for a completed-game RESULT;
+        use `can_see_result` for that.
+        """
         return observed_at is not None and observed_at.tzinfo is not None and observed_at <= self.now
+
+    def can_see_result(self, observed_at: datetime | None) -> bool:
+        """Strict visibility for completed-game results: `observed_at < now`.
+
+        A result is only usable once it is strictly in the past. At exactly
+        `now` it is not, and the distinction is not academic: when `now` is
+        a game's own kickoff, an inclusive test would admit that game's own
+        outcome into the state used to predict it.
+
+        Making this strict means replay correctness no longer depends on
+        `RESULT_AVAILABILITY_OFFSET` being positive. Even a zero offset
+        cannot leak a game into its own prediction through this predicate.
+        """
+        return observed_at is not None and observed_at.tzinfo is not None and observed_at < self.now
