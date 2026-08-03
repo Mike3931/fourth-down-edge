@@ -74,6 +74,7 @@ from fde_api.models_ml.market import MarketBenchmark
 from fde_api.models_ml.protocol import GamePredictor, MarketRef, PredictedMoments
 from fde_api.models_ml.ratings import DynamicRatings
 from fde_api.pit.clock import PredictionHorizon, ReplayClock, horizon_as_of
+from fde_api.pit.guards import LookaheadError
 from fde_api.registry import register_model
 from fde_api.util import utc_now
 
@@ -170,7 +171,29 @@ def sequential_ratings_moments(
     ratings: DynamicRatings, games: list[GameRow]
 ) -> dict[str, PredictedMoments]:
     """Predict-then-observe over games in observation order on a forward-only
-    clock — the only honest way to evaluate an in-season-updating model."""
+    clock — the only honest way to evaluate an in-season-updating model.
+
+    The correctness of this loop rests on results becoming visible strictly
+    AFTER the kickoff they belong to. `ReplayClock.can_see` is inclusive
+    (`observed_at <= now`), so a result stamped exactly at its own kickoff
+    would be observed while that same game was being predicted — the model
+    would be told the answer first.
+
+    Today nothing like that reaches here, because the loader stamps
+    `result_observed_at = kickoff + 4h30m`. That is a constant in a
+    different module, and this loop silently depends on it. So the
+    invariant is checked here instead of assumed: a violation is a
+    lookahead, and it fails loudly rather than quietly inflating the
+    model's measured skill.
+    """
+    for g in games:
+        if g.result_observed_at is not None and g.result_observed_at <= g.kickoff:
+            raise LookaheadError(
+                f"game {g.id} reports its result at {g.result_observed_at.isoformat()}, "
+                f"at or before its own kickoff {g.kickoff.isoformat()}; a sequential "
+                "replay would observe the outcome before predicting the game"
+            )
+
     clock = ReplayClock(min(g.kickoff for g in games))
     out: dict[str, PredictedMoments] = {}
     pending = sorted(games, key=lambda g: g.kickoff)
@@ -179,6 +202,8 @@ def sequential_ratings_moments(
         clock.advance_to(g.kickoff)
         # observe any game whose result became visible before this kickoff
         for o in pending:
+            if o.id == g.id:
+                continue  # never the game about to be predicted
             if o.id not in observed and o.result_observed_at and clock.can_see(o.result_observed_at):
                 ratings.observe_game(o)
                 observed.add(o.id)
