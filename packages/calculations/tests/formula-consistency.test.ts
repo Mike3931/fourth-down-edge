@@ -9,6 +9,13 @@ import {
 } from '../src/odds';
 import { expectedValuePerDollar } from '../src/ev';
 import { fullKelly, fractionalKelly } from '../src/kelly';
+import {
+  homeWinProbability,
+  marginDistribution,
+  spreadOutcomeProbabilities,
+  totalDistribution,
+  totalOutcomeProbabilities,
+} from '../src/distributions';
 
 /**
  * The existing tests check each formula against known values. These check
@@ -189,6 +196,67 @@ describe('a break-even bet is never worth staking', () => {
         if (be + q > 1) continue;
         expect(fullKelly(be, american, q)).toBeCloseTo(0, 10);
       }
+    }
+  });
+});
+
+describe('margin distribution handles the tie bucket as documented', () => {
+  it('assigns zero probability to a tie', () => {
+    const dist = marginDistribution(2.5, 13.5);
+    expect(dist.find((p) => p.value === 0)).toBeUndefined();
+  });
+
+  it('drops the tie mass proportionally rather than folding it into +/-1', () => {
+    // The comment used to claim folding. It never did. Both are valid
+    // models and they disagree materially at +/-1, so the behaviour is
+    // pinned rather than left to whichever the reader assumes.
+    const mean = 2.5;
+    const std = 13.5;
+    const dist = marginDistribution(mean, std);
+    const at = (v: number) => dist.find((p) => p.value === v)!.probability;
+
+    const pdf = (x: number) => Math.exp(-0.5 * ((x - mean) / std) ** 2) / (std * Math.sqrt(2 * Math.PI));
+    const folded = (pdf(1) + pdf(0) / 2) / pdf(1);
+
+    // Renormalised: +1 carries no share of the tie mass beyond its own.
+    // Folded would inflate it by roughly this factor.
+    expect(folded).toBeGreaterThan(1.4);
+    expect(at(1) / at(-1)).toBeCloseTo(pdf(1) / pdf(-1), 6);
+  });
+
+  it('sums to one', () => {
+    for (const [mean, std] of [[0, 10], [2.5, 13.5], [-7, 9]] as const) {
+      const total = marginDistribution(mean, std).reduce((a, p) => a + p.probability, 0);
+      expect(total).toBeCloseTo(1, 12);
+    }
+  });
+
+  it('home win and away win probabilities partition the mass', () => {
+    const dist = marginDistribution(2.5, 13.5);
+    const home = homeWinProbability(dist);
+    const away = dist.filter((p) => p.value < 0).reduce((a, p) => a + p.probability, 0);
+    expect(home + away).toBeCloseTo(1, 12);
+  });
+
+  it('a half-point spread can never push; a whole-point one can', () => {
+    const dist = marginDistribution(2.5, 13.5);
+    expect(spreadOutcomeProbabilities(dist, -3.5).push).toBe(0);
+    expect(spreadOutcomeProbabilities(dist, -3).push).toBeGreaterThan(0);
+  });
+
+  it('spread outcomes partition the mass at every line', () => {
+    const dist = marginDistribution(2.5, 13.5);
+    for (const line of [-14, -7, -3.5, -3, -0.5, 0, 3, 7.5, 14]) {
+      const { cover, push, lose } = spreadOutcomeProbabilities(dist, line);
+      expect(cover + push + lose).toBeCloseTo(1, 12);
+    }
+  });
+
+  it('total outcomes partition the mass at every line', () => {
+    const dist = totalDistribution(44.5, 9);
+    for (const line of [35, 41.5, 44, 47.5, 55]) {
+      const { over, push, under } = totalOutcomeProbabilities(dist, line);
+      expect(over + push + under).toBeCloseTo(1, 12);
     }
   });
 });

@@ -42,8 +42,26 @@ export interface DiscretePoint {
 
 /**
  * Discretized margin distribution over integer margins in [-45, 45], with
- * key-number boosting and zero-margin removed (NFL games rarely tie; we fold
- * tie mass into +/-1). Probabilities sum to 1.
+ * key-number boosting and zero margin removed. Probabilities sum to 1.
+ *
+ * The zero-margin mass is DROPPED and the remainder renormalised
+ * proportionally. An earlier version of this comment said the tie mass was
+ * folded into +/-1; it never was, and the difference is not cosmetic —
+ * folding would put P(margin = +1) at ~0.038 where renormalising leaves it
+ * at ~0.026, which moves cover probabilities for spreads near pick'em.
+ *
+ * Folding into +/-1 is arguably the better model: a tie resembles a
+ * one-point game far more than a twenty-point one, and proportional
+ * renormalisation hands some of that mass to blowouts. It is deliberately
+ * NOT changed here. This module is an explicitly labelled V1 placeholder
+ * for the Python analytical engine, its outputs are baked into the demo
+ * dataset and the end-to-end expectations, and silently altering demo
+ * numbers to satisfy a comment is the wrong direction of fix. The comment
+ * now describes the code; the modelling choice is recorded for whoever
+ * replaces this.
+ *
+ * Pinned by tests/formula-consistency.test.ts so the behaviour cannot
+ * drift back to matching the old comment by accident.
  */
 export function marginDistribution(mean: number, std: number): DiscretePoint[] {
   const pts: DiscretePoint[] = [];
