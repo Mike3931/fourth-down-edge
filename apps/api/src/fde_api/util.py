@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import quote
 
 
 def sha256_bytes(payload: bytes) -> str:
@@ -54,3 +56,32 @@ def dependency_lock_hash() -> str:
     if lock.exists():
         return sha256_file(lock)
     return "unknown"
+
+
+# Environment variables whose values must never reach a log line, an error
+# summary, or the database. Listed here rather than at each call site so a
+# new secret is protected everywhere by adding one entry.
+SECRET_ENV_VARS = ("FDE_ODDS_API_KEY", "FDE_API_TOKEN")
+
+
+def redact_secrets(text: str | None) -> str | None:
+    """Strip any configured secret out of a string.
+
+    Defense in depth, not the primary control. The odds adapter already
+    scrubs its own errors, but `error_summary` is built from arbitrary
+    exceptions and PERSISTED, so a credential that ends up in an exception
+    message anywhere would otherwise be written to the database. Applied at
+    the point of persistence, this covers handlers that do not exist yet.
+
+    Also catches the percent-encoded form: a credential carried in a URL
+    query string appears encoded, and a plain substring check would miss it.
+    """
+    if not text:
+        return text
+    for name in SECRET_ENV_VARS:
+        value = os.environ.get(name)
+        if not value:
+            continue
+        for form in (value, quote(value, safe="")):
+            text = text.replace(form, f"***{name}_REDACTED***")
+    return text

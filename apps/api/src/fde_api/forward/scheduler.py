@@ -43,7 +43,7 @@ from fde_api.db.forward_models import ScheduledJobRun
 from fde_api.forward.cohort import Cohort, ProviderMode
 from fde_api.forward.modes import DataMode
 from fde_api.forward.state import DomainState, Outcome, StateOrigin, apply_state
-from fde_api.util import current_code_commit, utc_now
+from fde_api.util import current_code_commit, redact_secrets, utc_now
 
 log = logging.getLogger("fde.scheduler")
 
@@ -611,9 +611,13 @@ class Scheduler:
                 row.records_received = result.records_read
                 row.records_written = result.records_written
                 row.provider_calls = result.provider_calls
-                row.error_summary = "; ".join(result.warnings)[:2000] or None
+                # redact_secrets at the point of PERSISTENCE, not at each
+                # producer: error summaries are built from arbitrary
+                # exception messages and written to the database, so this
+                # has to cover handlers that do not exist yet.
+                row.error_summary = redact_secrets("; ".join(result.warnings)[:2000]) or None
             if error is not None:
-                row.error_summary = error[:2000]
+                row.error_summary = redact_secrets(error[:2000])
 
     # -- tick ------------------------------------------------------------ #
 

@@ -14,6 +14,7 @@ progress is polled via GET /v1/jobs/{id}.
 from __future__ import annotations
 
 import os
+import secrets
 import threading
 import uuid
 from typing import Annotated, Any, Literal, cast
@@ -59,19 +60,62 @@ app.add_middleware(
 
 
 # --------------------------------------------------------------------------- #
-# Auth (bearer token via FDE_API_TOKEN; disabled when unset for local dev)
+# Auth: bearer token via FDE_API_TOKEN. Serving without one requires
+# FDE_ALLOW_UNAUTHENTICATED=1 — an unset token is a misconfiguration, not
+# an invitation.
 # --------------------------------------------------------------------------- #
 
 
+def auth_state() -> Literal["enabled", "disabled", "misconfigured"]:
+    """Whether the API is protected, and if not, whether that was on purpose.
+
+    An unset token used to mean "local dev, serve everything". That fails
+    OPEN: a deployment where the environment simply failed to load would
+    serve every endpoint unauthenticated and report itself healthy. This
+    mirrors the discipline already applied to the odds credential, which
+    fails readiness checks when absent rather than degrading quietly.
+
+    Running without a token now requires saying so explicitly.
+    """
+    if os.environ.get("FDE_API_TOKEN"):
+        return "enabled"
+    if os.environ.get("FDE_ALLOW_UNAUTHENTICATED") == "1":
+        return "disabled"
+    return "misconfigured"
+
+
 def _require_auth(authorization: Annotated[str | None, Header()] = None) -> None:
-    token = os.environ.get("FDE_API_TOKEN")
-    if not token:
-        return  # local dev: auth disabled, surfaced in /health
-    if authorization != f"Bearer {token}":
+    state = auth_state()
+    if state == "disabled":
+        return  # explicitly opted out; surfaced in /health
+    if state == "misconfigured":
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "API token not configured. Set FDE_API_TOKEN, or set "
+                "FDE_ALLOW_UNAUTHENTICATED=1 to serve without authentication "
+                "on purpose."
+            ),
+        )
+    token = os.environ["FDE_API_TOKEN"]
+    # compare_digest, not ==: string equality short-circuits on the first
+    # differing byte, which leaks the token one character at a time to
+    # anyone who can time the responses.
+    expected = f"Bearer {token}"
+    if authorization is None or not secrets.compare_digest(authorization, expected):
         raise HTTPException(status_code=401, detail="Invalid or missing bearer token")
 
 
 Auth = Depends(_require_auth)
+
+# /health must distinguish "deliberately open" from "nobody configured a
+# token". Reporting both as "disabled (local dev)" is how an unprotected
+# deployment reads as a normal one.
+_AUTH_LABELS: dict[str, schemas.AuthState] = {
+    "enabled": "enabled",
+    "disabled": "disabled (explicitly allowed)",
+    "misconfigured": "MISCONFIGURED — no token set and unauthenticated access not allowed",
+}
 
 
 # --------------------------------------------------------------------------- #
@@ -145,7 +189,7 @@ def health() -> schemas.HealthResponse:
         database=cast(Literal["ok", "unavailable"], db),
         games=games,
         predictions=preds,
-        auth="enabled" if os.environ.get("FDE_API_TOKEN") else "disabled (local dev)",
+        auth=_AUTH_LABELS[auth_state()],
         version=__version__,
     )
 

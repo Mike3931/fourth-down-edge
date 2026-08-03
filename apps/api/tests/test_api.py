@@ -17,6 +17,11 @@ from fde_api.db.models import Base
 
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
+    # Serving unauthenticated is now an explicit choice rather than what
+    # happens when nobody sets a token, so the test harness has to make
+    # that choice out loud like any other caller would.
+    monkeypatch.delenv("FDE_API_TOKEN", raising=False)
+    monkeypatch.setenv("FDE_ALLOW_UNAUTHENTICATED", "1")
     db_path = tmp_path / "api.db"
     monkeypatch.setattr(settings, "database_url", f"sqlite:///{db_path.as_posix()}")
     monkeypatch.setattr(settings, "data_dir", tmp_path)

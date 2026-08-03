@@ -26,6 +26,38 @@
 | Least privilege | service_role used only by future ingestion/analytics services; never shipped to the client |
 | Environments | Separate dev/prod Supabase projects recommended; config via env vars only |
 | Data rights | Settings screen: one-click JSON export and full local deletion; DB-side deletion via `on delete cascade` from `users` |
+| Engine API auth | Bearer token via `FDE_API_TOKEN`, compared with `secrets.compare_digest`. Fails **closed**: an unset token returns 503 on every `/v1/*` endpoint unless `FDE_ALLOW_UNAUTHENTICATED=1` is set deliberately. See docs/deployment.md. |
+| Credential redaction | The odds provider takes its key as a URL query parameter, so transport errors carry it. The adapter raises only scrubbed `OddsProviderError`, and `redact_secrets()` is applied again where `error_summary` is persisted. See below. |
+
+### Credential leak through transport errors (found and fixed)
+
+The Odds API requires its key as a **query parameter**, so the key is part
+of every request URL. httpx includes that URL in the message of every
+`HTTPStatusError` and `RequestError` it raises, and the scheduler writes
+handler exception messages into `ScheduledJobRun.error_summary`.
+
+One 401 from the provider would therefore have written the live API key
+into the database, into any health output that reads `error_summary`, and
+into every log line that echoed it. Nothing was logging the key
+deliberately — the transport was doing it.
+
+Two layers now:
+
+1. **At the adapter.** `TheOddsApiProvider.fetch_odds` catches every httpx
+   error and re-raises a scrubbed `OddsProviderError`, using
+   `raise ... from None` so no chained `__cause__` carries the original
+   message into a formatted traceback. Both the raw and percent-encoded
+   forms of the key are removed.
+2. **At persistence.** `util.redact_secrets()` strips every value in
+   `SECRET_ENV_VARS` (`FDE_ODDS_API_KEY`, `FDE_API_TOKEN`) from
+   `error_summary` as it is written. This is deliberately at the point of
+   persistence rather than at each producer, so it covers handlers that do
+   not exist yet.
+
+Pinned by `apps/api/tests/test_odds_key_never_leaks.py`, including a test
+that runs a deliberately leaking handler through the real scheduler and
+asserts the key never reaches the database. Verified by mutation:
+disabling redaction fails 14 of those tests.
 
 ## Residual risks / notes
 

@@ -115,7 +115,23 @@ async function fetchValidated<T>(
     return { ok: false, error: 'model-unavailable', detail: `Not found: ${url}` };
   }
   if (!resp.ok) {
-    return { ok: false, error: 'unavailable', detail: `HTTP ${resp.status} from analytical engine` };
+    // FastAPI puts an explanation in `detail`. A 503 for a missing API
+    // token says exactly which variable to set; discarding that turns an
+    // actionable misconfiguration into a bare "unavailable".
+    let detail = `HTTP ${resp.status} from analytical engine`;
+    try {
+      const body: unknown = await resp.json();
+      const serverDetail =
+        typeof body === 'object' && body !== null && 'detail' in body
+          ? (body as { detail: unknown }).detail
+          : undefined;
+      if (typeof serverDetail === 'string' && serverDetail) {
+        detail = `${detail}: ${serverDetail}`;
+      }
+    } catch {
+      // Non-JSON error body (a gateway page, say) — the status alone stands.
+    }
+    return { ok: false, error: 'unavailable', detail };
   }
   let body: unknown;
   try {

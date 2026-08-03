@@ -62,6 +62,35 @@ describe('ResearchApiClient', () => {
     expect(res).toMatchObject({ ok: false, error: 'model-unavailable' });
   });
 
+  it('surfaces the engine\'s explanation for a misconfiguration 503', async () => {
+    // The engine returns 503 with the variable to set when no API token is
+    // configured. Reporting a bare "unavailable" would send someone hunting
+    // for an outage that is really a missing environment variable.
+    mockFetch(() => new Response(
+      JSON.stringify({
+        detail: 'API token not configured. Set FDE_API_TOKEN, or set FDE_ALLOW_UNAUTHENTICATED=1 to serve without authentication on purpose.',
+      }),
+      { status: 503 },
+    ));
+    const res = await new ResearchApiClient('http://engine.local').health();
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toBe('unavailable');
+      expect(res.detail).toContain('503');
+      expect(res.detail).toContain('FDE_API_TOKEN');
+    }
+  });
+
+  it('still reports the status when an error body is not JSON', async () => {
+    mockFetch(() => new Response('<html>502 Bad Gateway</html>', { status: 502 }));
+    const res = await new ResearchApiClient('http://engine.local').health();
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.error).toBe('unavailable');
+      expect(res.detail).toContain('502');
+    }
+  });
+
   it('rejects payloads that fail runtime validation', async () => {
     const bad = { ...VALID_PREDICTION, outputs: { ...VALID_PREDICTION.outputs, home_win_prob: 1.7 } };
     mockFetch(() => new Response(JSON.stringify([bad]), { status: 200 }));

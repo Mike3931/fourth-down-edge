@@ -55,6 +55,31 @@ only exception).
 5. Never expose the `service_role` key to the frontend or commit it anywhere.
 6. Set `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` as build-time env vars in the host.
 
+## Analytical engine (`apps/api`) environment
+
+| variable | required | effect |
+| --- | --- | --- |
+| `FDE_API_TOKEN` | yes, in any shared deployment | Bearer token for every `/v1/*` endpoint. Compared with `secrets.compare_digest`, so the check does not leak the value through response timing. |
+| `FDE_ALLOW_UNAUTHENTICATED` | only to run open on purpose | Must be exactly `1`. Ignored when `FDE_API_TOKEN` is set — the opt-out cannot disable a token that exists. |
+| `FDE_CORS_ORIGINS` | no | Comma-separated allowlist. Defaults to the local Vite dev server only. Credentials are not allowed and methods are limited to GET/POST. |
+| `FDE_ODDS_API_KEY` | for live capture | Read backend-only, never logged, never in a frontend bundle. Absence fails readiness rather than falling back to fixtures. |
+
+**An unset `FDE_API_TOKEN` fails closed.** Every `/v1/*` endpoint returns
+`503` naming both the token variable and the opt-out. This is deliberate:
+the previous behaviour treated an unset token as "local dev, serve
+everything", so a deployment whose environment failed to load would serve
+the entire API unauthenticated *and report itself healthy*.
+
+`/health` stays reachable without a token — otherwise nothing could report
+that the service is misconfigured — and distinguishes all three states:
+
+- `enabled`
+- `disabled (explicitly allowed)`
+- `MISCONFIGURED — no token set and unauthenticated access not allowed`
+
+It never echoes the token value. Behaviour pinned by
+`apps/api/tests/test_api_auth.py`.
+
 ## PWA install verification checklist
 
 - Open the HTTPS URL in Chrome/Edge → DevTools → Application → Manifest: no warnings, installability

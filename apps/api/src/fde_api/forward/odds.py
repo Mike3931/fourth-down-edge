@@ -21,6 +21,7 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from sqlalchemy import select
@@ -43,6 +44,16 @@ class OddsProviderNotConfigured(RuntimeError):
 
     Raised rather than silently returning nothing, so a missing key can
     never be mistaken for "the market has no prices".
+    """
+
+
+class OddsProviderError(RuntimeError):
+    """A provider request failed.
+
+    Distinct from the raw httpx exceptions on purpose: the credential is a
+    query parameter, so httpx errors carry the full request URL — and
+    therefore the key — in their message. Only this type crosses the
+    adapter boundary, and its message is always scrubbed.
     """
 
 
@@ -139,18 +150,46 @@ class TheOddsApiProvider:
                 "FDE_ODDS_API_KEY is not set. Live market capture requires a provider key; "
                 "refusing to proceed so that 'no key' is never mistaken for 'no prices'."
             )
-        resp = self._client.get(
-            f"{THE_ODDS_API_BASE}/sports/{SPORT_KEY}/odds",
-            params={
-                "apiKey": self.api_key,
-                "regions": regions,
-                "markets": markets,
-                "oddsFormat": odds_format,
-                "dateFormat": "iso",
-            },
-        )
-        resp.raise_for_status()
-        return resp.json(), dict(resp.headers)
+        # The provider requires the key as a QUERY PARAMETER, so it is part
+        # of the request URL. httpx puts that URL in the message of every
+        # HTTPStatusError and RequestError it raises, and the scheduler
+        # persists handler exceptions to ScheduledJobRun.error_summary. An
+        # unhandled provider error would therefore write the key into the
+        # database and every log line that echoed it.
+        #
+        # Every exception out of this call is scrubbed. Nothing that leaves
+        # this method may contain the key.
+        try:
+            resp = self._client.get(
+                f"{THE_ODDS_API_BASE}/sports/{SPORT_KEY}/odds",
+                params={
+                    "apiKey": self.api_key,
+                    "regions": regions,
+                    "markets": markets,
+                    "oddsFormat": odds_format,
+                    "dateFormat": "iso",
+                },
+            )
+            resp.raise_for_status()
+            return resp.json(), dict(resp.headers)
+        except httpx.HTTPStatusError as e:
+            raise OddsProviderError(
+                f"provider returned HTTP {e.response.status_code} "
+                f"({self._redact(str(e))})"
+            ) from None
+        except httpx.HTTPError as e:
+            raise OddsProviderError(
+                f"provider request failed: {self._redact(str(e))}"
+            ) from None
+
+    def _redact(self, text: str) -> str:
+        """Remove the key from anything about to be raised, logged, or
+        stored. Both the raw value and any URL-encoded form of it."""
+        if not self.api_key:
+            return text
+        for form in (self.api_key, quote(self.api_key, safe="")):
+            text = text.replace(form, "***REDACTED***")
+        return text
 
 
 def _match_canonical_game(

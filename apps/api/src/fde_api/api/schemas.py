@@ -17,13 +17,23 @@ ApprovalStatus = Literal["research_only", "approved", "retired"]
 JobStatus = Literal["queued", "running", "finished", "failed"]
 
 
+# Three states, not two. "Nobody configured a token" is not the same
+# condition as "running open on purpose", and collapsing them is how an
+# unprotected deployment reads as a normal one.
+AuthState = Literal[
+    "enabled",
+    "disabled (explicitly allowed)",
+    "MISCONFIGURED — no token set and unauthenticated access not allowed",
+]
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"]
     research_banner: str
     database: Literal["ok", "unavailable"]
     games: int
     predictions: int
-    auth: Literal["enabled", "disabled (local dev)"]
+    auth: AuthState
     version: str
 
 
