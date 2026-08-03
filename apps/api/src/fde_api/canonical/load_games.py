@@ -33,6 +33,7 @@ from fde_api.db.models import (
     Stadium,
     Team,
 )
+from fde_api.pit.guards import LookaheadError
 from fde_api.util import utc_now
 
 _EASTERN = ZoneInfo("America/New_York")
@@ -151,6 +152,24 @@ def load_games_csv(
             session.merge(Official(id=referee_id, name=referee))
 
         has_result = home_score is not None and away_score is not None
+        result_observed_at = (kickoff + RESULT_AVAILABILITY_OFFSET) if has_result else None
+        # Layer 0 of the no-self-observation invariant: enforce it at INGEST,
+        # not only in the replay. A result that is not strictly after its own
+        # kickoff is malformed, and letting it into the canonical store means
+        # every downstream consumer has to defend against it separately.
+        # RESULT_AVAILABILITY_OFFSET is positive today; this check is what
+        # makes that a guarantee rather than a coincidence.
+        if result_observed_at is not None and result_observed_at <= kickoff:
+            raise LookaheadError(
+                f"refusing to load {game_id}: result_observed_at "
+                f"{result_observed_at.isoformat()} is not strictly after kickoff "
+                f"{kickoff.isoformat()}"
+            )
+        if result_observed_at is not None and result_observed_at.tzinfo is None:
+            raise LookaheadError(
+                f"refusing to load {game_id}: result_observed_at is timezone-naive"
+            )
+
         session.merge(
             Game(
                 id=game_id,
@@ -176,7 +195,7 @@ def load_games_csv(
                 away_qb_id=row.get("away_qb_id", "").strip() or None,
                 home_coach=row.get("home_coach", "").strip() or None,
                 away_coach=row.get("away_coach", "").strip() or None,
-                result_observed_at=(kickoff + RESULT_AVAILABILITY_OFFSET) if has_result else None,
+                result_observed_at=result_observed_at,
                 source_manifest_version=source_manifest_version,
             )
         )
