@@ -733,6 +733,23 @@ def lineage_violations(session: Session) -> list[dict[str, Any]]:
                 problems.append({"check": "manual_review_unresolved", "root": root,
                                  "detail": m.id, "severity": "CRITICAL"})
 
+        # Every member of a chain ran under one provider mode. `validate_recovery`
+        # refuses a mode change at the moment of recovery; this is the detection
+        # side, for chains written before that check existed or by any path that
+        # bypassed it. A mixed chain means fixture and live records share a
+        # logical slot, which no downstream consumer can untangle.
+        #
+        # UNKNOWN_LEGACY is excluded from the comparison rather than treated as
+        # a mismatch: it means "not recorded", so a chain of backfilled rows is
+        # unverifiable, not wrong.
+        modes = {
+            m.provider_mode for m in members
+            if m.provider_mode and m.provider_mode != ProviderMode.UNKNOWN_LEGACY.value
+        }
+        if len(modes) > 1:
+            problems.append({"check": "provider_mode_changed_mid_chain", "root": root,
+                             "detail": sorted(modes), "severity": "CRITICAL"})
+
         # A closed chain must not have anything after it.
         for i, m in enumerate(members[:-1]):
             if m.job_outcome in _CLOSING_OUTCOMES:

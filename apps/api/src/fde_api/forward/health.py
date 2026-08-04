@@ -504,6 +504,7 @@ def run_health_checks(
         "root_mismatch", "recovery_branch", "missing_recovery_reason",
         "missing_override_identity", "closed_chain_reopened", "replay_decision_absent",
         "manual_review_unresolved", "root_sequence_not_zero",
+        "provider_mode_changed_mid_chain",
     ):
         hits = by_check.get(name, [])
         sev = Severity.WARNING if name in (

@@ -420,3 +420,147 @@ class TestProviderModeInvariance:
             run, cohort=None, policy_version=None, logical_slot=None,
             provider_mode=None, reason="interrupted",
         )
+
+
+class TestRecoveryDepth:
+    """Chains of depth 0, 1, 2 and 3.
+
+    Depth 0 is not a degenerate case: an initial run IS a chain of one, its
+    own root at sequence zero. Treating it as "not a chain yet" was how the
+    lineage columns came to be null on ordinary runs in the first place,
+    which made every chain query miss them.
+
+    Depth 3 exists because two-deep tests pass under an off-by-one that a
+    third link exposes: a successor whose predecessor is itself a recovery
+    rather than the root.
+    """
+
+    def _chain(self, session: Session, depth: int) -> list[ScheduledJobRun]:
+        # The root carries a decision too: `lineage_violations` warns when any
+        # non-running member lacks one, and a chain that trips a warning is not
+        # the clean baseline these tests are asserting against.
+        runs = [_run(session, "r0", outcome=Outcome.INTERRUPTED, seq=0, root="r0",
+                     decision=ReplayDecision.NO_PRIOR_EFFECTS_REPLAY)]
+        for n in range(1, depth + 1):
+            outcome = Outcome.SUCCESS if n == depth else Outcome.INTERRUPTED
+            runs.append(_run(
+                session, f"r{n}", outcome=outcome, seq=n, root="r0",
+                predecessor=f"r{n - 1}", reason=f"recovery {n}",
+                decision=ReplayDecision.NO_PRIOR_EFFECTS_REPLAY,
+            ))
+        session.commit()
+        return runs
+
+    @pytest.mark.parametrize("depth", [0, 1, 2, 3])
+    def test_a_chain_of_this_depth_is_structurally_sound(
+        self, session: Session, depth: int
+    ) -> None:
+        self._chain(session, depth)
+        assert lineage_violations(session) == []
+
+    @pytest.mark.parametrize("depth", [0, 1, 2, 3])
+    def test_every_member_is_reachable_from_the_root(
+        self, session: Session, depth: int
+    ) -> None:
+        self._chain(session, depth)
+        members = chain_members(session, "r0")
+        assert len(members) == depth + 1
+        assert [m.recovery_sequence for m in members] == list(range(depth + 1))
+
+    @pytest.mark.parametrize("depth", [1, 2, 3])
+    def test_each_link_points_at_its_immediate_predecessor(
+        self, session: Session, depth: int
+    ) -> None:
+        """Not at the root. A chain is a line; collapsing every link onto the
+        root would make depth 3 indistinguishable from three parallel
+        recoveries of the same run."""
+        self._chain(session, depth)
+        members = chain_members(session, "r0")
+        assert members[0].recovery_of_run_id is None
+        for i in range(1, depth + 1):
+            assert members[i].recovery_of_run_id == members[i - 1].id
+
+    @pytest.mark.parametrize("depth", [0, 1, 2, 3])
+    def test_at_most_one_member_is_active(self, session: Session, depth: int) -> None:
+        self._chain(session, depth)
+        assert active_member(session, "r0") is None
+
+    def test_a_gap_in_the_sequence_is_a_violation(self, session: Session) -> None:
+        """The mutation these depth tests exist to catch."""
+        _run(session, "r0", outcome=Outcome.INTERRUPTED, seq=0, root="r0")
+        _run(session, "r2", outcome=Outcome.SUCCESS, seq=2, root="r0",
+             predecessor="r0", reason="skipped a sequence",
+             decision=ReplayDecision.NO_PRIOR_EFFECTS_REPLAY)
+        session.commit()
+        checks = {p["check"] for p in lineage_violations(session)}
+        assert "incorrect_recovery_sequence" in checks
+
+    def test_two_members_at_the_same_depth_are_a_branch(self, session: Session) -> None:
+        _run(session, "r0", outcome=Outcome.INTERRUPTED, seq=0, root="r0")
+        for rid in ("r1a", "r1b"):
+            _run(session, rid, outcome=Outcome.SUCCESS, seq=1, root="r0",
+                 predecessor="r0", reason="parallel branch",
+                 decision=ReplayDecision.NO_PRIOR_EFFECTS_REPLAY)
+        session.commit()
+        checks = {p["check"] for p in lineage_violations(session)}
+        assert "recovery_branch" in checks
+
+
+class TestProviderModeIsConstantAlongAChain:
+    """Detection, complementing the refusal in `validate_recovery`.
+
+    The refusal stops a mode change at the moment of recovery. This finds
+    chains written before that check existed, or by any path that bypassed
+    it. A mixed chain means fixture and live records share one logical slot,
+    which nothing downstream can untangle afterwards.
+    """
+
+    def test_a_consistent_chain_is_clean(self, session: Session) -> None:
+        for rid, seq, outcome in (("r0", 0, Outcome.INTERRUPTED), ("r1", 1, Outcome.SUCCESS)):
+            run = _run(session, rid, outcome=outcome, seq=seq, root="r0",
+                       predecessor="r0" if seq else None,
+                       reason="recovery" if seq else None,
+                       decision=ReplayDecision.NO_PRIOR_EFFECTS_REPLAY)
+            run.provider_mode = "FIXTURE"
+        session.commit()
+        assert lineage_violations(session) == []
+
+    def test_a_mode_change_mid_chain_is_critical(self, session: Session) -> None:
+        modes = {"r0": "FIXTURE", "r1": "LIVE"}
+        for rid, seq, outcome in (("r0", 0, Outcome.INTERRUPTED), ("r1", 1, Outcome.SUCCESS)):
+            run = _run(session, rid, outcome=outcome, seq=seq, root="r0",
+                       predecessor="r0" if seq else None,
+                       reason="recovery" if seq else None,
+                       decision=ReplayDecision.NO_PRIOR_EFFECTS_REPLAY)
+            run.provider_mode = modes[rid]
+        session.commit()
+        problems = lineage_violations(session)
+        hit = [p for p in problems if p["check"] == "provider_mode_changed_mid_chain"]
+        assert hit, {p["check"] for p in problems}
+        assert hit[0]["severity"] == "CRITICAL"
+        assert hit[0]["detail"] == ["FIXTURE", "LIVE"]
+
+    def test_a_mode_change_blocks_automatic_recovery(self, session: Session) -> None:
+        modes = {"r0": "FIXTURE", "r1": "SANDBOX"}
+        for rid, seq, outcome in (("r0", 0, Outcome.INTERRUPTED), ("r1", 1, Outcome.SUCCESS)):
+            run = _run(session, rid, outcome=outcome, seq=seq, root="r0",
+                       predecessor="r0" if seq else None,
+                       reason="recovery" if seq else None,
+                       decision=ReplayDecision.NO_PRIOR_EFFECTS_REPLAY)
+            run.provider_mode = modes[rid]
+        session.commit()
+        assert blocks_automatic_recovery(lineage_violations(session))
+
+    def test_unrecorded_modes_are_unverifiable_not_wrong(self, session: Session) -> None:
+        """UNKNOWN_LEGACY means "not recorded". A chain of backfilled rows
+        cannot be checked; calling that a violation would flag every row
+        written before the column existed."""
+        for rid, seq, outcome in (("r0", 0, Outcome.INTERRUPTED), ("r1", 1, Outcome.SUCCESS)):
+            run = _run(session, rid, outcome=outcome, seq=seq, root="r0",
+                       predecessor="r0" if seq else None,
+                       reason="recovery" if seq else None,
+                       decision=ReplayDecision.NO_PRIOR_EFFECTS_REPLAY)
+            run.provider_mode = "UNKNOWN_LEGACY" if rid == "r0" else "FIXTURE"
+        session.commit()
+        checks = {p["check"] for p in lineage_violations(session)}
+        assert "provider_mode_changed_mid_chain" not in checks
