@@ -3,20 +3,25 @@
     {
       "original_filename": "phase2_reports.json",
       "original_generating_commit": "fe730a163233",
-      "original_sha256": "f715e7e8e1387f62c4b301d7775760d1223d41ee4263b650b1d6b6dc1f893f28",
+      "original_sha256": "090d95df99bb9eeb224e3a4fd9f06dc7e7f0c045b258d4eb5f1f05319af74b4f",
+      "original_sha256_raw_bytes_windows": "f715e7e8e1387f62c4b301d7775760d1223d41ee4263b650b1d6b6dc1f893f28",
       "preserved_as": "superseded/SUPERSEDED_phase2_reports.json",
       "replacement_filename": "phase2_reports.json",
-      "replacement_sha256": "aab0729671e8c40481d681cc9550fafe92fb579dc419e0cb5fe61471ffb4475f"
+      "replacement_sha256": "33be324514ba1d23197dce7dbe7b2158ffc7725031a5bdb0e42bf8d8dcc2fcca",
+      "replacement_sha256_raw_bytes_windows": "aab0729671e8c40481d681cc9550fafe92fb579dc419e0cb5fe61471ffb4475f"
     },
     {
       "original_filename": "phase2_reports.md",
       "original_generating_commit": "fe730a163233",
-      "original_sha256": "9b1289bbe5d680d3b3655d5bb1a072fee4c65f408d1dacba0e5ac68774b82ed9",
+      "original_sha256": "03ff2687c94825b8fd601f430ee0469ee43fe943652bfbfdae0c267bb1f13b3f",
+      "original_sha256_raw_bytes_windows": "9b1289bbe5d680d3b3655d5bb1a072fee4c65f408d1dacba0e5ac68774b82ed9",
       "preserved_as": "superseded/SUPERSEDED_phase2_reports.md",
       "replacement_filename": "phase2_reports.md",
-      "replacement_sha256": "51f7a1c202335d709f9b3e857924e67416b68ce724efdb61b2870d343a31c3fc"
+      "replacement_sha256": "7c4f9e36f1fed863b24aae00826bb92c529df8dd2c499665c026b3ff4cb51cdd",
+      "replacement_sha256_raw_bytes_windows": "51f7a1c202335d709f9b3e857924e67416b68ce724efdb61b2870d343a31c3fc"
     }
   ],
+  "hash_method": "sha256 of file content with CRLF normalised to LF, so the digest is identical on every checkout platform",
   "model_version": "team-ratings-v1",
   "scope": "Only team-ratings-v1 predictions and evaluation metrics are superseded. Other model tiers, recommendation statuses, simulated wagers, ROI and drawdown are unchanged.",
   "superseding_commit": "b1545d82a763e30c34ec4585a88250b0c9230e61",

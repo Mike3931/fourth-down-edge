@@ -47,6 +47,21 @@ def _is_historical_reference(path: Path) -> bool:
     return any(root in path.parents or root == path.parent for root in HISTORICAL_REFERENCE_ROOTS)
 
 
+def content_sha256(path: Path) -> str:
+    """sha256 of file CONTENT with CRLF normalised to LF.
+
+    Platform-independent by construction, so the same artifact hashes
+    identically on a Windows working tree and a Linux CI checkout.
+    Hashing raw bytes made this digest depend on the checkout host: it
+    passed locally and failed in CI for a reason that had nothing to do
+    with the artifact.
+    """
+    import hashlib
+
+    normalised = path.read_bytes().replace(b'\r\n', b'\n')
+    return hashlib.sha256(normalised).hexdigest()
+
+
 def _active_report_files() -> list[Path]:
     return [p for p in REPORTS.glob("*.*") if p.is_file()]
 
@@ -118,16 +133,31 @@ class TestPreservedArtifactsAreMarked:
 
     def test_the_replacement_hash_matches_the_current_file(self) -> None:
         """A stale replacement hash would let the index point at something
-        that no longer exists in that form."""
-        import hashlib
+        that no longer exists in that form.
 
+        Hashes CONTENT, not raw bytes. Git stores LF and checks out CRLF on
+        Windows, so hashing bytes made this digest depend on the checkout
+        host - it passed locally and failed in CI for a reason that had
+        nothing to do with the artifact. A governance hash that changes with
+        the platform is worse than no hash.
+        """
         manifest = json.loads((SUPERSEDED_DIR / "MANIFEST.json").read_text(encoding="utf-8"))
         for a in manifest["artifacts"]:
             current = REPORTS / a["replacement_filename"]
-            actual = hashlib.sha256(current.read_bytes()).hexdigest()
-            assert actual == a["replacement_sha256"], (
+            assert content_sha256(current) == a["replacement_sha256"], (
                 f"{a['replacement_filename']} changed since the manifest was written"
             )
+
+    def test_the_manifest_declares_its_hash_method(self) -> None:
+        """Whoever verifies these later must know how to reproduce them."""
+        manifest = json.loads((SUPERSEDED_DIR / "MANIFEST.json").read_text(encoding="utf-8"))
+        assert "CRLF" in manifest["hash_method"]
+
+    def test_the_preserved_original_still_matches_its_recorded_hash(self) -> None:
+        manifest = json.loads((SUPERSEDED_DIR / "MANIFEST.json").read_text(encoding="utf-8"))
+        for a in manifest["artifacts"]:
+            preserved = REPORTS / a["preserved_as"]
+            assert content_sha256(preserved) == a["original_sha256"], a["preserved_as"]
 
     def test_the_manifest_scopes_the_supersession(self) -> None:
         """It must say what is NOT superseded, or readers will assume all."""
