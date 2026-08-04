@@ -1,0 +1,145 @@
+{
+  "float_tolerance": 1e-09,
+  "seasons": [
+    {
+      "evaluations": {
+        "by_key_prefix": {
+          "team-ratings-v1": 8
+        },
+        "difference_count": 8,
+        "rows_after": 6,
+        "rows_before": 6,
+        "sample": [
+          {
+            "after": 0.21590023953100435,
+            "before": 0.2158905902667402,
+            "kind": "value",
+            "path": "team-ratings-v1|test:2024:PREGAME.brier"
+          },
+          {
+            "after": -0.12016021641269653,
+            "before": -0.12018002601476949,
+            "kind": "value",
+            "path": "team-ratings-v1|test:2024:PREGAME.calibration_intercept"
+          },
+          {
+            "after": 1.3561321283060497,
+            "before": 1.3561551299400156,
+            "kind": "value",
+            "path": "team-ratings-v1|test:2024:PREGAME.calibration_slope"
+          },
+          {
+            "after": 7.392150850084551,
+            "before": 7.391999049893967,
+            "kind": "value",
+            "path": "team-ratings-v1|test:2024:PREGAME.crps_margin"
+          },
+          {
+            "after": 0.6215017958014554,
+            "before": 0.6214827783686157,
+            "kind": "value",
+            "path": "team-ratings-v1|test:2024:PREGAME.log_loss"
+          },
+          {
+            "after": 0.591441259684758,
+            "before": 0.5913980978899084,
+            "kind": "value",
+            "path": "team-ratings-v1|test:2024:PREGAME.log_loss_ci90[0]"
+          },
+          {
+            "after": 0.6545510868834389,
+            "before": 0.654539573363896,
+            "kind": "value",
+            "path": "team-ratings-v1|test:2024:PREGAME.log_loss_ci90[1]"
+          },
+          {
+            "after": 10.159634615089859,
+            "before": 10.159306083905557,
+            "kind": "value",
+            "path": "team-ratings-v1|test:2024:PREGAME.margin_mae"
+          }
+        ]
+      },
+      "original_run": "bt_4cfbc3643125",
+      "recommendations": {
+        "by_key_prefix": {},
+        "difference_count": 0,
+        "rows_after": 1140,
+        "rows_before": 1140,
+        "sample": []
+      },
+      "rerun": "bt_74a4ff43f39c",
+      "season": 2024
+    },
+    {
+      "evaluations": {
+        "by_key_prefix": {
+          "team-ratings-v1": 8
+        },
+        "difference_count": 8,
+        "rows_after": 6,
+        "rows_before": 6,
+        "sample": [
+          {
+            "after": 0.22192644753074933,
+            "before": 0.221923568382995,
+            "kind": "value",
+            "path": "team-ratings-v1|test:2025:PREGAME.brier"
+          },
+          {
+            "after": -0.1128158958010666,
+            "before": -0.11284430459884344,
+            "kind": "value",
+            "path": "team-ratings-v1|test:2025:PREGAME.calibration_intercept"
+          },
+          {
+            "after": 0.9607344060069791,
+            "before": 0.9608650882698042,
+            "kind": "value",
+            "path": "team-ratings-v1|test:2025:PREGAME.calibration_slope"
+          },
+          {
+            "after": 7.248987889259427,
+            "before": 7.248845198625203,
+            "kind": "value",
+            "path": "team-ratings-v1|test:2025:PREGAME.crps_margin"
+          },
+          {
+            "after": 0.6335073640110067,
+            "before": 0.6334932496153032,
+            "kind": "value",
+            "path": "team-ratings-v1|test:2025:PREGAME.log_loss"
+          },
+          {
+            "after": 0.5995790998805032,
+            "before": 0.599567837182048,
+            "kind": "value",
+            "path": "team-ratings-v1|test:2025:PREGAME.log_loss_ci90[0]"
+          },
+          {
+            "after": 0.670020640752483,
+            "before": 0.6700286153145092,
+            "kind": "value",
+            "path": "team-ratings-v1|test:2025:PREGAME.log_loss_ci90[1]"
+          },
+          {
+            "after": 10.162845286740145,
+            "before": 10.162320568293946,
+            "kind": "value",
+            "path": "team-ratings-v1|test:2025:PREGAME.margin_mae"
+          }
+        ]
+      },
+      "original_run": "bt_0df40f7df767",
+      "recommendations": {
+        "by_key_prefix": {},
+        "difference_count": 0,
+        "rows_after": 1140,
+        "rows_before": 1140,
+        "sample": []
+      },
+      "rerun": "bt_373547598177",
+      "season": 2025
+    }
+  ]
+}

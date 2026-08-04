@@ -61,6 +61,21 @@ code path in the repository sets any other approval status.
 | glm-ridge-v1 | `research_only` | 20260801 | `51ea1332f4ed` |
 | market-residual-v1 | `research_only` | 20260801 | `7fd7c355acb3` |
 
+## SUPERSEDED — DO NOT CITE: team-ratings-v1 historical metrics
+
+The original team-ratings-v1 historical evaluation is superseded because
+simultaneous game results were previously applied in input-dependent
+order. The corrected deterministic evaluation replaces those metrics. The
+change did not affect other model tiers, recommendation statuses,
+simulated wagers, or reported ROI.
+
+Full record, including previous and corrected values for both test
+seasons: `reports/integrity/SUPERSESSION.md`.
+
+Superseding tag `phase-2-research-engine-v1.0.1`. The original tag
+`phase-2-research-engine-v1` is unchanged. Prior artifacts are retained,
+not deleted.
+
 ## Sequential replay: a latent lookahead, closed
 
 `sequential_ratings_moments` is how the in-season-updating ratings model
@@ -92,8 +107,17 @@ prediction does not move — paired with a control that flips the same
 result and asserts a *later* prediction does move, so the test cannot pass
 by the model simply ignoring everything.
 
-**No results are invalidated.** The loader has always stamped +4h30m, so
-the leak was never realised in any run that produced the recorded numbers.
+**The lookahead itself invalidated nothing.** The loader has always
+stamped +4h30m, so the leak was never realised in any run that produced
+the recorded numbers — confirmed by rerunning both frozen folds, which
+reproduced byte-identical snapshot hashes.
+
+A SEPARATE correction found while testing this one did supersede results:
+simultaneous results were absorbed in input-dependent order. See the
+supersession notice above. Three further layers now protect the replay —
+strict result visibility (`can_see_result`, `<` not `<=`), explicit
+current-game exclusion, and an ingest-time invariant guard — so
+correctness no longer depends on `RESULT_AVAILABILITY_OFFSET` at all.
 
 ## Burned evaluation periods — binding constraint
 

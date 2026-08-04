@@ -11,7 +11,7 @@ Conventions:
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, ClassVar
 
 from sqlalchemy import (
@@ -24,13 +24,48 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    TypeDecorator,
     UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
+class UtcDateTime(TypeDecorator[datetime]):
+    """Timezone-aware datetimes that survive a SQLite round-trip.
+
+    SQLite has no native timestamptz and returns naive datetimes, which the
+    point-in-time guards correctly refuse to compare. Storing UTC and
+    re-attaching UTC on the way out keeps every timestamp unambiguous on
+    both SQLite and PostgreSQL.
+
+    Backported into the Phase 2 lineage under the model-integrity gate: the
+    requirement is that every timestamp is timezone-aware and normalised to
+    UTC, enforced at more than one layer. Coercing only in
+    LeagueHistory.load is a single layer, and a consumer that reads a Game
+    row directly would get a naive value.
+
+    Behaviourally inert for the walk-forward - LeagueHistory already
+    coerced - and verified so by rerunning both frozen folds.
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect: object) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            raise ValueError("refusing to store a timezone-naive datetime")
+        return value.astimezone(UTC)
+
+    def process_result_value(self, value: datetime | None, dialect: object) -> datetime | None:
+        if value is None:
+            return None
+        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
 class Base(DeclarativeBase):
-    type_annotation_map: ClassVar = {dict[str, Any]: JSON, datetime: DateTime(timezone=True)}
+    type_annotation_map: ClassVar = {dict[str, Any]: JSON, datetime: UtcDateTime()}
 
 
 # --------------------------------------------------------------------------- #
