@@ -10,6 +10,7 @@ are marked as such rather than presented as reconstructed fact.
 from __future__ import annotations
 
 import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -47,11 +48,23 @@ CONSERVATIVE_ROWS = [i for i, r in enumerate(LEGACY_ROWS) if not r[4]]
 
 
 def _alembic(db_url: str, *args: str) -> subprocess.CompletedProcess[str]:
+    """Run alembic in a subprocess under the CURRENT interpreter.
+
+    `sys.executable`, not a hardcoded venv path. This previously pointed at
+    `.venv/Scripts/python`, which exists only on Windows: on Linux CI the
+    layout is `.venv/bin/python`, so the step died with FileNotFoundError
+    before alembic ran. Everything after it in the job - the downgrade /
+    re-upgrade check and the entire Python suite - was then SKIPPED, so a
+    path bug silently cost the whole PostgreSQL verification.
+
+    `sys.executable` is whatever interpreter is running these tests, which
+    is by definition the one with alembic installed, on any platform.
+    """
     import os
 
     env = {**os.environ, "FDE_DATABASE_URL": db_url}
     return subprocess.run(
-        [str(API_ROOT / ".venv" / "Scripts" / "python"), "-m", "alembic", *args],
+        [sys.executable, "-m", "alembic", *args],
         cwd=API_ROOT, env=env, capture_output=True, text=True, timeout=300, check=False,
     )
 
