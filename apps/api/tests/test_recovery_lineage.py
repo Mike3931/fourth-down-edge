@@ -339,3 +339,84 @@ class TestDataHealthIntegration:
         check = next(c for c in r["checks"] if c["id"] == "automatic_recovery_permitted")
         assert check["status"] != "OK"
         assert check["severity"] == "CRITICAL"
+
+
+class TestProviderModeInvariance:
+    """A recovery may not change the provider mode.
+
+    This check used to be a comment explaining why it could not exist:
+    `scheduled_job_runs` did not persist the mode, so there was nothing to
+    compare against. Migration e7b3c04d1f28 added the column, and these
+    tests are what make the check load-bearing rather than decorative -
+    each one fails if the comparison is removed.
+
+    It matters because a recovery that changes the mode launders data
+    across the fixture/live boundary: a slot captured from a fixture
+    payload, recovered under LIVE, would produce records stamped LIVE that
+    no provider ever returned.
+    """
+
+    def test_the_same_mode_is_permitted(self, session: Session) -> None:
+        run = _run(session, "r1", outcome=Outcome.INTERRUPTED)
+        run.provider_mode = "FIXTURE"
+        session.commit()
+        validate_recovery(
+            run, cohort=None, policy_version=None, logical_slot=None,
+            provider_mode="FIXTURE", reason="interrupted",
+        )
+
+    def test_a_different_mode_is_refused(self, session: Session) -> None:
+        run = _run(session, "r1", outcome=Outcome.INTERRUPTED)
+        run.provider_mode = "FIXTURE"
+        session.commit()
+        with pytest.raises(RecoveryError, match="may not change the provider mode"):
+            validate_recovery(
+                run, cohort=None, policy_version=None, logical_slot=None,
+                provider_mode="LIVE", reason="interrupted",
+            )
+
+    def test_the_message_names_both_modes(self, session: Session) -> None:
+        run = _run(session, "r1", outcome=Outcome.INTERRUPTED)
+        run.provider_mode = "FIXTURE"
+        session.commit()
+        with pytest.raises(RecoveryError) as e:
+            validate_recovery(
+                run, cohort=None, policy_version=None, logical_slot=None,
+                provider_mode="LIVE", reason="interrupted",
+            )
+        assert "FIXTURE" in str(e.value)
+        assert "LIVE" in str(e.value)
+
+    def test_a_legacy_row_cannot_be_recovered_automatically(self, session: Session) -> None:
+        """Backfilled rows have no recoverable mode. An invariant that cannot
+        be verified is a reason to involve a human, not to wave it through."""
+        run = _run(session, "r1", outcome=Outcome.INTERRUPTED)
+        run.provider_mode = "UNKNOWN_LEGACY"
+        session.commit()
+        with pytest.raises(RecoveryError, match="UNKNOWN_LEGACY"):
+            validate_recovery(
+                run, cohort=None, policy_version=None, logical_slot=None,
+                provider_mode="FIXTURE", reason="interrupted",
+            )
+
+    def test_a_legacy_row_may_be_recovered_by_an_operator(self, session: Session) -> None:
+        run = _run(session, "r1", outcome=Outcome.INTERRUPTED)
+        run.provider_mode = "UNKNOWN_LEGACY"
+        session.commit()
+        validate_recovery(
+            run, cohort=None, policy_version=None, logical_slot=None,
+            provider_mode="FIXTURE", reason="interrupted",
+            administrative_override=True, override_operator="ops",
+            override_reason="verified against the raw archive by hand",
+        )
+
+    def test_an_unstated_mode_skips_the_check(self, session: Session) -> None:
+        """Callers that genuinely do not know the mode must not be forced to
+        invent one; the check is skipped rather than guessed."""
+        run = _run(session, "r1", outcome=Outcome.INTERRUPTED)
+        run.provider_mode = "FIXTURE"
+        session.commit()
+        validate_recovery(
+            run, cohort=None, policy_version=None, logical_slot=None,
+            provider_mode=None, reason="interrupted",
+        )

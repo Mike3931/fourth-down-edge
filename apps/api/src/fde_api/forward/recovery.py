@@ -35,6 +35,7 @@ from fde_api.db.forward_models import (
     ScheduleObservation,
     WeatherForecastVintage,
 )
+from fde_api.forward.cohort import ProviderMode
 from fde_api.forward.state import Outcome, StateOrigin
 
 # --------------------------------------------------------------------------- #
@@ -580,10 +581,33 @@ def validate_recovery(
         stored = (predecessor.error_summary or "")
         if "policy=" in stored and f"policy={policy_version}" not in stored:
             raise RecoveryError("a recovery may not change the policy version")
-    # Provider-mode invariance is NOT enforced here: scheduled_job_runs does
-    # not persist provider mode, so there is nothing to compare against. A
-    # check that cannot fail would be worse than none. Enforcing it requires
-    # persisting provider_mode on the run record first.
+    # Provider-mode invariance. This used to be a comment explaining why the
+    # check could not exist: `scheduled_job_runs` did not persist the mode,
+    # so there was nothing to compare against, and a check that cannot fail
+    # is worse than none. Migration e7b3c04d1f28 added the column, so the
+    # check is now real.
+    #
+    # It matters because a recovery that changes the mode launders data
+    # across the fixture/live boundary: a slot captured from a fixture
+    # payload, recovered under LIVE, would produce records stamped LIVE that
+    # no provider ever returned.
+    stored_mode = getattr(predecessor, "provider_mode", None)
+    if provider_mode is not None and stored_mode:
+        if stored_mode == ProviderMode.UNKNOWN_LEGACY.value:
+            # A backfilled row. Its true mode is unrecoverable, so the
+            # invariant cannot be checked - and an unverifiable invariant is
+            # a reason to involve a human, not to wave the recovery through.
+            if not administrative_override:
+                raise RecoveryError(
+                    f"run {predecessor.id} predates provider-mode recording "
+                    f"(UNKNOWN_LEGACY), so mode invariance cannot be verified; "
+                    "an administrative override with operator and reason is required"
+                )
+        elif provider_mode != stored_mode:
+            raise RecoveryError(
+                f"a recovery may not change the provider mode: run {predecessor.id} "
+                f"ran under {stored_mode}, this recovery would run under {provider_mode}"
+            )
 
 
 def build_recovery_lineage(
@@ -594,6 +618,7 @@ def build_recovery_lineage(
     recovery_key: str,
     reason: str,
     now: datetime,
+    provider_mode: str | None = None,
     inspection: EffectInspection | None = None,
     administrative_override: bool = False,
     override_operator: str | None = None,
@@ -615,7 +640,7 @@ def build_recovery_lineage(
         cohort=predecessor.data_mode,
         policy_version=None,
         logical_slot=predecessor.logical_slot or predecessor.scheduled_for,
-        provider_mode=None,
+        provider_mode=provider_mode,
         reason=reason,
         administrative_override=administrative_override,
         override_operator=override_operator,

@@ -400,6 +400,13 @@ class ScheduledJobRun(Base):
     job_kind: Mapped[str] = mapped_column(String(48), index=True)
     idempotency_key: Mapped[str] = mapped_column(String(160), unique=True)
     data_mode: Mapped[str] = mapped_column(String(16))
+    # The provider mode this run executed under. Persisted so a recovery can
+    # be refused when it would change the mode - a fixture capture must not
+    # be recovered as a live one. Backfilled rows are UNKNOWN_LEGACY, which
+    # is a reason to require review, not permission to proceed.
+    provider_mode: Mapped[str] = mapped_column(
+        String(16), default="UNKNOWN_LEGACY", server_default="UNKNOWN_LEGACY", index=True
+    )
     scheduled_for: Mapped[datetime | None] = mapped_column()
     started_at: Mapped[datetime | None] = mapped_column()
     completed_at: Mapped[datetime | None] = mapped_column()

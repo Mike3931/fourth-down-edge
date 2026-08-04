@@ -411,6 +411,7 @@ class Scheduler:
                     job_kind=job.name,
                     idempotency_key=key,
                     data_mode=self.data_mode.value,
+                    provider_mode=self.provider_mode.value,
                     scheduled_for=slot,
                     started_at=self.clock.now(),
                     retry_count=attempt - 1,
@@ -541,6 +542,7 @@ class Scheduler:
                     recovery_key=recovery_key,
                     reason=reason,
                     now=self.clock.now(),
+                    provider_mode=self.provider_mode.value,
                     inspection=inspection,
                     administrative_override=administrative_override,
                     override_operator=override_operator,
@@ -687,7 +689,8 @@ class Scheduler:
         with self._session() as s:
             run = ScheduledJobRun(
                 id=run_id, job_kind=job.name, idempotency_key=key,
-                data_mode=self.data_mode.value, scheduled_for=slot,
+                data_mode=self.data_mode.value, provider_mode=self.provider_mode.value,
+                scheduled_for=slot,
                 started_at=self.clock.now(), completed_at=self.clock.now(),
                 retry_count=0, provider_calls=0, records_received=0, records_written=0,
                 code_commit=current_code_commit(), created_at=self.clock.now(),

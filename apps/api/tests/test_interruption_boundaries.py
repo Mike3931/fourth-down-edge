@@ -319,3 +319,58 @@ class TestNoRecoveryWhenNotInterrupted:
         r = s.run_job("odds_capture", slot=NOW)
         assert r["status"] == "skipped"
         assert len(_runs(factory)) == 1
+
+
+class TestProviderModeTravelsOnTheRun:
+    """The run row must record the mode it executed under.
+
+    Without it the fixture/live boundary is unenforceable at recovery time,
+    which is exactly the state `validate_recovery` was in before migration
+    e7b3c04d1f28: it had a provider-mode parameter and no column to compare
+    it against.
+    """
+
+    def test_a_run_records_the_mode_it_executed_under(self, factory) -> None:
+        _sched(factory).run_job("odds_capture", slot=NOW,
+                                params={"fixture_payload": _payload(NOW)})
+        runs = _runs(factory)
+        assert len(runs) == 1
+        assert runs[0].provider_mode == ProviderMode.FIXTURE.value
+
+    def test_recovering_under_a_different_mode_is_refused(self, factory) -> None:
+        """A fixture capture must not be recovered as a live one: the
+        recovery would stamp LIVE on records no provider ever returned."""
+        _sched(factory).run_job("odds_capture", slot=NOW,
+                               params={"fixture_payload": _payload(NOW)})
+        with factory() as s:
+            row = s.scalars(select(ScheduledJobRun)).one()
+            row.job_outcome = Outcome.INTERRUPTED.value
+            row.status = "interrupted"
+            s.commit()
+
+        live = Scheduler(factory, clock=FrozenClock(NOW), cohort=Cohort.BURN_IN,
+                         provider_mode=ProviderMode.LIVE, policy_version="ftp-2026-v1")
+        register_all(live)
+        # run_job reports a refusal rather than raising: the caller gets a
+        # typed outcome, and no run row is created for the refused attempt.
+        result = live.run_job("odds_capture", slot=NOW,
+                              params={"fixture_payload": _payload(NOW)})
+        assert result["status"] == "refused"
+        assert "may not change the provider mode" in result["reason"]
+        assert len(_runs(factory)) == 1
+
+    def test_recovering_under_the_same_mode_proceeds(self, factory) -> None:
+        _sched(factory).run_job("odds_capture", slot=NOW,
+                               params={"fixture_payload": _payload(NOW)})
+        with factory() as s:
+            row = s.scalars(select(ScheduledJobRun)).one()
+            row.job_outcome = Outcome.INTERRUPTED.value
+            row.status = "interrupted"
+            s.commit()
+
+        result = _sched(factory).run_job("odds_capture", slot=NOW,
+                                         params={"fixture_payload": _payload(NOW)})
+        assert result["status"] in {"finished", "skipped"}
+        runs = _runs(factory)
+        assert len(runs) == 2
+        assert {r.provider_mode for r in runs} == {ProviderMode.FIXTURE.value}
