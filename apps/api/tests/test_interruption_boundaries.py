@@ -45,6 +45,7 @@ def _capture(session, payload, **kw):
 
 
 KICK = datetime(2026, 9, 13, 17, 0, tzinfo=UTC)
+GAME = "2026_02_KC_BUF"
 NOW = KICK - timedelta(days=3)
 
 HEADER = (
@@ -374,3 +375,61 @@ class TestProviderModeTravelsOnTheRun:
         runs = _runs(factory)
         assert len(runs) == 2
         assert {r.provider_mode for r in runs} == {ProviderMode.FIXTURE.value}
+
+
+class TestBoundary4PerCategory:
+    """Boundary 4 is where job CATEGORY changes the answer.
+
+    Boundaries 1-3 are category-independent: nothing happened, or the
+    rollback removed it. Boundary 4 - committed effects with an unfinalised
+    run - is the one where "replay it" and "do not replay it" diverge, so
+    it is exercised for each category rather than for odds_capture alone.
+
+    OBSERVATION and SNAPSHOT effects carry their own identity, so a replay
+    deduplicates. TERMINAL effects do not: settling twice is not a no-op,
+    and a settlement cannot be attributed from a timestamp, so the honest
+    answer without an explicit game scope is that a human must decide.
+    """
+
+    def _crash(self, factory, job: str, params: dict) -> None:
+        _sched(factory).run_job(job, slot=NOW, params=params)
+        with factory() as sess:
+            run = sess.scalars(
+                select(ScheduledJobRun).where(ScheduledJobRun.job_kind == job)
+            ).one()
+            run.job_outcome = Outcome.RUNNING.value
+            run.status = "running"
+            run.completed_at = None
+            sess.commit()
+
+    def test_an_observation_job_replays_idempotently(self, factory) -> None:
+        self._crash(factory, "odds_capture", {"fixture_payload": _payload(NOW)})
+        s = _sched(factory)
+        s.reconcile_startup()
+        r = s.run_job("odds_capture", slot=NOW, params={"fixture_payload": _payload(NOW)})
+        assert r["replay_decision"] == ReplayDecision.PRIOR_EFFECTS_IDEMPOTENT_REPLAY.value
+
+    def test_a_terminal_job_without_a_scope_requires_review(self, factory) -> None:
+        """The behaviour that used to be silently wrong. A settled ledger
+        entry anywhere in the database made this conclude
+        PRIOR_EFFECTS_NO_REPLAY, so the recovery finalised without settling
+        and the settlement never happened. Unattributable now means
+        reviewable, not skippable."""
+        from fde_api.forward.recovery import inspect_prior_effects as inspect
+
+        with factory() as sess:
+            insp = inspect(sess, job_kind="settlement",
+                           idempotency_key="settlement:burn_in:20260913T140000Z",
+                           logical_slot=NOW, data_mode="burn_in")
+        assert insp.recommended_decision is ReplayDecision.MANUAL_REVIEW_REQUIRED
+
+    def test_a_scoped_terminal_job_with_no_effects_may_run(self, factory) -> None:
+        from fde_api.forward.recovery import inspect_prior_effects as inspect
+
+        with factory() as sess:
+            insp = inspect(sess, job_kind="settlement",
+                           idempotency_key="settlement:burn_in:20260913T140000Z",
+                           logical_slot=NOW, data_mode="burn_in",
+                           canonical_game_id=GAME)
+        assert insp.recommended_decision is ReplayDecision.NO_PRIOR_EFFECTS_REPLAY
+        assert insp.actual_effect_count == 0
