@@ -34,6 +34,82 @@ from fde_api.db.models import BacktestRecommendation, BacktestRun, ModelEvaluati
 FLOAT_TOL = 1e-9
 
 
+class ComparisonError(RuntimeError):
+    """The comparison cannot be trusted and must not be reported."""
+
+
+# STABLE SEMANTIC KEYS - documented because the whole tool depends on them.
+#
+#   evaluations      (model_version_id, scope)   within one explicitly
+#                    selected run. NOT across runs: ModelEvaluation.id
+#                    embeds the run id, so the table holds one row per
+#                    (model, scope) PER RUN.
+#   recommendations  (game_id, market, selection, as_of_at) within one
+#                    explicitly selected run. The primary key is an
+#                    autoincrement integer and is deliberately excluded.
+#
+# Run UUIDs and generated database ids are never part of a semantic key or
+# a semantic hash: they change on every execution and would make two
+# identical runs look different.
+EVALUATION_KEY = ("model_version_id", "scope")
+RECOMMENDATION_KEY = ("game_id", "market", "selection", "as_of_at")
+EXCLUDED_FROM_SEMANTIC_KEYS = ("id", "backtest_run_id", "run_id", "created_at")
+
+
+def _require_run(session, run_id: str):
+    run = session.get(BacktestRun, run_id)
+    if run is None:
+        raise ComparisonError(
+            f"run {run_id!r} does not exist; a comparison cannot be performed "
+            "against a run that is not in the database"
+        )
+    return run
+
+
+def _index_unique(rows: list[tuple[str, Any]], what: str, run_id: str) -> dict[str, Any]:
+    """Build a keyed index, refusing to let two rows share a key.
+
+    The original tool used a plain dict assignment here, so a duplicate key
+    silently kept whichever row was encountered last. That is exactly how a
+    pre-fix and a post-fix row could be compared against themselves.
+    """
+    out: dict[str, Any] = {}
+    dupes: list[str] = []
+    for key, value in rows:
+        if key in out:
+            dupes.append(key)
+        out[key] = value
+    if dupes:
+        raise ComparisonError(
+            f"{len(dupes)} duplicate {what} key(s) within run {run_id}: "
+            f"{sorted(set(dupes))[:5]}; the run-scoped selection is wrong "
+            "and the comparison would silently drop rows"
+        )
+    return out
+
+
+def _check_shape(before: dict[str, Any], after: dict[str, Any], what: str) -> list[str]:
+    """Row counts and membership are checked BEFORE any value comparison.
+
+    A count mismatch means the two sides are not the same population, and
+    comparing values across them would report differences that are really
+    absences.
+    """
+    problems: list[str] = []
+    if len(before) != len(after):
+        problems.append(
+            f"{what}: row count differs ({len(before)} vs {len(after)}); "
+            "refusing to compare values across differently sized populations"
+        )
+    only_before = sorted(set(before) - set(after))
+    only_after = sorted(set(after) - set(before))
+    if only_before:
+        problems.append(f"{what}: {len(only_before)} row(s) only in the first run: {only_before[:10]}")
+    if only_after:
+        problems.append(f"{what}: {len(only_after)} row(s) only in the second run: {only_after[:10]}")
+    return problems
+
+
 def _num_close(a: Any, b: Any) -> bool:
     if isinstance(a, bool) or isinstance(b, bool):
         return a == b
@@ -60,70 +136,92 @@ def _diff(path: str, a: Any, b: Any, out: list[dict[str, Any]]) -> None:
         out.append({"path": path, "kind": "value", "before": a, "after": b})
 
 
-def compare_season(session, season: int) -> dict[str, Any]:
-    runs = [
-        r for r in session.scalars(select(BacktestRun).order_by(BacktestRun.created_at))
-        if (r.config or {}).get("test_season") == season
-    ]
-    if len(runs) < 2:
-        return {"season": season, "error": f"need 2 runs, found {len(runs)}"}
-    original, rerun = runs[0], runs[-1]
+def compare_runs(session, before_run_id: str, after_run_id: str) -> dict[str, Any]:
+    """Compare two EXPLICITLY named runs.
+
+    Both ids are required. There is no "pick the first and last" default,
+    because guessing which run is the pre-fix baseline is precisely the
+    decision a certification must not leave to iteration order.
+    """
+    before_run = _require_run(session, before_run_id)
+    after_run = _require_run(session, after_run_id)
 
     def evals(run_id: str) -> dict[str, Any]:
-        return {
-            f"{e.model_version_id}|{e.scope}": e.metrics
+        rows = [
+            (f"{e.model_version_id}|{e.scope}", e.metrics)
             for e in session.scalars(
                 select(ModelEvaluation).where(ModelEvaluation.id.like(f"ev_{run_id}_%"))
             )
-        }
+        ]
+        return _index_unique(rows, "evaluation", run_id)
 
     def recs(run_id: str) -> dict[str, Any]:
-        out: dict[str, Any] = {}
+        rows = []
         for r in session.scalars(
             select(BacktestRecommendation).where(
                 BacktestRecommendation.backtest_run_id == run_id
             )
         ):
             key = f"{r.game_id}|{r.market}|{r.selection}|{r.as_of_at.isoformat()}"
-            out[key] = {
+            rows.append((key, {
                 "status": r.status,
                 "line": r.line,
                 "price_american": r.price_american,
+                "prediction_id": r.prediction_id,
                 "reasons": r.reasons,
                 "execution": r.execution,
                 "settlement": r.settlement,
-            }
-        return out
+            }))
+        return _index_unique(rows, "recommendation", run_id)
 
     result: dict[str, Any] = {
-        "season": season,
-        "original_run": original.id,
-        "rerun": rerun.id,
+        "before_run": before_run_id,
+        "after_run": after_run_id,
+        "before_config": before_run.config,
+        "after_config": after_run.config,
+        "shape_problems": [],
     }
     for label, before, after in (
-        ("evaluations", evals(original.id), evals(rerun.id)),
-        ("recommendations", recs(original.id), recs(rerun.id)),
+        ("evaluations", evals(before_run_id), evals(after_run_id)),
+        ("recommendations", recs(before_run_id), recs(after_run_id)),
     ):
+        shape = _check_shape(before, after, label)
+        result["shape_problems"].extend(shape)
         found: list[dict[str, Any]] = []
-        for key in sorted(set(before) | set(after)):
-            if key not in before:
-                found.append({"path": key, "kind": "added"})
-            elif key not in after:
-                found.append({"path": key, "kind": "removed"})
-            else:
-                _diff(key, before[key], after[key], found)
-        by_model: dict[str, int] = {}
+        for key in sorted(set(before) & set(after)):
+            _diff(key, before[key], after[key], found)
+        by_prefix: dict[str, int] = {}
         for d in found:
-            model = d["path"].split("|")[0] if "|" in d["path"] else "—"
-            by_model[model] = by_model.get(model, 0) + 1
+            by_prefix.setdefault(d["path"].split("|")[0], 0)
+            by_prefix[d["path"].split("|")[0]] += 1
         result[label] = {
             "rows_before": len(before),
             "rows_after": len(after),
+            "unmatched_before": sorted(set(before) - set(after))[:50],
+            "unmatched_after": sorted(set(after) - set(before))[:50],
             "difference_count": len(found),
-            "by_key_prefix": by_model,
+            "by_key_prefix": by_prefix,
             "sample": found[:20],
         }
     return result
+
+
+def runs_for_season(session, season: int) -> list[str]:
+    return [
+        r.id for r in session.scalars(select(BacktestRun).order_by(BacktestRun.created_at))
+        if (r.config or {}).get("test_season") == season
+    ]
+
+
+def compare_season(session, season: int) -> dict[str, Any]:
+    ids = runs_for_season(session, season)
+    if len(ids) < 2:
+        raise ComparisonError(
+            f"season {season}: need two runs to compare, found {len(ids)}"
+        )
+    out = compare_runs(session, ids[0], ids[-1])
+    out["season"] = season
+    return out
 
 
 def main(argv: list[str] | None = None) -> int:

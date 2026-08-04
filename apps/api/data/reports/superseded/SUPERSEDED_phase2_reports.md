@@ -2,10 +2,7 @@
 
 > RESEARCH MODE — MODEL NOT APPROVED FOR REAL-MONEY DECISIONS
 
-> **SUPERSEDED — DO NOT CITE (prior team-ratings-v1 metrics)**  
-> The original team-ratings-v1 historical evaluation is superseded because simultaneous game results were previously applied in input-dependent order. The corrected deterministic evaluation replaces those metrics. The change did not affect other model tiers, recommendation statuses, simulated wagers, or reported ROI.
-
-Generated 2026-08-04T00:52:56.198254+00:00 · commit `b1545d82a763` · lock `8b16a8d40132`
+Generated 2026-08-01T13:40:45.703702+00:00 · commit `51144321127e` · lock `955525cd6ac3`
 
 ## 1. Data coverage by season
 
@@ -91,7 +88,7 @@ Status: **all passing**
 | --- | ---: | ---: | ---: | :--: |
 | market-residual-v1 | -0.0003 | -0.0058 | 0.0025 | yes |
 | glm-ridge-v1 | 0.0264 | 0.1995 | 0.3087 | no |
-| team-ratings-v1 | 0.0277 | 0.2611 | 0.4437 | no |
+| team-ratings-v1 | 0.0277 | 0.2609 | 0.4434 | no |
 | naive-rolling-v1 | 0.0637 | 0.5038 | 0.7832 | no |
 | naive-homefield-v1 | 0.0949 | 0.9644 | 1.4529 | no |
 
@@ -101,7 +98,7 @@ Status: **all passing**
 | --- | ---: | ---: | ---: | :--: |
 | market-residual-v1 | 0.0066 | 0.1290 | 0.1462 | no |
 | naive-rolling-v1 | 0.0047 | 0.3360 | 0.3601 | no |
-| team-ratings-v1 | 0.0252 | 0.3411 | 0.4909 | no |
+| team-ratings-v1 | 0.0252 | 0.3409 | 0.4904 | no |
 | glm-ridge-v1 | 0.0431 | 0.5721 | 0.7407 | no |
 | naive-homefield-v1 | 0.0826 | 1.0630 | 1.3325 | no |
 
@@ -125,27 +122,6 @@ Max drawdown: 2.0 units · CLV: unavailable — see limitations
 | SPREAD | 4 | 2 | 2 | 0 | -0.095 |
 
 ### bt_0df40f7df767 (test season 2025)
-
-Statuses: {'PASS': 867, 'WATCH': 169, 'RESEARCH_CANDIDATE': 104}
-
-Max drawdown: 14.1305 units · CLV: unavailable — see limitations
-
-| Market | Bets | Wins | Losses | Pushes | P/L units |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| SPREAD | 52 | 28 | 24 | 0 | 2.019 |
-| TOTAL | 52 | 26 | 26 | 0 | -2.13 |
-
-### bt_25962c7fc4ce (test season 2024)
-
-Statuses: {'PASS': 1083, 'WATCH': 53, 'RESEARCH_CANDIDATE': 4}
-
-Max drawdown: 2.0 units · CLV: unavailable — see limitations
-
-| Market | Bets | Wins | Losses | Pushes | P/L units |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| SPREAD | 4 | 2 | 2 | 0 | -0.095 |
-
-### bt_ae29bb505c2c (test season 2025)
 
 Statuses: {'PASS': 867, 'WATCH': 169, 'RESEARCH_CANDIDATE': 104}
 

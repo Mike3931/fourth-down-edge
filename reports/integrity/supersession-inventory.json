@@ -1,0 +1,109 @@
+{
+  "classifications": [
+    "CURRENT",
+    "SUPERSEDED",
+    "HISTORICAL_REFERENCE",
+    "TEST_FIXTURE",
+    "UNRELATED"
+  ],
+  "generated_at": "2026-08-04T00:52:31.631234+00:00",
+  "model_version": "team-ratings-v1",
+  "occurrences": [
+    {
+      "classification": "CURRENT",
+      "mentions_model": true,
+      "path": "apps/api/data/reports/phase2_reports.json",
+      "sha256": "0a0c6e8e52fcb789bca75758125533d78dc966a28ae4d110a5ce2da980516d0b",
+      "stale_metric_literals": []
+    },
+    {
+      "classification": "CURRENT",
+      "mentions_model": true,
+      "path": "apps/api/data/reports/phase2_reports.md",
+      "sha256": "aacbb3e609803e8615e07ab25de14fb9489ba27eed2d14285762f0bfbe79545a",
+      "stale_metric_literals": []
+    },
+    {
+      "classification": "UNRELATED",
+      "mentions_model": true,
+      "path": "apps/api/src/fde_api/backtest/walkforward.py",
+      "sha256": "389762325061cb4b3243bd7cefcb997e701c49d2070123b082e792d3ffd2f57c",
+      "stale_metric_literals": []
+    },
+    {
+      "classification": "UNRELATED",
+      "mentions_model": true,
+      "path": "apps/api/src/fde_api/models_ml/ratings.py",
+      "sha256": "4cc82c132eed2f0c5dffdddbbf16fe1e31d92034bd6722babd328da0f1d0bd55",
+      "stale_metric_literals": []
+    },
+    {
+      "classification": "TEST_FIXTURE",
+      "mentions_model": true,
+      "path": "apps/api/tests/test_walkforward.py",
+      "sha256": "16ae29e965fd07cd5a3a4a8120902beea8994dc4830de9955a341eb5b554e1e3",
+      "stale_metric_literals": []
+    },
+    {
+      "classification": "CURRENT",
+      "mentions_model": true,
+      "path": "docs/model-governance.md",
+      "sha256": "07a70d94cfc0583604cdaa3977e9e0e99605370168a2eead813b591becb1e1cf",
+      "stale_metric_literals": []
+    },
+    {
+      "classification": "HISTORICAL_REFERENCE",
+      "mentions_model": true,
+      "path": "reports/integrity/CERTIFICATION.md",
+      "sha256": "d5bcc090cd3b641f17fdd0b6c43d7e0d4e543158e841e7de497202c226f57cde",
+      "stale_metric_literals": []
+    },
+    {
+      "classification": "HISTORICAL_REFERENCE",
+      "mentions_model": true,
+      "path": "reports/integrity/SUPERSESSION.md",
+      "sha256": "d9cdfc09cbce1e4852bf316ba59490f30f416576a3276978af747fcf038aabe4",
+      "stale_metric_literals": [
+        "0.215890590267",
+        "0.621482778369",
+        "10.1593060839",
+        "0.221923568383",
+        "0.633493249615",
+        "10.1623205683",
+        "7.39199904989",
+        "7.24884519863",
+        "1.35615512994",
+        "0.96086508827"
+      ]
+    },
+    {
+      "classification": "HISTORICAL_REFERENCE",
+      "mentions_model": true,
+      "path": "reports/integrity/run-scoped-comparison.json",
+      "sha256": "8f89cedea323bdd15bf7372318d6f1ade24964133c0b8e5d94460d3607f9a690",
+      "stale_metric_literals": [
+        "10.1593060839",
+        "0.633493249615",
+        "7.39199904989",
+        "1.35615512994"
+      ]
+    },
+    {
+      "classification": "HISTORICAL_REFERENCE",
+      "mentions_model": true,
+      "path": "reports/integrity/walkforward-prefix-vs-postfix.json",
+      "sha256": "9f90e763d576c9ec8d5e8505eaf455485969bdd446b7d2401e08273902322c4e",
+      "stale_metric_literals": [
+        "10.1593060839",
+        "0.633493249615",
+        "7.39199904989",
+        "1.35615512994"
+      ]
+    }
+  ],
+  "test_seasons": [
+    2024,
+    2025
+  ],
+  "tool_version": "supersession-sweep-1"
+}

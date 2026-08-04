@@ -110,10 +110,29 @@ def _leakage_results() -> dict[str, Any]:
 
 
 def _model_tables(session: Session) -> dict[str, Any]:
-    evals = session.scalars(select(ModelEvaluation).order_by(ModelEvaluation.scope)).all()
-    by_scope: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    """Latest evaluation per (scope, model).
+
+    `model_evaluations` is APPEND-ONLY: `ModelEvaluation.id` embeds the
+    backtest run id, so rerunning a fold leaves both generations in the
+    table. Appending every row produced a report listing each model twice
+    per scope with different numbers, and reading it row-by-row gave no
+    way to tell which was current.
+
+    Selection is explicit and total - newest `created_at`, ties broken by
+    `id` - so the report can never depend on query order or silently show
+    a superseded evaluation.
+    """
+    evals = session.scalars(
+        select(ModelEvaluation).order_by(
+            ModelEvaluation.scope, ModelEvaluation.created_at, ModelEvaluation.id
+        )
+    ).all()
+    latest: dict[tuple[str, str], ModelEvaluation] = {}
     for e in evals:
-        by_scope[e.scope].append(
+        latest[(e.scope, e.model_version_id)] = e  # ordered, so last wins deterministically
+    by_scope: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for (scope, _model), e in latest.items():
+        by_scope[scope].append(
             {"model": e.model_version_id, "sample_size": e.sample_size, **e.metrics}
         )
     return {scope: sorted(rows, key=lambda r: r.get("crps_margin", 9e9)) for scope, rows in by_scope.items()}
@@ -225,12 +244,18 @@ def _limitations() -> dict[str, Any]:
     }
 
 
+SUPERSESSION_NOTICE = (
+    "The original team-ratings-v1 historical evaluation is superseded because simultaneous game results were previously applied in input-dependent order. The corrected deterministic evaluation replaces those metrics. The change did not affect other model tiers, recommendation statuses, simulated wagers, or reported ROI."
+)
+
+
 def generate_all(session: Session) -> dict[str, Any]:
     report = {
         "generated_at": iso_now(),
         "code_commit": current_code_commit(),
         "dependency_lock_hash": dependency_lock_hash(),
         "research_banner": RESEARCH_BANNER,
+        "supersession_notice": SUPERSESSION_NOTICE,
         "1_data_coverage": _data_coverage(session),
         "2_missingness": _missingness(session),
         "3_leakage_tests": _leakage_results(),
@@ -300,6 +325,9 @@ def _markdown(r: dict[str, Any]) -> str:
         "# Fourth Down Edge — Phase 2 analytical engine reports",
         "",
         f"> {r['research_banner']}",
+        "",
+        "> **SUPERSEDED — DO NOT CITE (prior team-ratings-v1 metrics)**  ",
+        f"> {r['supersession_notice']}",
         "",
         f"Generated {r['generated_at']} · commit `{r['code_commit'][:12]}` · lock `{r['dependency_lock_hash'][:12]}`",
         "",

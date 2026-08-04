@@ -1,9 +1,8 @@
 {
-  "generated_at": "2026-08-04T00:52:56.198254+00:00",
-  "code_commit": "b1545d82a763e30c34ec4585a88250b0c9230e61",
-  "dependency_lock_hash": "8b16a8d40132888411c8241b4befa4864540040b449ee647c31407e4101c0627",
+  "generated_at": "2026-08-01T13:40:45.703702+00:00",
+  "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
+  "dependency_lock_hash": "955525cd6ac3d1bf9de3dfbeb60396283a2f9338e209e5f9fcb3044890aec182",
   "research_banner": "RESEARCH MODE \u2014 MODEL NOT APPROVED FOR REAL-MONEY DECISIONS",
-  "supersession_notice": "The original team-ratings-v1 historical evaluation is superseded because simultaneous game results were previously applied in input-dependent order. The corrected deterministic evaluation replaces those metrics. The change did not affect other model tiers, recommendation statuses, simulated wagers, or reported ROI.",
   "1_data_coverage": {
     "by_season": [
       {
@@ -178,17 +177,17 @@
         "sample_size": 285,
         "n": 285,
         "n_win_scored": 285,
-        "log_loss": 0.6215017958014554,
+        "log_loss": 0.6214827783686157,
         "log_loss_ci90": [
-          0.591441259684758,
-          0.6545510868834389
+          0.5913980978899084,
+          0.654539573363896
         ],
-        "brier": 0.21590023953100435,
-        "calibration_intercept": -0.12016021641269653,
-        "calibration_slope": 1.3561321283060497,
-        "crps_margin": 7.392150850084551,
+        "brier": 0.2158905902667402,
+        "calibration_intercept": -0.12018002601476949,
+        "calibration_slope": 1.3561551299400156,
+        "crps_margin": 7.391999049893967,
         "crps_total": 7.2483896831237775,
-        "margin_mae": 10.159634615089859,
+        "margin_mae": 10.159306083905557,
         "total_mae": 10.0473502048404,
         "win_rate_observed": 0.5473684210526316
       },
@@ -294,17 +293,17 @@
         "sample_size": 285,
         "n": 285,
         "n_win_scored": 284,
-        "log_loss": 0.6335073640110067,
+        "log_loss": 0.6334932496153032,
         "log_loss_ci90": [
-          0.5995790998805032,
-          0.670020640752483
+          0.599567837182048,
+          0.6700286153145092
         ],
-        "brier": 0.22192644753074933,
-        "calibration_intercept": -0.1128158958010666,
-        "calibration_slope": 0.9607344060069791,
-        "crps_margin": 7.248987889259427,
+        "brier": 0.221923568382995,
+        "calibration_intercept": -0.11284430459884344,
+        "calibration_slope": 0.9608650882698042,
+        "crps_margin": 7.248845198625203,
         "crps_total": 7.552679097513793,
-        "margin_mae": 10.162845286740145,
+        "margin_mae": 10.162320568293946,
         "total_mae": 10.601412108838785,
         "win_rate_observed": 0.5352112676056338
       },
@@ -416,8 +415,8 @@
         {
           "model": "team-ratings-v1",
           "d_log_loss": 0.0277,
-          "d_crps_margin": 0.2611,
-          "d_margin_mae": 0.4437,
+          "d_crps_margin": 0.2609,
+          "d_margin_mae": 0.4434,
           "beats_market_on_crps": false
         },
         {
@@ -474,8 +473,8 @@
         {
           "model": "team-ratings-v1",
           "d_log_loss": 0.0252,
-          "d_crps_margin": 0.3411,
-          "d_margin_mae": 0.4909,
+          "d_crps_margin": 0.3409,
+          "d_margin_mae": 0.4904,
           "beats_market_on_crps": false
         },
         {
@@ -712,223 +711,6 @@
       ],
       "max_drawdown_units": 14.1305,
       "clv": "unavailable \u2014 see limitations"
-    },
-    "bt_25962c7fc4ce": {
-      "config": {
-        "test_season": 2024,
-        "horizon": "PREGAME",
-        "half_life_grid": [
-          180.0,
-          365.0
-        ],
-        "ridge_alpha_grid": [
-          10.0,
-          25.0,
-          60.0
-        ],
-        "ratings_k_grid": [
-          0.08,
-          0.12,
-          0.18
-        ],
-        "candidate_edge_grid": [
-          0.03,
-          0.05,
-          0.08
-        ],
-        "seed": 20260801,
-        "execution": {
-          "manual_delay_minutes": 3.0,
-          "price_deterioration_cents": 5,
-          "halfpoint_deterioration_prob": 0.25,
-          "no_fill_prob": 0.02,
-          "suspended_prob": 0.005,
-          "seed": 20260801
-        }
-      },
-      "status": "finished",
-      "statuses": {
-        "PASS": 1083,
-        "WATCH": 53,
-        "RESEARCH_CANDIDATE": 4
-      },
-      "by_market": {
-        "SPREAD": {
-          "n": 4,
-          "pnl": -0.09523809523809534,
-          "wins": 2,
-          "losses": 2,
-          "pushes": 0
-        }
-      },
-      "bankroll_curve_units": [
-        {
-          "week": "2024-w42",
-          "cumulative_units": 0.9524
-        },
-        {
-          "week": "2024-w43",
-          "cumulative_units": -0.0476
-        },
-        {
-          "week": "2024-w44",
-          "cumulative_units": -1.0476
-        },
-        {
-          "week": "2024-w51",
-          "cumulative_units": -0.0952
-        }
-      ],
-      "max_drawdown_units": 2.0,
-      "clv": "unavailable \u2014 see limitations"
-    },
-    "bt_ae29bb505c2c": {
-      "config": {
-        "test_season": 2025,
-        "horizon": "PREGAME",
-        "half_life_grid": [
-          180.0,
-          365.0
-        ],
-        "ridge_alpha_grid": [
-          10.0,
-          25.0,
-          60.0
-        ],
-        "ratings_k_grid": [
-          0.08,
-          0.12,
-          0.18
-        ],
-        "candidate_edge_grid": [
-          0.03,
-          0.05,
-          0.08
-        ],
-        "seed": 20260801,
-        "execution": {
-          "manual_delay_minutes": 3.0,
-          "price_deterioration_cents": 5,
-          "halfpoint_deterioration_prob": 0.25,
-          "no_fill_prob": 0.02,
-          "suspended_prob": 0.005,
-          "seed": 20260801
-        }
-      },
-      "status": "finished",
-      "statuses": {
-        "PASS": 867,
-        "WATCH": 169,
-        "RESEARCH_CANDIDATE": 104
-      },
-      "by_market": {
-        "SPREAD": {
-          "n": 52,
-          "pnl": 2.019217542582027,
-          "wins": 28,
-          "losses": 24,
-          "pushes": 0
-        },
-        "TOTAL": {
-          "n": 52,
-          "pnl": -2.129767418939417,
-          "wins": 26,
-          "losses": 26,
-          "pushes": 0
-        }
-      },
-      "bankroll_curve_units": [
-        {
-          "week": "2025-w35",
-          "cumulative_units": 2.6652
-        },
-        {
-          "week": "2025-w36",
-          "cumulative_units": 5.4136
-        },
-        {
-          "week": "2025-w37",
-          "cumulative_units": 8.0933
-        },
-        {
-          "week": "2025-w38",
-          "cumulative_units": 12.7984
-        },
-        {
-          "week": "2025-w39",
-          "cumulative_units": 10.6599
-        },
-        {
-          "week": "2025-w40",
-          "cumulative_units": 12.2671
-        },
-        {
-          "week": "2025-w41",
-          "cumulative_units": 14.0199
-        },
-        {
-          "week": "2025-w42",
-          "cumulative_units": 11.0199
-        },
-        {
-          "week": "2025-w43",
-          "cumulative_units": 7.9545
-        },
-        {
-          "week": "2025-w44",
-          "cumulative_units": 8.61
-        },
-        {
-          "week": "2025-w45",
-          "cumulative_units": 5.4715
-        },
-        {
-          "week": "2025-w46",
-          "cumulative_units": 4.4715
-        },
-        {
-          "week": "2025-w47",
-          "cumulative_units": 4.2897
-        },
-        {
-          "week": "2025-w48",
-          "cumulative_units": 5.1078
-        },
-        {
-          "week": "2025-w49",
-          "cumulative_units": 6.8351
-        },
-        {
-          "week": "2025-w50",
-          "cumulative_units": 4.4061
-        },
-        {
-          "week": "2025-w51",
-          "cumulative_units": 4.2276
-        },
-        {
-          "week": "2026-w00",
-          "cumulative_units": 1.1367
-        },
-        {
-          "week": "2026-w01",
-          "cumulative_units": 1.0458
-        },
-        {
-          "week": "2026-w02",
-          "cumulative_units": -0.0196
-        },
-        {
-          "week": "2026-w03",
-          "cumulative_units": 0.8895
-        },
-        {
-          "week": "2026-w05",
-          "cumulative_units": -0.1105
-        }
-      ],
-      "max_drawdown_units": 14.1305,
-      "clv": "unavailable \u2014 see limitations"
     }
   },
   "13_clv": {
@@ -948,7 +730,7 @@
         "status": "success",
         "schema_version": "nflverse-games-v1",
         "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
-        "ingested_at": "2026-08-01T12:54:03.341745+00:00"
+        "ingested_at": "2026-08-01T12:54:03.341745"
       },
       {
         "version_id": "20260801T125454000816Z-2e6f2dce",
@@ -961,7 +743,7 @@
         "status": "success",
         "schema_version": "nflverse-pbp-v1",
         "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
-        "ingested_at": "2026-08-01T12:54:54.000816+00:00"
+        "ingested_at": "2026-08-01T12:54:54.000816"
       },
       {
         "version_id": "20260801T125454362864Z-259532b0",
@@ -974,7 +756,7 @@
         "status": "success",
         "schema_version": "nflverse-rosters-v1",
         "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
-        "ingested_at": "2026-08-01T12:54:54.362864+00:00"
+        "ingested_at": "2026-08-01T12:54:54.362864"
       },
       {
         "version_id": "20260801T125456439013Z-60c30670",
@@ -987,7 +769,7 @@
         "status": "success",
         "schema_version": "nflverse-pbp-v1",
         "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
-        "ingested_at": "2026-08-01T12:54:56.439013+00:00"
+        "ingested_at": "2026-08-01T12:54:56.439013"
       },
       {
         "version_id": "20260801T125456780880Z-8aeee315",
@@ -1000,7 +782,7 @@
         "status": "success",
         "schema_version": "nflverse-rosters-v1",
         "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
-        "ingested_at": "2026-08-01T12:54:56.780880+00:00"
+        "ingested_at": "2026-08-01T12:54:56.780880"
       },
       {
         "version_id": "20260801T125458893309Z-73b7dbf6",
@@ -1013,7 +795,7 @@
         "status": "success",
         "schema_version": "nflverse-pbp-v1",
         "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
-        "ingested_at": "2026-08-01T12:54:58.893309+00:00"
+        "ingested_at": "2026-08-01T12:54:58.893309"
       },
       {
         "version_id": "20260801T125459241782Z-f511f31f",
@@ -1026,7 +808,7 @@
         "status": "success",
         "schema_version": "nflverse-rosters-v1",
         "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
-        "ingested_at": "2026-08-01T12:54:59.241782+00:00"
+        "ingested_at": "2026-08-01T12:54:59.241782"
       },
       {
         "version_id": "20260801T125501290940Z-333ad343",
@@ -1039,7 +821,7 @@
         "status": "success",
         "schema_version": "nflverse-pbp-v1",
         "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
-        "ingested_at": "2026-08-01T12:55:01.290940+00:00"
+        "ingested_at": "2026-08-01T12:55:01.290940"
       },
       {
         "version_id": "20260801T125501623136Z-62015270",
@@ -1052,7 +834,7 @@
         "status": "success",
         "schema_version": "nflverse-rosters-v1",
         "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
-        "ingested_at": "2026-08-01T12:55:01.623136+00:00"
+        "ingested_at": "2026-08-01T12:55:01.623136"
       },
       {
         "version_id": "20260801T125503680900Z-931121d8",
@@ -1065,7 +847,7 @@
         "status": "success",
         "schema_version": "nflverse-pbp-v1",
         "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
-        "ingested_at": "2026-08-01T12:55:03.680900+00:00"
+        "ingested_at": "2026-08-01T12:55:03.680900"
       },
       {
         "version_id": "20260801T125504032573Z-1d8e7987",
@@ -1078,7 +860,7 @@
         "status": "success",
         "schema_version": "nflverse-rosters-v1",
         "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
-        "ingested_at": "2026-08-01T12:55:04.032573+00:00"
+        "ingested_at": "2026-08-01T12:55:04.032573"
       },
       {
         "version_id": "20260801T125506074830Z-bd348473",
@@ -1091,7 +873,7 @@
         "status": "success",
         "schema_version": "nflverse-pbp-v1",
         "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
-        "ingested_at": "2026-08-01T12:55:06.074830+00:00"
+        "ingested_at": "2026-08-01T12:55:06.074830"
       },
       {
         "version_id": "20260801T125506425489Z-66dcb7d0",
@@ -1104,7 +886,7 @@
         "status": "success",
         "schema_version": "nflverse-rosters-v1",
         "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
-        "ingested_at": "2026-08-01T12:55:06.425489+00:00"
+        "ingested_at": "2026-08-01T12:55:06.425489"
       },
       {
         "version_id": "20260801T125508477222Z-6d432dd4",
@@ -1117,7 +899,7 @@
         "status": "success",
         "schema_version": "nflverse-pbp-v1",
         "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
-        "ingested_at": "2026-08-01T12:55:08.477222+00:00"
+        "ingested_at": "2026-08-01T12:55:08.477222"
       },
       {
         "version_id": "20260801T125508802999Z-bd38dbe7",
@@ -1130,7 +912,7 @@
         "status": "success",
         "schema_version": "nflverse-rosters-v1",
         "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
-        "ingested_at": "2026-08-01T12:55:08.802999+00:00"
+        "ingested_at": "2026-08-01T12:55:08.802999"
       },
       {
         "version_id": "20260801T125510991924Z-3730c4db",
@@ -1143,7 +925,7 @@
         "status": "success",
         "schema_version": "nflverse-pbp-v1",
         "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
-        "ingested_at": "2026-08-01T12:55:10.991924+00:00"
+        "ingested_at": "2026-08-01T12:55:10.991924"
       },
       {
         "version_id": "20260801T125511307667Z-902904a0",
@@ -1156,7 +938,7 @@
         "status": "success",
         "schema_version": "nflverse-rosters-v1",
         "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
-        "ingested_at": "2026-08-01T12:55:11.307667+00:00"
+        "ingested_at": "2026-08-01T12:55:11.307667"
       }
     ],
     "count": 17
@@ -1228,7 +1010,7 @@
       "feature_set": null,
       "calibration_version": null,
       "artifact_hash": "3e19da1e7477064770386c7cad99fc79f708a9fc15f1160a7cc5060d89b5d75e",
-      "code_commit": "6870a7f1c457ecc9807331bbb2e9668b24bc5194",
+      "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
       "dependency_lock_hash": "955525cd6ac3d1bf9de3dfbeb60396283a2f9338e209e5f9fcb3044890aec182",
       "train_window": "seasons<= 2023",
       "validation_window": "season 2024",
@@ -1241,7 +1023,7 @@
       "feature_set": null,
       "calibration_version": null,
       "artifact_hash": "01b46e5a889bd75c003d2f4444e8b320c235353f77c03c6119d1a00124de5eca",
-      "code_commit": "6870a7f1c457ecc9807331bbb2e9668b24bc5194",
+      "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
       "dependency_lock_hash": "955525cd6ac3d1bf9de3dfbeb60396283a2f9338e209e5f9fcb3044890aec182",
       "train_window": "seasons<= 2023",
       "validation_window": "season 2024",
@@ -1254,7 +1036,7 @@
       "feature_set": null,
       "calibration_version": null,
       "artifact_hash": "c28ea742a1cae9f7bb937c1e219df5f33f03e06e231690efb6e272a3ce98ffca",
-      "code_commit": "6870a7f1c457ecc9807331bbb2e9668b24bc5194",
+      "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
       "dependency_lock_hash": "955525cd6ac3d1bf9de3dfbeb60396283a2f9338e209e5f9fcb3044890aec182",
       "train_window": "seasons<= 2023",
       "validation_window": "season 2024",
@@ -1267,7 +1049,7 @@
       "feature_set": null,
       "calibration_version": null,
       "artifact_hash": "1ad358bf8464b07a2fe8ac6687f62c401bd42c299c4f30b31b32313970cdda8f",
-      "code_commit": "6870a7f1c457ecc9807331bbb2e9668b24bc5194",
+      "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
       "dependency_lock_hash": "955525cd6ac3d1bf9de3dfbeb60396283a2f9338e209e5f9fcb3044890aec182",
       "train_window": "seasons<= 2023",
       "validation_window": "season 2024",
@@ -1280,7 +1062,7 @@
       "feature_set": "nfl-core-v1",
       "calibration_version": null,
       "artifact_hash": "51ea1332f4edc6dbe310a96add4a4982c6d52b978a78a95e47a10a8865b8eddb",
-      "code_commit": "6870a7f1c457ecc9807331bbb2e9668b24bc5194",
+      "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
       "dependency_lock_hash": "955525cd6ac3d1bf9de3dfbeb60396283a2f9338e209e5f9fcb3044890aec182",
       "train_window": "seasons<= 2023",
       "validation_window": "season 2024",
@@ -1293,7 +1075,7 @@
       "feature_set": "nfl-core-v1",
       "calibration_version": "cal_beta_val2024",
       "artifact_hash": "7fd7c355acb3feb3700df62daba3f0d3346b02577e76d8abe6b51298f4047967",
-      "code_commit": "6870a7f1c457ecc9807331bbb2e9668b24bc5194",
+      "code_commit": "51144321127e22fb486f6fa4be87d45113445529",
       "dependency_lock_hash": "955525cd6ac3d1bf9de3dfbeb60396283a2f9338e209e5f9fcb3044890aec182",
       "train_window": "seasons<= 2023",
       "validation_window": "season 2024",
