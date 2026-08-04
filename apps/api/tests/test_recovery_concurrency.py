@@ -240,6 +240,61 @@ class TestConcurrentReconciliation:
         assert runs[0].job_outcome == Outcome.INTERRUPTED.value
         assert runs[0].status == "interrupted"
 
+    def test_a_second_pass_reconciles_nothing(self, factory) -> None:
+        """The sequential form of the same invariant, with no threads.
+
+        Deterministic on every platform, which the threaded test is not:
+        that one passed on Windows for weeks and failed on Linux CI with a
+        count of 2, because both workers read the RUNNING row before either
+        wrote. A guard that only holds under a lucky interleaving is not a
+        guard, so the property is pinned here where scheduling cannot hide
+        a regression.
+        """
+        _crash_after_commit(factory)
+        assert _sched(factory).reconcile_startup()["count"] == 1
+        assert _sched(factory).reconcile_startup()["count"] == 0
+
+    def test_a_worker_that_loses_the_race_claims_nothing(self, factory) -> None:
+        """The race itself, forced rather than hoped for.
+
+        A competing worker is made to win in the window between this
+        worker's SELECT and its UPDATE. With a conditional update the loser
+        matches zero rows and reports zero; with the original read-then-write
+        it would report one, and two workers would each believe they owned
+        the transition that decides who may open the recovery.
+        """
+        from fde_api.forward import scheduler as scheduler_mod
+
+        _crash_after_commit(factory)
+        original = scheduler_mod.apply_state
+        fired: list[int] = []
+
+        def steal(run, **kwargs):
+            # First call only: another worker completes the whole transition
+            # before ours reaches its UPDATE.
+            if not fired:
+                fired.append(1)
+                with factory() as other:
+                    row = other.scalars(select(ScheduledJobRun)).one()
+                    original(row, outcome=Outcome.INTERRUPTED)
+                    other.commit()
+            return original(run, **kwargs)
+
+        try:
+            scheduler_mod.apply_state = steal
+            result = _sched(factory).reconcile_startup()
+        finally:
+            scheduler_mod.apply_state = original
+
+        assert fired, "the competing worker never ran; the test proved nothing"
+        assert result["count"] == 0, result
+        assert result["interrupted_runs"] == []
+
+        runs = _runs(factory)
+        assert len(runs) == 1
+        assert runs[0].job_outcome == Outcome.INTERRUPTED.value
+        assert runs[0].status == "interrupted"
+
 
 class TestConcurrentAdministrativeOverride:
     def test_only_one_override_takes_effect(self, factory) -> None:

@@ -17,11 +17,11 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fde_api.db.forward_models import (
@@ -207,18 +207,75 @@ JOB_CATEGORIES: dict[str, JobCategory] = {
     "forward_evaluation": JobCategory.TERMINAL,
 }
 
-# Domain table each job writes, used to look for committed effects.
-_EFFECT_TABLES: dict[str, Any] = {
-    "schedule_refresh": ScheduleObservation,
-    "odds_capture": OddsQuote,
-    "weather_capture": WeatherForecastVintage,
-    "injury_reconciliation": InjuryObservation,
-    "consensus_build": ConsensusSnapshot,
-    "availability_computation": AvailabilityAssessment,
-    "prediction_vintage": ForwardPrediction,
-    "settlement": ForwardLedgerEntry,
-    "forward_evaluation": ForwardLedgerEntry,
+class Attribution(StrEnum):
+    """How effects are tied back to the run that produced them.
+
+    This is the crux of effect inspection: "are there rows in the table" is
+    not the question. The question is "are there rows THIS run wrote". The
+    original implementation counted the whole table for every job except
+    `odds_capture`, so any pre-existing row - one from a different slot, a
+    different game, or a different cohort - was read as this run's effects.
+    For an observation job that only mislabelled the reason. For a TERMINAL
+    job it changed behaviour: one unrelated settled ledger entry anywhere in
+    the database made every settlement recovery conclude
+    PRIOR_EFFECTS_NO_REPLAY, so settlement was skipped and silently never
+    happened.
+    """
+
+    REQUEST_ID = "REQUEST_ID"  # the row records the originating request
+    EXACT_SLOT = "EXACT_SLOT"  # the row's as-of instant IS the logical slot
+    SLOT_WINDOW = "SLOT_WINDOW"  # captured at some point during the slot
+    SCOPE_REQUIRED = "SCOPE_REQUIRED"  # not attributable without an explicit scope
+
+
+@dataclass(frozen=True)
+class EffectSource:
+    """Where a job's committed effects live and how to attribute them."""
+
+    table: Any
+    time_column: str | None
+    attribution: Attribution
+    request_column: str | None = None
+
+
+# Domain table each job writes, and the rule for attributing rows to a run.
+#
+# SNAPSHOT jobs stamp the cutoff itself, so attribution is exact equality.
+# OBSERVATION jobs stamp the moment of capture, which lands somewhere inside
+# the slot rather than on it, so attribution is a half-open window.
+# TERMINAL jobs are not attributable from a slot at all - a settlement is
+# about a game, not a time - so they demand an explicit scope and refuse to
+# guess without one.
+_EFFECT_SOURCES: dict[str, EffectSource] = {
+    "schedule_refresh": EffectSource(
+        ScheduleObservation, "observed_at", Attribution.SLOT_WINDOW),
+    "odds_capture": EffectSource(
+        OddsQuote, "observed_at", Attribution.REQUEST_ID, request_column="request_id"),
+    "weather_capture": EffectSource(
+        WeatherForecastVintage, "observed_at", Attribution.SLOT_WINDOW),
+    "injury_reconciliation": EffectSource(
+        InjuryObservation, "observed_at", Attribution.SLOT_WINDOW),
+    "consensus_build": EffectSource(
+        ConsensusSnapshot, "observed_at", Attribution.EXACT_SLOT),
+    "availability_computation": EffectSource(
+        AvailabilityAssessment, "as_of_at", Attribution.EXACT_SLOT),
+    "prediction_vintage": EffectSource(
+        ForwardPrediction, "as_of_at", Attribution.EXACT_SLOT),
+    "settlement": EffectSource(
+        ForwardLedgerEntry, "settled_at", Attribution.SCOPE_REQUIRED),
+    "forward_evaluation": EffectSource(
+        ForwardLedgerEntry, "settled_at", Attribution.SCOPE_REQUIRED),
 }
+
+# Backwards-compatible view for callers that only need the table.
+_EFFECT_TABLES: dict[str, Any] = {k: v.table for k, v in _EFFECT_SOURCES.items()}
+
+# How long after its logical slot an observation job's writes are still
+# attributable to that slot. Deliberately explicit rather than unbounded: a
+# window wide enough to swallow the next slot would attribute the successor's
+# rows to this run. The scheduler passes the job's own interval when it has
+# one, which is the tightest correct bound.
+DEFAULT_ATTRIBUTION_WINDOW = timedelta(hours=1)
 
 
 class RecoveryError(RuntimeError):
@@ -240,6 +297,11 @@ class EffectInspection:
     conflicts: list[str] = field(default_factory=list)
     recommended_decision: ReplayDecision = ReplayDecision.NO_PRIOR_EFFECTS_REPLAY
     reason: str = ""
+    # How the count was scoped. Recorded because a count is only meaningful
+    # alongside the rule that produced it, and an audit reading the lineage
+    # later must be able to tell a scoped count from a table census.
+    attribution: Attribution = Attribution.SCOPE_REQUIRED
+    attribution_detail: str = ""
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -254,6 +316,8 @@ class EffectInspection:
             "conflicts": self.conflicts,
             "recommended_decision": self.recommended_decision.value,
             "reason": self.reason,
+            "attribution": self.attribution.value,
+            "attribution_detail": self.attribution_detail,
         }
 
 
@@ -263,38 +327,103 @@ def inspect_prior_effects(
     job_kind: str,
     idempotency_key: str,
     logical_slot: datetime | None = None,
+    data_mode: str | None = None,
+    canonical_game_id: str | None = None,
+    attribution_window: timedelta | None = None,
 ) -> EffectInspection:
-    """Determine whether committed domain effects exist for a run.
+    """Determine whether committed domain effects exist FOR THIS RUN.
 
     Deliberately reads the DOMAIN, never the scheduler run status: a
     process that committed its write and then died leaves a `running` row
     and real records, and only the latter is evidence.
+
+    Every query is scoped by the run's attribution rule (see `Attribution`)
+    and, where the table carries one, by `data_mode`. Without that scoping
+    the count is a table census, and a census answers a different question
+    than the one recovery asks.
     """
     category = JOB_CATEGORIES.get(job_kind, JobCategory.OBSERVATION)
-    table = _EFFECT_TABLES.get(job_kind)
-    if table is None:
+    source = _EFFECT_SOURCES.get(job_kind)
+    if source is None:
         return EffectInspection(
             job_kind=job_kind, category=category, record_type="unknown",
             recommended_decision=ReplayDecision.NO_PRIOR_EFFECTS_REPLAY,
             reason="job writes no tracked domain table; replay is safe",
         )
 
+    table = source.table
     insp = EffectInspection(job_kind=job_kind, category=category, record_type=table.__tablename__)
     insp.idempotency_keys = [idempotency_key]
+    insp.attribution = source.attribution
 
-    # Odds quotes carry the originating request id, so effects are directly
-    # attributable to the run that wrote them.
-    if job_kind == "odds_capture":
-        ids = list(session.scalars(
-            select(OddsQuote.id).where(OddsQuote.request_id == idempotency_key)
-        ))
-        insp.record_identifiers = [str(i) for i in ids]
-        insp.actual_effect_count = len(ids)
-    else:
-        insp.actual_effect_count = int(
-            session.scalar(select(func.count()).select_from(table)) or 0
+    stmt = select(table.id)
+    scoped = False
+
+    if source.attribution is Attribution.REQUEST_ID and source.request_column:
+        stmt = stmt.where(getattr(table, source.request_column) == idempotency_key)
+        scoped = True
+        insp.attribution_detail = f"{source.request_column} == the chain's original key"
+
+    elif (
+        source.attribution is Attribution.EXACT_SLOT
+        and logical_slot is not None
+        and source.time_column
+    ):
+        stmt = stmt.where(getattr(table, source.time_column) == logical_slot)
+        scoped = True
+        insp.attribution_detail = f"{source.time_column} == {logical_slot.isoformat()}"
+
+    elif (
+        source.attribution is Attribution.SLOT_WINDOW
+        and logical_slot is not None
+        and source.time_column
+    ):
+        window = attribution_window or DEFAULT_ATTRIBUTION_WINDOW
+        col = getattr(table, source.time_column)
+        stmt = stmt.where(col >= logical_slot, col < logical_slot + window)
+        scoped = True
+        insp.attribution_detail = (
+            f"{source.time_column} in [{logical_slot.isoformat()}, +{window})"
         )
 
+    elif source.attribution is Attribution.SCOPE_REQUIRED:
+        if canonical_game_id is None:
+            # Refusing beats guessing. A terminal job's effects cannot be
+            # derived from a timestamp, and treating unrelated rows as this
+            # run's effects would silently skip a settlement.
+            insp.complete = None
+            insp.recommended_decision = ReplayDecision.MANUAL_REVIEW_REQUIRED
+            insp.reason = (
+                f"{job_kind} is a terminal job whose effects are attributable only by "
+                "game; no canonical_game_id was supplied, so prior effects cannot be "
+                "determined and a human must decide"
+            )
+            insp.attribution_detail = "no scope supplied"
+            return insp
+        stmt = stmt.where(table.canonical_game_id == canonical_game_id)
+        scoped = True
+        insp.attribution_detail = f"canonical_game_id == {canonical_game_id}"
+
+    if not scoped:
+        # Attribution was impossible (no slot on the predecessor row). For
+        # idempotent categories replaying is the safe answer; the reason
+        # records that the conclusion rests on absence of evidence.
+        insp.complete = False
+        insp.recommended_decision = ReplayDecision.NO_PRIOR_EFFECTS_REPLAY
+        insp.reason = (
+            "the predecessor carries no logical slot, so effects could not be "
+            "attributed; replaying an idempotent handler is the safe default"
+        )
+        insp.attribution_detail = "unattributable: no logical slot"
+        return insp
+
+    if data_mode is not None and hasattr(table, "data_mode"):
+        stmt = stmt.where(table.data_mode == data_mode)
+        insp.attribution_detail += f", data_mode == {data_mode}"
+
+    ids = list(session.scalars(stmt))
+    insp.record_identifiers = [str(i) for i in ids]
+    insp.actual_effect_count = len(ids)
     return _decide(insp)
 
 

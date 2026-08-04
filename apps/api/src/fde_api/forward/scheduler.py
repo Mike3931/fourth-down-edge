@@ -35,11 +35,14 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import StrEnum
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+
+if TYPE_CHECKING:
+    from sqlalchemy.engine import CursorResult
 
 from fde_api.db.forward_models import ScheduledJobRun
 from fde_api.forward.cohort import Cohort, ProviderMode
@@ -308,6 +311,7 @@ class Scheduler:
         """Mark runs orphaned by a crash, so they are never counted as
         finished and never silently re-execute under the same key."""
         reconciled: list[str] = []
+        now = self.clock.now()
         with self._session() as s:
             # Query the AUTHORITATIVE axis, and write through apply_state so
             # the compatibility column is projected rather than set by hand.
@@ -317,11 +321,56 @@ class Scheduler:
                 )
             ).all()
             for r in rows:
-                apply_state(r, outcome=Outcome.INTERRUPTED)
-                r.completed_at = self.clock.now()
-                r.reconciled_at = self.clock.now()
-                r.error_summary = "process terminated before completion; reconciled at startup"
-                reconciled.append(r.idempotency_key)
+                # SELECT-then-write is not atomic: several workers restarting
+                # together all see the same RUNNING row and all claim to have
+                # reconciled it. The row itself ends up correct (they write
+                # identical values), but each worker believes it owns the
+                # transition - and ownership is exactly what decides who may
+                # open the recovery. CI caught this as a count of 2 where the
+                # invariant is 1; it had passed locally for weeks because the
+                # threads happened to serialise.
+                #
+                # The transition is therefore a CONDITIONAL update guarded by
+                # the state it is transitioning FROM. Exactly one worker's
+                # UPDATE matches; the others match zero rows and report
+                # nothing reconciled. This is a single atomic statement on
+                # both SQLite and PostgreSQL - no advisory lock, no SELECT
+                # FOR UPDATE, and no dependence on isolation level.
+                #
+                # apply_state still owns the projection: it is applied to the
+                # in-memory object first, and the values it produced are what
+                # the guarded UPDATE writes, so `status` cannot drift from
+                # `job_outcome` through this path either.
+                # apply_state is applied to a TRANSIENT stand-in, never to
+                # the persistent row. Mutating `r` would mark it dirty, and
+                # the autoflush before the UPDATE would then write
+                # INTERRUPTED first - so the guard would match zero rows and
+                # every worker would report reconciling nothing.
+                projected = ScheduledJobRun(state_origin=r.state_origin)
+                apply_state(projected, outcome=Outcome.INTERRUPTED)
+                result = cast(
+                    "CursorResult[Any]",
+                    s.execute(
+                        update(ScheduledJobRun)
+                        .where(
+                            ScheduledJobRun.id == r.id,
+                            ScheduledJobRun.job_outcome == Outcome.RUNNING.value,
+                        )
+                        .values(
+                            job_outcome=projected.job_outcome,
+                            status=projected.status,
+                            state_origin=projected.state_origin,
+                            completed_at=now,
+                            reconciled_at=now,
+                            error_summary=(
+                                "process terminated before completion; reconciled at startup"
+                            ),
+                        )
+                        .execution_options(synchronize_session=False)
+                    ),
+                )
+                if result.rowcount == 1:
+                    reconciled.append(r.idempotency_key)
         log.info("startup reconciliation", extra={"interrupted": len(reconciled)})
         return {"interrupted_runs": reconciled, "count": len(reconciled)}
 
@@ -398,6 +447,7 @@ class Scheduler:
 
     def _plan_recovery(
         self, job: JobDefinition, key: str, *, reason: str,
+        params: dict[str, Any] | None = None,
         administrative_override: bool = False,
         override_operator: str | None = None,
         override_reason: str | None = None,
@@ -418,9 +468,22 @@ class Scheduler:
         )
 
         with self._session() as s:
+            # Chain membership is looked up through the LINEAGE columns, not
+            # by prefix. `idempotency_key LIKE 'key%'` matched anything that
+            # merely started with this key - and since a paramless key is a
+            # strict prefix of the same job/slot/cohort key WITH params
+            # (`...Z` vs `...Z:p<digest>`), a paramless run would adopt the
+            # chain of an unrelated parameterised one and "recover" it.
+            # `original_idempotency_key` is exactly the field that records
+            # chain identity, so match on it.
             prior = s.scalars(
                 select(ScheduledJobRun)
-                .where(ScheduledJobRun.idempotency_key.like(f"{key}%"))
+                .where(
+                    or_(
+                        ScheduledJobRun.original_idempotency_key == key,
+                        ScheduledJobRun.idempotency_key == key,
+                    )
+                )
                 # Order by recovery_sequence, not created_at: members of a
                 # chain can share a timestamp (frozen clock, or two recoveries
                 # inside the same second), and then created_at ordering is
@@ -458,11 +521,18 @@ class Scheduler:
             # off `latest.idempotency_key` would make the second recovery in a
             # chain conclude "nothing ever happened" and replay freely. Harmless
             # for idempotent observation jobs, wrong for terminal ones.
+            # Scope the inspection to THIS run: its cohort, its slot, and -
+            # for a terminal job - the game it settles. An unscoped count is
+            # a table census, and a census would report an unrelated ledger
+            # entry as this settlement's prior effect.
             inspection = inspect_prior_effects(
                 s,
                 job_kind=job.name,
                 idempotency_key=latest.original_idempotency_key or latest.idempotency_key,
                 logical_slot=latest.logical_slot or latest.scheduled_for,
+                data_mode=latest.data_mode,
+                canonical_game_id=(params or {}).get("canonical_game_id"),
+                attribution_window=job.interval,
             )
             try:
                 lineage = build_recovery_lineage(
@@ -527,7 +597,7 @@ class Scheduler:
 
         try:
             key, recovery_lineage = self._plan_recovery(
-                job, key, reason=recovery_reason,
+                job, key, reason=recovery_reason, params=params,
                 administrative_override=administrative_override,
                 override_operator=override_operator,
                 override_reason=override_reason,
