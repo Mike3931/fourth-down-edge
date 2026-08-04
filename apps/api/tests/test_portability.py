@@ -168,3 +168,35 @@ class TestPathsAreConstructedPortably:
                     ) and "\\n" not in v and "\\r" not in v and "\\t" not in v:
                         offenders.append(f"{p.relative_to(TESTS_DIR.parent)}:{node.lineno}: {v[:70]}")
         assert not offenders, "backslash paths in literals:\n" + "\n".join(offenders)
+
+
+class TestTestModulesImportPortably:
+    """A cross-test import must not assume `tests` is an importable package.
+
+    `test_migration_semantics.py` used `from tests.test_migration_upgrade
+    import ...`. That works where the repository root happens to be on
+    sys.path and fails on CI with ModuleNotFoundError. It went unnoticed for
+    a different reason worth recording: the Tests step had never actually
+    run on Linux, because the hardcoded interpreter path above killed an
+    earlier step and everything after it was skipped. Fixing the path
+    unmasked this.
+
+    `tests/` has no `__init__.py`, so pytest puts the directory itself on
+    sys.path and a plain module import is the portable form.
+    """
+
+    def test_no_test_imports_the_tests_package(self) -> None:
+        offenders: list[str] = []
+        for p in TESTS_DIR.glob("*.py"):
+            for node in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
+                if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("tests"):
+                    offenders.append(f"{p.name}:{node.lineno}: from {node.module} import ...")
+                if isinstance(node, ast.Import):
+                    for a in node.names:
+                        if a.name.startswith("tests"):
+                            offenders.append(f"{p.name}:{node.lineno}: import {a.name}")
+        assert not offenders, "package-qualified test imports:\n" + chr(10).join(offenders)
+
+    def test_tests_dir_is_not_a_package(self) -> None:
+        """If this ever becomes a package the rule above must be revisited."""
+        assert not (TESTS_DIR / "__init__.py").exists()

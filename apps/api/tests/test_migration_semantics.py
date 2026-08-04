@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import pytest
 from sqlalchemy import create_engine, text
-from tests.test_migration_upgrade import (
+
+from test_migration_upgrade import (
     CONSERVATIVE_ROWS,
     EXACT_ROWS,
     LEGACY_ROWS,
