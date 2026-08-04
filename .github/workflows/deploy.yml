@@ -100,8 +100,24 @@ jobs:
 
       # Network-marked tests download real provider data; they are excluded so
       # CI does not depend on an external service being up.
+      #
+      # pg_concurrency is excluded HERE and run as its own gate below. Not
+      # because it is optional, but so that a PostgreSQL race result is
+      # independently visible rather than buried in a 500-test total where a
+      # skip would look like a pass.
       - name: Tests
-        run: uv run pytest tests -m "not network"
+        run: uv run pytest tests -m "not network and not pg_concurrency"
+
+      # The dedicated PostgreSQL concurrency gate.
+      #
+      # These tests FAIL if FDE_DATABASE_URL is absent rather than falling
+      # back to SQLite. SQLite serialises writers at the file level, so a
+      # race that "passes" there proves nothing about PostgreSQL row locking
+      # - reporting that as verified would be worse than not running it.
+      # Each test asserts the dialect and uses genuinely independent
+      # connections released together from a barrier.
+      - name: PostgreSQL recovery-lineage concurrency gate
+        run: uv run pytest tests -m "pg_concurrency" -v -s
 
   dependencies:
     name: Dependency audit

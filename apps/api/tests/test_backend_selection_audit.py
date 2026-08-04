@@ -1,0 +1,232 @@
+"""Backend selection must be explicit, and PostgreSQL gates must not degrade.
+
+Two failure modes this guards against, both of which produce a GREEN result
+that means nothing:
+
+  1. A module named or reported as PostgreSQL concurrency quietly builds a
+     `sqlite://` engine. SQLite serialises writers at the file level, so the
+     race never happens and the suite passes.
+  2. A PostgreSQL fixture falls back to SQLite when `FDE_DATABASE_URL` is
+     unset, so a misconfigured CI job reports success without a server.
+
+Also pins §4: the legacy free-form `#recovery` suffix must never be
+generated again.
+"""
+
+from __future__ import annotations
+
+import ast
+import os
+from pathlib import Path
+
+import pytest
+
+TESTS_DIR = Path(__file__).resolve().parent
+SRC_DIR = TESTS_DIR.parent / "src"
+
+PG_MODULES = sorted(TESTS_DIR.glob("test_pg_*.py"))
+
+
+def _detector_lines(tree: ast.AST) -> set[int]:
+    """Lines where a literal is COMPARED against, not built from.
+
+    `"#recovery" in key` detects the legacy form; `f"{k}#recovery{n}"`
+    creates it. The rule is that nothing may CREATE it - a detector is how
+    historical rows stay readable. Membership and equality tests are
+    therefore exempt, and everything else is not.
+    """
+    out: set[int] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Compare):
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+                    out.add(sub.lineno)
+    return out
+
+
+def _docstring_nodes(tree: ast.AST) -> set[int]:
+    """Line numbers occupied by docstrings.
+
+    Both audits below match on source text, and a docstring that NAMES the
+    forbidden pattern in order to explain why it is forbidden is
+    documentation, not a defect. An audit that cannot tell those apart
+    produces false positives until someone deletes the explanation - or the
+    audit.
+    """
+    out: set[int] = set()
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Constant)
+            and isinstance(node.value.value, str)
+        ):
+            end = node.value.end_lineno or node.value.lineno
+            out.update(range(node.value.lineno, end + 1))
+    return out
+
+
+class TestPostgresModulesNeverBuildSqlite:
+    def test_there_is_at_least_one_postgres_module(self) -> None:
+        """Otherwise every assertion below is vacuously true."""
+        assert PG_MODULES, "no test_pg_*.py modules found"
+
+    @pytest.mark.parametrize("path", PG_MODULES, ids=lambda p: p.name)
+    def test_no_sqlite_url_is_constructed(self, path: Path) -> None:
+        """Parsed, not grepped: a `sqlite://` string literal anywhere in a
+        PostgreSQL module is a fallback waiting to happen."""
+        offenders: list[str] = []
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        exempt = _docstring_nodes(tree) | _detector_lines(tree)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                if node.lineno in exempt:
+                    continue
+                v = node.value
+                if "sqlite" in v.lower() and "://" in v:
+                    offenders.append(f"{path.name}:{node.lineno}: {v[:60]}")
+        assert not offenders, "sqlite URL in a PostgreSQL module:\n" + chr(10).join(offenders)
+
+    @pytest.mark.parametrize("path", PG_MODULES, ids=lambda p: p.name)
+    def test_the_module_asserts_its_dialect(self, path: Path) -> None:
+        src = path.read_text(encoding="utf-8")
+        assert 'dialect.name == "postgresql"' in src, (
+            f"{path.name} must assert the backend before racing on it"
+        )
+
+    @pytest.mark.parametrize("path", PG_MODULES, ids=lambda p: p.name)
+    def test_the_module_is_marked(self, path: Path) -> None:
+        src = path.read_text(encoding="utf-8")
+        assert "pg_concurrency" in src, f"{path.name} must carry the gate marker"
+
+
+class TestPostgresFixturesRefuseToFallBack:
+    def test_missing_url_raises_rather_than_defaulting(self, monkeypatch) -> None:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "pgconftest_probe", TESTS_DIR / "pgconftest.py"
+        )
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        monkeypatch.delenv("FDE_DATABASE_URL", raising=False)
+        with pytest.raises(mod.PostgresRequired, match="not set"):
+            mod.require_pg_url()
+
+    def test_a_non_postgres_url_is_refused(self, monkeypatch) -> None:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "pgconftest_probe2", TESTS_DIR / "pgconftest.py"
+        )
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        monkeypatch.setenv("FDE_DATABASE_URL", "sqlite:///" + os.devnull)
+        with pytest.raises(mod.PostgresRequired, match="not a PostgreSQL URL"):
+            mod.require_pg_url()
+
+    def test_credentials_are_redacted_in_messages(self, monkeypatch) -> None:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "pgconftest_probe3", TESTS_DIR / "pgconftest.py"
+        )
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        monkeypatch.setenv("FDE_DATABASE_URL", "mysql://user:hunter2@host/db")
+        with pytest.raises(mod.PostgresRequired) as e:
+            mod.require_pg_url()
+        assert "hunter2" not in str(e.value)
+        assert "***" in str(e.value)
+
+
+class TestLegacyRecoveryMechanismIsGone:
+    """§4: no production path may generate the free-form suffix."""
+
+    def test_no_source_file_generates_the_legacy_suffix(self) -> None:
+        offenders: list[str] = []
+        for p in SRC_DIR.rglob("*.py"):
+            if "__pycache__" in p.parts:
+                continue
+            tree = ast.parse(p.read_text(encoding="utf-8"))
+            exempt = _docstring_nodes(tree) | _detector_lines(tree)
+            for node in ast.walk(tree):
+                # A literal or f-string that BUILDS the suffix. A docstring
+                # that merely names it is the explanation of this rule.
+                if (
+                    isinstance(node, ast.Constant)
+                    and isinstance(node.value, str)
+                    and node.lineno not in exempt
+                    and "#recovery" in node.value
+                ):
+                    offenders.append(f"{p.name}:{node.lineno}")
+        assert not offenders, "legacy recovery suffix still generated:\n" + chr(10).join(offenders)
+
+    def test_the_typed_generator_is_used_by_the_scheduler(self) -> None:
+        src = (SRC_DIR / "fde_api" / "forward" / "scheduler.py").read_text(encoding="utf-8")
+        assert "build_recovery_key(" in src
+
+    def test_the_legacy_form_is_still_recognisable(self) -> None:
+        """Historical rows remain readable; they are just never created."""
+        from fde_api.forward.recovery import is_legacy_recovery_key
+
+        assert is_legacy_recovery_key("job:cohort:slot#recovery1")
+        assert not is_legacy_recovery_key("job:cohort:slot")
+
+
+class TestTypedRecoveryKey:
+    def test_sequence_zero_is_the_original_key_unchanged(self) -> None:
+        from fde_api.forward.recovery import build_recovery_key
+
+        key = build_recovery_key(
+            job_name="odds_capture", cohort="burn_in", logical_slot="2026-09-10T17:00:00+00:00",
+            root_run_id="run_a", sequence=0, original_key="odds_capture:burn_in:X",
+        )
+        assert key == "odds_capture:burn_in:X"
+
+    def test_a_recovery_key_round_trips(self) -> None:
+        from fde_api.forward.recovery import RecoveryKey, build_recovery_key
+
+        original = "odds_capture:burn_in:X"
+        key = build_recovery_key(
+            job_name="odds_capture", cohort="burn_in", logical_slot="s",
+            root_run_id="run_a", sequence=3, original_key=original,
+        )
+        parsed_original, root, seq = RecoveryKey.parse(key)
+        assert parsed_original == original
+        assert root == "run_a"
+        assert seq == 3
+
+    def test_sequences_produce_distinct_keys(self) -> None:
+        from fde_api.forward.recovery import build_recovery_key
+
+        keys = {
+            build_recovery_key(
+                job_name="j", cohort="c", logical_slot="s",
+                root_run_id="r", sequence=n, original_key="orig",
+            )
+            for n in range(4)
+        }
+        assert len(keys) == 4
+
+    def test_a_negative_sequence_is_refused(self) -> None:
+        from fde_api.forward.recovery import RecoveryError, build_recovery_key
+
+        with pytest.raises(RecoveryError, match="may not be negative"):
+            build_recovery_key(
+                job_name="j", cohort="c", logical_slot="s",
+                root_run_id="r", sequence=-1, original_key="orig",
+            )
+
+    def test_a_plain_key_parses_as_sequence_zero(self) -> None:
+        from fde_api.forward.recovery import RecoveryKey
+
+        original, root, seq = RecoveryKey.parse("job:cohort:20260910T170000Z")
+        assert original == "job:cohort:20260910T170000Z"
+        assert root is None
+        assert seq == 0

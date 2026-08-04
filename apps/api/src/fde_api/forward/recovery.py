@@ -36,6 +36,86 @@ from fde_api.db.forward_models import (
 )
 from fde_api.forward.state import Outcome, StateOrigin
 
+# --------------------------------------------------------------------------- #
+# Typed recovery keys
+# --------------------------------------------------------------------------- #
+
+# The separator is a control character deliberately: it cannot occur in a job
+# name, cohort, or ISO timestamp, so a parsed key can never be confused with
+# one that merely contains the literal text.
+_KEY_SEP = "|"
+_RECOVERY_MARKER = "recovery"
+
+
+@dataclass(frozen=True)
+class RecoveryKey:
+    """The authoritative identity of one attempt at a logical slot.
+
+    Replaces a free-form `f"{key}#recovery{n}"` suffix. That form was
+    unparseable - nothing could recover the root, slot or sequence from it
+    without string surgery, and any job name containing the marker would
+    have collided. Worse, it encouraged prefix matching (`LIKE 'key%'`),
+    which silently matches unrelated slots whose keys share a prefix.
+
+    Sequence 0 IS the original key, unchanged, so historical rows written
+    before this type existed remain readable and match exactly.
+    """
+
+    job_name: str
+    cohort: str
+    logical_slot: str
+    root_run_id: str
+    sequence: int
+    original_key: str
+
+    def render(self) -> str:
+        if self.sequence == 0:
+            return self.original_key
+        return _KEY_SEP.join([
+            self.original_key,
+            _RECOVERY_MARKER,
+            self.root_run_id,
+            str(self.sequence),
+        ])
+
+    @classmethod
+    def parse(cls, rendered: str) -> tuple[str, str | None, int]:
+        """Return (original_key, root_run_id, sequence).
+
+        A key with no recovery segment is sequence 0 and its own original.
+        """
+        parts = rendered.split(_KEY_SEP)
+        if len(parts) < 4 or parts[-3] != _RECOVERY_MARKER:
+            return rendered, None, 0
+        return _KEY_SEP.join(parts[:-3]), parts[-2], int(parts[-1])
+
+
+def build_recovery_key(
+    *,
+    job_name: str,
+    cohort: str,
+    logical_slot: str,
+    root_run_id: str,
+    sequence: int,
+    original_key: str,
+) -> str:
+    """Render the authoritative key for a recovery attempt."""
+    if sequence < 0:
+        raise RecoveryError(f"recovery sequence may not be negative, got {sequence}")
+    return RecoveryKey(
+        job_name=job_name,
+        cohort=cohort,
+        logical_slot=logical_slot,
+        root_run_id=root_run_id,
+        sequence=sequence,
+        original_key=original_key,
+    ).render()
+
+
+def is_legacy_recovery_key(rendered: str) -> bool:
+    """True for the old free-form suffix. Readable, never generated."""
+    return "#recovery" in rendered
+
 
 class ReplayDecision(StrEnum):
     """Authoritative. Free text may explain it but never replaces it."""

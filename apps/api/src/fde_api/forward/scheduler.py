@@ -42,6 +42,7 @@ from sqlalchemy.orm import Session
 from fde_api.db.forward_models import ScheduledJobRun
 from fde_api.forward.cohort import Cohort, ProviderMode
 from fde_api.forward.modes import DataMode
+from fde_api.forward.recovery import build_recovery_key
 from fde_api.forward.state import DomainState, Outcome, StateOrigin, apply_state
 from fde_api.util import current_code_commit, redact_secrets, utc_now
 
@@ -413,7 +414,19 @@ class Scheduler:
 
             root = latest.root_run_id or latest.id
             seq = (latest.recovery_sequence or 0) + 1
-            recovery_key = f"{key}#recovery{seq}"
+            slot_ts = latest.logical_slot or latest.scheduled_for
+            slot_repr = slot_ts.isoformat() if slot_ts else ""
+            # Typed key, not a free-form suffix. The old
+            # f"{key}#recovery{n}" form was unparseable and invited prefix
+            # matching; this one carries root and sequence explicitly.
+            recovery_key = build_recovery_key(
+                job_name=job.name,
+                cohort=self.cohort.value,
+                logical_slot=slot_repr,
+                root_run_id=root,
+                sequence=seq,
+                original_key=latest.original_idempotency_key or key,
+            )
 
             # Inspect using the CHAIN's stable key, not this attempt's key.
             # Domain rows are written under the original key; a recovery whose

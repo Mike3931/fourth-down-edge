@@ -87,6 +87,7 @@ addopts = "-q --strict-markers"
 markers = [
     "network: tests that download real provider data (deselect with '-m \"not network\"')",
     "postgres: tests that require a live PostgreSQL server (run in CI service container)",
+    "pg_concurrency: genuine multi-connection PostgreSQL race tests. Selected by a dedicated CI gate; they FAIL rather than fall back when FDE_DATABASE_URL is absent, because a race silently downgraded to SQLite would be reported as verified when SQLite had serialised it away.",
 ]
 
 [tool.coverage.run]
