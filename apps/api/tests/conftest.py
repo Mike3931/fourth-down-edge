@@ -12,13 +12,57 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from hypothesis import settings
-from sqlalchemy import create_engine, event
+from sqlalchemy import String, create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
 from fde_api.db.models import Base, Game, OddsSnapshot, Team, TeamGameStat
 
 TEAMS = ["AAA", "BBB", "CCC", "DDD", "EEE", "FFF", "GGG", "HHH"]
 STRENGTH = dict(zip(TEAMS, [6, 4, 2, 1, -1, -2, -4, -6], strict=True))
+
+
+# --------------------------------------------------------------------------- #
+# SQLite must not be more permissive than PostgreSQL
+# --------------------------------------------------------------------------- #
+# SQLite ignores VARCHAR(n) entirely: it stores whatever it is handed. So a
+# value that PostgreSQL rejects with StringDataRightTruncation is written
+# without complaint locally, and the whole suite reports green while the
+# real database would refuse the insert. That is not hypothetical - an
+# unbounded idempotency key passed 539 SQLite tests and failed the first
+# time it met PostgreSQL in CI.
+#
+# This listener closes the gap for every ORM write in the suite rather than
+# for the one column that happened to break. It is a TEST-ONLY control:
+# production behaviour is whatever the real backend enforces, and the point
+# is that the fast local suite now enforces the same thing.
+#
+# Coverage limit worth stating: mapper events see ORM inserts and updates,
+# not Core `insert()` statements or raw SQL. Those still depend on the
+# PostgreSQL gate.
+
+
+class StringWidthExceeded(AssertionError):
+    """An ORM write would overflow a declared VARCHAR width."""
+
+
+def _enforce_string_widths(mapper, _connection, target) -> None:
+    for attr in mapper.column_attrs:
+        col = attr.columns[0]
+        limit = getattr(col.type, "length", None)
+        if not limit or not isinstance(col.type, String):
+            continue
+        value = getattr(target, attr.key, None)
+        if isinstance(value, str) and len(value) > limit:
+            raise StringWidthExceeded(
+                f"{mapper.local_table.name}.{col.name} is VARCHAR({limit}) but the "
+                f"value is {len(value)} characters. SQLite would store this; "
+                f"PostgreSQL rejects it with StringDataRightTruncation. "
+                f"Value begins: {value[:60]!r}"
+            )
+
+
+event.listen(Base, "before_insert", _enforce_string_widths, propagate=True)
+event.listen(Base, "before_update", _enforce_string_widths, propagate=True)
 
 
 @pytest.fixture()

@@ -150,6 +150,25 @@ def _race(fn, n: int = WORKERS) -> list[Any]:
     return out
 
 
+def _outcomes(results: list[Any]) -> list[dict]:
+    """Assert every worker returned, and surface the real failure if not.
+
+    `_race` captures worker exceptions into the result list so one thread
+    cannot take the process down. That makes it possible to index a result
+    that is actually an exception - `r["status"]` on a DataError raised
+    `TypeError: 'DataError' object is not subscriptable`, which buried the
+    genuine PostgreSQL error under a test-harness one. Every test funnels
+    through here so the underlying exception is always what gets reported.
+    """
+    failures = [r for r in results if isinstance(r, BaseException)]
+    if failures:
+        detail = chr(10).join(f"  worker: {type(f).__name__}: {f}" for f in failures)
+        raise AssertionError(f"{len(failures)}/{len(results)} workers raised:{chr(10)}{detail}")
+    missing = [i for i, r in enumerate(results) if r is None]
+    assert not missing, f"workers {missing} never produced a result"
+    return list(results)
+
+
 def _runs(factory) -> list[ScheduledJobRun]:
     with factory() as s:
         rows = list(s.scalars(select(ScheduledJobRun).order_by(ScheduledJobRun.recovery_sequence)))
@@ -201,10 +220,7 @@ class TestInitialRunRace:
     def test_exactly_one_active_run_and_no_duplicate_effects(self, factory) -> None:
         results = _race(lambda i: _sched(factory).run_job(
             "odds_capture", slot=NOW, params={"fixture_payload": _payload()}))
-        errors = [r for r in results if isinstance(r, Exception)]
-        assert not errors, errors
-
-        statuses = [r["status"] for r in results]
+        statuses = [r["status"] for r in _outcomes(results)]
         assert statuses.count("finished") == 1, statuses
         assert statuses.count("skipped") == WORKERS - 1, statuses
         assert len(_runs(factory)) == 1
@@ -212,7 +228,7 @@ class TestInitialRunRace:
     def test_losers_receive_a_typed_skip(self, factory) -> None:
         results = _race(lambda i: _sched(factory).run_job(
             "odds_capture", slot=NOW, params={"fixture_payload": _payload()}))
-        for r in results:
+        for r in _outcomes(results):
             assert r["status"] in {"finished", "skipped", "refused"}, r["status"]
 
     def test_only_one_worker_wrote_domain_effects(self, factory) -> None:
@@ -235,8 +251,7 @@ class TestRecoveryRace:
     def test_exactly_one_recovery_branch(self, factory) -> None:
         written = _crash_after_commit(factory)
         results = _race(self._restart(factory))
-        errors = [r for r in results if isinstance(r, Exception)]
-        assert not errors, errors
+        _outcomes(results)
 
         runs = _runs(factory)
         recoveries = [r for r in runs if (r.recovery_sequence or 0) > 0]
@@ -278,8 +293,7 @@ class TestAdministrativeRecoveryRace:
             )
 
         results = _race(force)
-        errors = [r for r in results if isinstance(r, Exception)]
-        assert not errors, errors
+        _outcomes(results)
 
         overrides = [r for r in _runs(factory) if r.administrative_override]
         assert len(overrides) <= 1, [r.override_operator for r in overrides]
@@ -307,8 +321,7 @@ class TestInitialVersusRecoveryRace:
             )
 
         results = _race(go)
-        errors = [r for r in results if isinstance(r, Exception)]
-        assert not errors, errors
+        _outcomes(results)
 
         runs = _runs(factory)
         successors = [r for r in runs if (r.recovery_sequence or 0) == 1]

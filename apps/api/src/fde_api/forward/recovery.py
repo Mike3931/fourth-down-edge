@@ -15,6 +15,7 @@ time, so a chain is a line, never a tree.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -45,6 +46,49 @@ from fde_api.forward.state import Outcome, StateOrigin
 # one that merely contains the literal text.
 _KEY_SEP = "|"
 _RECOVERY_MARKER = "recovery"
+
+# --- the bound ------------------------------------------------------------ #
+# `scheduled_job_runs.idempotency_key` is VARCHAR(160) and `root_run_id` is
+# VARCHAR(64). SQLite does not enforce VARCHAR length; PostgreSQL does, and
+# rejects the insert with StringDataRightTruncation. So an unbounded key
+# generator passes the entire SQLite suite and fails against the real
+# database - which is precisely what happened: the params dict was inlined
+# into the key, and a fixture odds payload overflowed the column.
+#
+# The bound is therefore arithmetic rather than assumed. A base key is
+# capped so that the WORST-CASE recovery suffix still fits, which makes
+# every key in a chain fit by construction rather than by luck.
+IDEMPOTENCY_KEY_MAX = 160
+_RUN_ID_MAX = 64
+_SEQUENCE_DIGITS = 6
+_DIGEST_CHARS = 16
+# The truncation marker must not be _KEY_SEP, or a bounded base key would
+# parse as though it carried a recovery segment.
+_TRUNCATION_MARKER = "~"
+
+# "|recovery|" + root_run_id + "|" + sequence
+RECOVERY_SUFFIX_MAX = (
+    2 * len(_KEY_SEP) + len(_RECOVERY_MARKER) + _RUN_ID_MAX + len(_KEY_SEP) + _SEQUENCE_DIGITS
+)
+BASE_KEY_MAX = IDEMPOTENCY_KEY_MAX - RECOVERY_SUFFIX_MAX
+
+
+def bound_key(text: str, limit: int = BASE_KEY_MAX) -> str:
+    """Cap a key at `limit` characters without losing distinctness.
+
+    Short keys - which is every key the scheduler generates in practice -
+    pass through byte-for-byte, so historical rows keep matching. Only an
+    over-long key is rewritten, and it is rewritten deterministically: a
+    readable prefix plus a digest of the WHOLE input, so two different
+    over-long keys never collapse onto one another.
+    """
+    if len(text) <= limit:
+        return text
+    keep = limit - _DIGEST_CHARS - len(_TRUNCATION_MARKER)
+    if keep < 1:
+        raise RecoveryError(f"key limit {limit} is too small to bound a key distinctly")
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:_DIGEST_CHARS]
+    return f"{text[:keep]}{_TRUNCATION_MARKER}{digest}"
 
 
 @dataclass(frozen=True)
@@ -99,10 +143,20 @@ def build_recovery_key(
     sequence: int,
     original_key: str,
 ) -> str:
-    """Render the authoritative key for a recovery attempt."""
+    """Render the authoritative key for a recovery attempt.
+
+    Refuses rather than truncates when the result would not fit the column.
+    Truncating here would silently merge two distinct attempts onto one
+    unique key, which is worse than a failed insert: the second attempt
+    would be treated as already done. Given `bound_key` caps the base key at
+    `BASE_KEY_MAX`, the refusal is unreachable for scheduler-generated keys
+    and only fires on a hand-supplied original.
+    """
     if sequence < 0:
         raise RecoveryError(f"recovery sequence may not be negative, got {sequence}")
-    return RecoveryKey(
+    if len(str(sequence)) > _SEQUENCE_DIGITS:
+        raise RecoveryError(f"recovery sequence {sequence} exceeds {_SEQUENCE_DIGITS} digits")
+    rendered = RecoveryKey(
         job_name=job_name,
         cohort=cohort,
         logical_slot=logical_slot,
@@ -110,6 +164,12 @@ def build_recovery_key(
         sequence=sequence,
         original_key=original_key,
     ).render()
+    if len(rendered) > IDEMPOTENCY_KEY_MAX:
+        raise RecoveryError(
+            f"recovery key would be {len(rendered)} characters, exceeding the "
+            f"{IDEMPOTENCY_KEY_MAX}-character column; the base key was not bounded"
+        )
+    return rendered
 
 
 def is_legacy_recovery_key(rendered: str) -> bool:

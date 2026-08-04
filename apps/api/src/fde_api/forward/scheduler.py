@@ -24,6 +24,8 @@ Design constraints that shaped this:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import random
 import time
@@ -42,7 +44,7 @@ from sqlalchemy.orm import Session
 from fde_api.db.forward_models import ScheduledJobRun
 from fde_api.forward.cohort import Cohort, ProviderMode
 from fde_api.forward.modes import DataMode
-from fde_api.forward.recovery import build_recovery_key
+from fde_api.forward.recovery import bound_key, build_recovery_key
 from fde_api.forward.state import DomainState, Outcome, StateOrigin, apply_state
 from fde_api.util import current_code_commit, redact_secrets, utc_now
 
@@ -195,13 +197,35 @@ def slot_for(interval: timedelta, now: datetime) -> datetime:
     return epoch + timedelta(seconds=(elapsed // seconds) * seconds)
 
 
+# scheduled_job_runs.idempotency_key is VARCHAR(160). A recovery key adds a
+# bounded suffix to it, so the generated portion has to stay well inside
+# that. The params digest is what makes the bound guaranteed rather than
+# hoped for.
+_PARAMS_DIGEST_CHARS = 16
+
+
 def make_idempotency_key(
     *, job_name: str, slot: datetime, cohort: Cohort, params: dict[str, Any] | None = None
 ) -> str:
+    """A BOUNDED key for (job, cohort, logical slot, params).
+
+    The params portion is a digest, not the params themselves. Inlining
+    them produced a key as long as the payload - a fixture odds payload ran
+    to several hundred characters - which SQLite silently accepted because
+    it does not enforce VARCHAR length, and PostgreSQL rejected outright
+    with StringDataRightTruncation. Every SQLite test passed while the real
+    database would have refused the insert.
+
+    The digest is over a canonical JSON encoding with sorted keys, so the
+    same params always produce the same key regardless of dict ordering,
+    which is what idempotency depends on.
+    """
     suffix = ""
     if params:
-        suffix = ":" + ",".join(f"{k}={params[k]}" for k in sorted(params))
-    return f"{job_name}:{cohort.value}:{slot.strftime('%Y%m%dT%H%M%SZ')}{suffix}"
+        canonical = json.dumps(params, sort_keys=True, default=str, separators=(",", ":"))
+        digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:_PARAMS_DIGEST_CHARS]
+        suffix = f":p{digest}"
+    return bound_key(f"{job_name}:{cohort.value}:{slot.strftime('%Y%m%dT%H%M%SZ')}{suffix}")
 
 
 class Scheduler:
