@@ -166,6 +166,25 @@ def record_price_observation(
                 f"{prior.superseded_by_id}; correct the current row instead"
             )
 
+    # An identical price for the same selection at the same observed
+    # instant is ONE observation, however many times it is submitted. A
+    # correction is explicit and takes the branch above; this only
+    # collapses exact repeats.
+    if correction_of_id is None:
+        duplicate = session.scalars(
+            select(ManualBookPriceEntry).where(
+                ManualBookPriceEntry.canonical_game_id == obs.canonical_game_id,
+                ManualBookPriceEntry.market == obs.market,
+                ManualBookPriceEntry.selection == obs.selection,
+                ManualBookPriceEntry.cohort == obs.cohort.value,
+                ManualBookPriceEntry.observed_at == obs.observed_at,
+                ManualBookPriceEntry.american == obs.american,
+                ManualBookPriceEntry.superseded_by_id.is_(None),
+            )
+        ).first()
+        if duplicate is not None and duplicate.line == obs.line:
+            return duplicate
+
     entry = ManualBookPriceEntry(
         id=f"px_{uuid.uuid4().hex[:20]}",
         data_mode=obs.data_mode.value,

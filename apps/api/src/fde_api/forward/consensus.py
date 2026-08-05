@@ -237,6 +237,46 @@ def build_consensus(
         # so rows written before closing_captures existed stay readable.
         observed_at=as_of_at,
     )
+    # Idempotent at the DOMAIN level, not only behind the scheduler's key.
+    #
+    # This used to append unconditionally. The scheduler never noticed
+    # because its idempotency key stops the handler running twice for a
+    # slot - but any other caller, including the direct-service chain,
+    # produced a second snapshot for the same instant with identical
+    # content. That is a duplicate observation of one moment, and it makes
+    # a vintage's lineage point at a different row on every rerun even
+    # though nothing about the market changed.
+    #
+    # Identity is (game, market, cohort, as_of instant). A snapshot already
+    # there with the same content is returned as-is; one with DIFFERENT
+    # content at the same instant is a real disagreement and is left to the
+    # caller rather than silently reconciled.
+    existing = session.scalars(
+        select(ConsensusSnapshot).where(
+            ConsensusSnapshot.canonical_game_id == canonical_game_id,
+            ConsensusSnapshot.market == market,
+            ConsensusSnapshot.data_mode == data_mode.value,
+            ConsensusSnapshot.observed_at == as_of_at,
+        )
+    ).first()
+    if existing is not None:
+        same = (
+            existing.median_line == snap.median_line
+            and existing.home_price_american == snap.home_price_american
+            and existing.away_price_american == snap.away_price_american
+            and existing.over_price_american == snap.over_price_american
+            and existing.under_price_american == snap.under_price_american
+            and existing.eligible_books == snap.eligible_books
+            and existing.method_version == snap.method_version
+        )
+        if same:
+            rep.reasons.append("consensus for this instant already exists; unchanged")
+            return existing, rep
+        rep.reasons.append(
+            "a DIFFERENT consensus already exists for this instant; the new one is "
+            "recorded alongside it rather than replacing it"
+        )
+
     session.add(snap)
     session.flush()
     return snap, rep

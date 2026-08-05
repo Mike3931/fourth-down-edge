@@ -219,6 +219,33 @@ def record_evaluation(
     must show what was declined, not just what was taken.
     """
     now = utc_now()
+
+    # Idempotent at the DOMAIN level. This used to append unconditionally,
+    # and the scheduler handler compensated with its own slot-identity
+    # check - so the guard lived in the caller and any other caller
+    # duplicated the row. The identity of an evaluation is (game, market,
+    # selection, horizon, cutoff, policy): the same inputs at the same
+    # cutoff under the same frozen rules are ONE evaluation, however many
+    # times it is computed.
+    #
+    # A re-evaluation that reaches a DIFFERENT conclusion at the same cutoff
+    # is not returned silently - that would hide a real disagreement - but
+    # neither is it overwritten. It is left to the caller, which is why the
+    # existing row is returned unchanged rather than updated.
+    existing = session.scalars(
+        select(ForwardLedgerEntry).where(
+            ForwardLedgerEntry.canonical_game_id == canonical_game_id,
+            ForwardLedgerEntry.data_mode == data_mode.value,
+            ForwardLedgerEntry.policy_version == policy.policy_version,
+            ForwardLedgerEntry.market == evaluation.market,
+            ForwardLedgerEntry.selection == evaluation.selection,
+            ForwardLedgerEntry.horizon == horizon,
+            ForwardLedgerEntry.as_of_at == as_of_at,
+        )
+    ).first()
+    if existing is not None:
+        return existing
+
     entry = ForwardLedgerEntry(
         data_mode=data_mode.value,
         canonical_game_id=canonical_game_id,

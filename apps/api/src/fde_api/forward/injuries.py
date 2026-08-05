@@ -280,6 +280,20 @@ def assess_player(
         as_of_at=as_of_at,
         created_at=utc_now(),
     )
+    # One assessment per (game, player, cutoff, cohort). Recomputing the
+    # same cutoff is not a new fact about the player, and appending would
+    # make a rerun of any caller look like new information.
+    existing = session.scalars(
+        select(AvailabilityAssessment).where(
+            AvailabilityAssessment.canonical_game_id == canonical_game_id,
+            AvailabilityAssessment.player_id == player_id,
+            AvailabilityAssessment.data_mode == data_mode.value,
+            AvailabilityAssessment.as_of_at == as_of_at,
+        )
+    ).first()
+    if existing is not None:
+        return existing
+
     session.add(assessment)
     session.flush()
     return assessment
