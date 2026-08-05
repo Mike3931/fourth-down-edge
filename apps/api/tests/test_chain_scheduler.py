@@ -18,12 +18,20 @@ research-only; the properties under test are structural.
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import datetime, timedelta
 
 import pytest
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import select
 
+from chainkit import (
+    DATA_MODE,
+    GAME,
+    KICK,
+    REQUIRED_SEQUENCE,
+    SchedulerChain,
+    drive,
+    prices,
+)
 from fde_api.db.forward_models import (
     ForwardLedgerEntry,
     ForwardPrediction,
@@ -31,7 +39,6 @@ from fde_api.db.forward_models import (
     ScheduledJobRun,
     ScheduleObservation,
 )
-from fde_api.db.models import Base
 from fde_api.forward.chain import (
     CHAIN_ORDER,
     CONDITIONALLY_ABSENT,
@@ -42,252 +49,8 @@ from fde_api.forward.chain import (
     reconcile_chain,
 )
 from fde_api.forward.cohort import Cohort, ProviderMode
-from fde_api.forward.handlers import register_all
 from fde_api.forward.modes import DataMode
-from fde_api.forward.policy import build_policy_draft, freeze_policy
-from fde_api.forward.schedule import ingest_schedule
-from fde_api.forward.scheduler import FrozenClock, Scheduler
 from fde_api.forward.state import Outcome
-from fde_api.forward.venues import seed_venues
-
-# A deterministic U.S. outdoor game at a governed venue.
-KICK = datetime(2026, 9, 13, 17, 0, tzinfo=UTC)
-GAME = "2026_02_KC_BUF"
-DATA_MODE = DataMode.DEMO  # fixture cohort never claims LIVE_RESEARCH
-
-HEADER = (
-    "game_id,season,game_type,week,gameday,weekday,gametime,away_team,away_score,home_team,"
-    "home_score,location,result,total,overtime,old_game_id,gsis,nfl_detail_id,pfr,pff,espn,ftn,"
-    "away_rest,home_rest,away_moneyline,home_moneyline,spread_line,away_spread_odds,"
-    "home_spread_odds,total_line,under_odds,over_odds,div_game,roof,surface,temp,wind,"
-    "away_qb_id,home_qb_id,away_qb_name,home_qb_name,away_coach,home_coach,referee,stadium_id,stadium"
-)
-
-
-def _csv(*, status_fields: dict[str, str] | None = None) -> bytes:
-    base = dict.fromkeys(HEADER.split(","), "")
-    base.update({
-        "game_id": GAME, "season": "2026", "game_type": "REG", "week": "2",
-        "gameday": "2026-09-13", "gametime": "13:00", "away_team": "KC", "home_team": "BUF",
-        "location": "Home", "div_game": "0", "roof": "outdoors", "surface": "a_turf",
-        "stadium_id": "BUF00", "stadium": "Highmark Stadium", "away_rest": "7", "home_rest": "7",
-        "home_qb_name": "Josh Allen", "away_qb_name": "Patrick Mahomes",
-    })
-    base.update(status_fields or {})
-    return ("\n".join([HEADER, ",".join(base[k] for k in HEADER.split(","))]) + "\n").encode()
-
-
-def _payload(ts: datetime, *, point: float = -2.5) -> list[dict]:
-    """Three eligible books, so consensus has something to agree about."""
-
-    def book(key: str, adj: float) -> dict:
-        return {"key": key, "last_update": ts.isoformat(), "markets": [
-            {"key": "spreads", "outcomes": [
-                {"name": "Buffalo Bills", "price": -110, "point": point + adj},
-                {"name": "Kansas City Chiefs", "price": -110, "point": -(point + adj)}]},
-            {"key": "totals", "outcomes": [
-                {"name": "Over", "price": -110, "point": 47.5},
-                {"name": "Under", "price": -110, "point": 47.5}]}]}
-
-    return [{"id": "evt1", "commence_time": KICK.isoformat(),
-             "home_team": "Buffalo Bills", "away_team": "Kansas City Chiefs",
-             "bookmakers": [book("draftkings", 0.0), book("fanduel", 0.5),
-                            book("betmgm", -0.5)]}]
-
-
-def _prices(observed_at: datetime, *, american: int = -110) -> list[dict]:
-    """Prices a person typed in. Nothing is fetched; no book is contacted."""
-    return [
-        {"canonical_game_id": GAME, "market": "SPREAD", "selection": "HOME",
-         "line": -3.0, "american": american, "observed_at": observed_at,
-         "user_id": "fixture-operator", "source": "fixture_price", "confirmed": True},
-        {"canonical_game_id": GAME, "market": "TOTAL", "selection": "OVER",
-         "line": 47.5, "american": american, "observed_at": observed_at,
-         "user_id": "fixture-operator", "source": "fixture_price", "confirmed": True},
-    ]
-
-
-class FixtureNws:
-    """A deterministic stand-in for the NWS client.
-
-    Returns the same forecast every time so the vintage is stable, and its
-    presence is what tells `weather_capture` it is running against a fixture
-    rather than reaching out to weather.gov. Nothing here opens a socket.
-    """
-
-    def __init__(self, *, temp_f: int = 62, wind: str = "8 mph") -> None:
-        self.temp_f = temp_f
-        self.wind = wind
-
-    def resolve_grid(self, lat: float, lon: float) -> dict:
-        return {"office": "BUF", "grid_x": 10, "grid_y": 20,
-                "forecast_url": "fixture://forecast"}
-
-    def fetch_forecast(self, url: str) -> tuple[dict, bytes]:
-        body = {"properties": {"periods": [{
-            "startTime": (KICK - timedelta(hours=1)).isoformat(),
-            "endTime": (KICK + timedelta(hours=3)).isoformat(),
-            "temperature": self.temp_f, "temperatureUnit": "F",
-            "windSpeed": self.wind, "probabilityOfPrecipitation": {"value": 10},
-            "relativeHumidity": {"value": 55},
-            "shortForecast": "Partly Cloudy",
-            "detailedForecast": "Partly cloudy with light wind.",
-        }]}}
-        raw = repr(sorted(body["properties"]["periods"][0].items())).encode()
-        return body, raw
-
-
-def _seed_injuries(factory, *, observed_at: datetime) -> None:
-    """A resolved starting quarterback and one listed player.
-
-    Injury entry is manual by design, so the chain needs observations to
-    exist before `injury_reconciliation` and `availability_computation` have
-    anything to reconcile or assess.
-    """
-    from fde_api.forward.injuries import SourceCategory, record_injury_observation
-
-    with factory() as s:
-        for team, player, designation in (
-            ("BUF", "BUF_QB_ALLEN", None),
-            ("KC", "KC_QB_MAHOMES", None),
-            ("BUF", "BUF_WR_DIGGS", "QUESTIONABLE"),
-        ):
-            record_injury_observation(
-                s,
-                canonical_game_id=GAME,
-                team_id=team,
-                player_id=player,
-                report_date="2026-09-11",
-                observed_at=observed_at,
-                source_category=SourceCategory.OFFICIAL_VERIFIED,
-                practice_status="FULL" if designation is None else "LIMITED",
-                game_designation=designation,
-                body_part=None if designation is None else "hamstring",
-                source_reference="fixture injury report",
-                data_mode=DATA_MODE,
-                now=observed_at,
-            )
-        s.commit()
-
-
-@pytest.fixture()
-def factory(tmp_path, monkeypatch):
-    from fde_api.config import settings
-
-    monkeypatch.setattr(settings, "data_dir", tmp_path)
-    engine = create_engine("sqlite://", future=True)
-    Base.metadata.create_all(engine)
-    f = sessionmaker(bind=engine, future=True)
-    with f() as s:
-        seed_venues(s)
-        freeze_policy(s, build_policy_draft(policy_version="ftp-2026-v1",
-                                            start=date(2026, 9, 1), end=date(2027, 2, 28)))
-        ingest_schedule(s, _csv(), season=2026, observed_at=KICK - timedelta(days=30),
-                        data_mode=DATA_MODE)
-        s.commit()
-    return f
-
-
-class SchedulerChain:
-    """Drives one game forward through scheduled handlers only."""
-
-    def __init__(self, factory) -> None:
-        self.factory = factory
-        self.clock = FrozenClock(KICK - timedelta(days=7))
-        self.sched = Scheduler(
-            factory, clock=self.clock,
-            cohort=Cohort.FIXTURE, provider_mode=ProviderMode.FIXTURE,
-            policy_version="ftp-2026-v1", data_mode=DATA_MODE,
-        )
-        register_all(self.sched)
-        self.log: list[tuple[str, str]] = []
-
-    def at(self, when: datetime) -> SchedulerChain:
-        self.clock.set(when)
-        return self
-
-    def run(self, job: str, **params) -> dict:
-        r = self.sched.run_job(job, slot=self.clock.now(), params=params or None)
-        self.log.append((job, r["status"]))
-        return r
-
-    def statuses(self) -> dict[str, str]:
-        return dict(self.log)
-
-    def session(self):
-        return self.factory()
-
-
-# The §14 sequence, in logical order. Named so a failure says which step.
-REQUIRED_SEQUENCE = (
-    "schedule_refresh",
-    "odds_capture",
-    "consensus_build",
-    "weather_capture",
-    "injury_reconciliation",
-    "availability_computation",
-    "feature_snapshot",
-    "prediction_vintage",
-    "price_observation",
-    "price_evaluation",
-    "closing_capture",
-    "result_ingestion",
-    "settlement",
-    "forward_evaluation",
-    "data_health_reconciliation",
-)
-
-
-def _drive(chain: SchedulerChain, *, seed_injuries: bool = True) -> None:
-    """The full week, in the order it actually becomes knowable.
-
-    `seed_injuries` is False on a replay. Injury entry is manual by design,
-    so seeding again genuinely appends new superseding observations - that
-    is the immutable-history behaviour working, not a duplicate effect. A
-    replay must exercise the SCHEDULER, so it re-runs the handlers over the
-    observations that already exist.
-    """
-    # T-7d: the slate is known and the market has opened.
-    chain.at(KICK - timedelta(days=7))
-    chain.run("schedule_refresh")
-    chain.run("odds_capture", fixture_payload=_payload(chain.clock.now()))
-    chain.run("consensus_build")
-    chain.run("weather_capture", nws_client=FixtureNws())
-    if seed_injuries:
-        _seed_injuries(chain.factory, observed_at=chain.clock.now())
-    chain.run("injury_reconciliation")
-    chain.run("availability_computation")
-    chain.run("feature_snapshot")
-
-    # T-2d: the market has moved. Recapture, then predict and price.
-    chain.at(KICK - timedelta(days=2))
-    chain.run("odds_capture", fixture_payload=_payload(chain.clock.now(), point=-3.0))
-    chain.run("consensus_build")
-    chain.run("prediction_vintage")
-    chain.run("price_observation",
-              price_observations=_prices(chain.clock.now() - timedelta(minutes=2)))
-    chain.run("price_evaluation")
-
-    # Kickoff: the close is captured without anyone seeing the outcome.
-    chain.at(KICK - timedelta(minutes=5))
-    chain.run("odds_capture", fixture_payload=_payload(chain.clock.now(), point=-3.5))
-    chain.run("consensus_build")
-    chain.run("closing_capture")
-
-    # After the whistle.
-    chain.at(KICK + timedelta(hours=4))
-    chain.run("result_ingestion", final_scores={GAME: (24, 20)})
-    chain.run("settlement", final_scores={GAME: (24, 20)})
-    chain.run("forward_evaluation")
-    chain.run("data_health_reconciliation")
-
-
-@pytest.fixture()
-def chain(factory):
-    c = SchedulerChain(factory)
-    _drive(c)
-    return c
-
 
 # --------------------------------------------------------------------------- #
 # §14 — the sequence ran
@@ -438,7 +201,7 @@ class TestTheChainIsComplete:
     def test_two_identical_runs_agree_on_the_hash(self, factory, tmp_path) -> None:
         """The property that makes the hash worth reporting."""
         first = SchedulerChain(factory)
-        _drive(first)
+        drive(first)
         with first.session() as s:
             h1 = chain_semantic_hash(read_chain(
                 s, canonical_game_id=GAME, data_mode=DATA_MODE.value))
@@ -634,7 +397,7 @@ class TestRerunningIsIdempotent:
                                 policy_version="ftp-2026-v1")
             before_hash = chain_semantic_hash(before)
         restarted = SchedulerChain(chain.factory)
-        _drive(restarted, seed_injuries=False)
+        drive(restarted, with_injuries=False)
         chain = restarted
         with chain.session() as s:
             after = read_chain(s, canonical_game_id=GAME, data_mode=DATA_MODE.value,
@@ -655,7 +418,7 @@ class TestRerunningIsIdempotent:
         replay = SchedulerChain(chain.factory)
         replay.at(KICK - timedelta(days=2))
         replay.run("price_observation",
-                   price_observations=_prices(replay.clock.now() - timedelta(minutes=2)))
+                   price_observations=prices(replay.clock.now() - timedelta(minutes=2)))
         with chain.session() as s:
             after = len(list(s.scalars(select(ManualBookPriceEntry).where(
                 ManualBookPriceEntry.canonical_game_id == GAME))))

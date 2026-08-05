@@ -168,3 +168,49 @@ def league_session(session: Session) -> Session:
 # pure-math property tests, so a slow example is not a failure signal.
 settings.register_profile("fde", deadline=None)
 settings.load_profile("fde")
+
+
+# --------------------------------------------------------------------------- #
+# Record-chain fixtures
+# --------------------------------------------------------------------------- #
+# Defined here rather than in a test module so the three chain modules can
+# each request them by name. Importing a fixture from another test module
+# shadows it - a lint error, and a genuine source of confusion about which
+# one actually ran. Fixtures are lazy, so their presence costs nothing to
+# the ~700 tests that never ask for them.
+
+
+@pytest.fixture()
+def factory(tmp_path, monkeypatch):
+    """A SQLite database seeded with one governed game and a frozen policy."""
+    from chainkit import DATA_MODE, KICK, csv_bytes
+    from fde_api.config import settings
+    from fde_api.forward.policy import build_policy_draft, freeze_policy
+    from fde_api.forward.schedule import ingest_schedule
+    from fde_api.forward.venues import seed_venues
+
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    engine = create_engine("sqlite://", future=True)
+    Base.metadata.create_all(engine)
+    f = sessionmaker(bind=engine, future=True)
+    with f() as s:
+        seed_venues(s)
+        freeze_policy(s, build_policy_draft(
+            policy_version="ftp-2026-v1",
+            start=datetime(2026, 9, 1, tzinfo=UTC).date(),
+            end=datetime(2027, 2, 28, tzinfo=UTC).date(),
+        ))
+        ingest_schedule(s, csv_bytes(), season=2026,
+                        observed_at=KICK - timedelta(days=30), data_mode=DATA_MODE)
+        s.commit()
+    return f
+
+
+@pytest.fixture()
+def chain(factory):
+    """One game driven all the way through the scheduler."""
+    from chainkit import SchedulerChain, drive
+
+    c = SchedulerChain(factory)
+    drive(c)
+    return c

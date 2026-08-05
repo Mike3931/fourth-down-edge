@@ -106,7 +106,18 @@ jobs:
       # independently visible rather than buried in a 500-test total where a
       # skip would look like a pass.
       - name: Tests
-        run: uv run pytest tests -m "not network and not pg_concurrency"
+        run: uv run pytest tests -m "not network and not pg_concurrency and not pg_chain"
+
+      # The scheduler-driven record chain, against the real database.
+      #
+      # Separate from the concurrency gate on purpose: this one is
+      # FUNCTIONAL and single-connection. It proves the chain survives
+      # PostgreSQL - UTC round trips, JSON lineage, boolean and enum
+      # storage, rollback, unique constraints - and it makes no claim about
+      # concurrency. Conflating the two would let a functional pass be read
+      # as a concurrency result.
+      - name: PostgreSQL record-chain gate
+        run: uv run pytest tests -m "pg_chain" -v -s
 
       # The dedicated PostgreSQL concurrency gate.
       #

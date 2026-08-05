@@ -48,7 +48,11 @@ def _concurrency_modules() -> list[Path]:
             names = {t.id for t in node.targets if isinstance(t, ast.Name)}
             if "pytestmark" not in names:
                 continue
-            if "pg_concurrency" in ast.unparse(node.value):
+            # Any pg_* marker, not just pg_concurrency: the chain gate is
+            # also a PostgreSQL-only module, and a fallback there would
+            # report PostgreSQL verification it never performed.
+            rendered = ast.unparse(node.value)
+            if "pg_concurrency" in rendered or "pg_chain" in rendered:
                 out.append(path)
                 break
     return out
@@ -126,7 +130,9 @@ class TestPostgresModulesNeverBuildSqlite:
     @pytest.mark.parametrize("path", PG_MODULES, ids=lambda p: p.name)
     def test_the_module_is_marked(self, path: Path) -> None:
         src = path.read_text(encoding="utf-8")
-        assert "pg_concurrency" in src, f"{path.name} must carry the gate marker"
+        assert "pg_concurrency" in src or "pg_chain" in src, (
+            f"{path.name} must carry a PostgreSQL gate marker"
+        )
 
 
 class TestPostgresFixturesRefuseToFallBack:
