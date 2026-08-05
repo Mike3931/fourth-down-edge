@@ -266,3 +266,85 @@ class TestTypedRecoveryKey:
         assert original == "job:cohort:20260910T170000Z"
         assert root is None
         assert seq == 0
+
+
+class TestTheLegacyClosingFlagIsNeverWritten:
+    """`consensus_snapshots.is_closing_capture` is read-only history.
+
+    The close is its own record now. The column stays because rows written
+    before the capture table carry it, and dropping it would destroy the
+    only evidence of what was treated as the close then. But nothing may
+    SET it again: a snapshot is an observation, and mutating one to mark it
+    is the edit this whole design forbids.
+
+    A source-level audit rather than a behavioural test, deliberately. The
+    stale reference that motivated it lived in a PostgreSQL-only module, so
+    the local suite never executed it and a green local run said nothing.
+    Parsing the source needs no database.
+    """
+
+    def _assignments(self, path: Path) -> list[int]:
+        """Lines that ASSIGN to is_closing_capture. Reading it is fine."""
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        hits: list[int] = []
+        for node in ast.walk(tree):
+            targets: list[ast.expr] = []
+            if isinstance(node, ast.Assign):
+                targets = list(node.targets)
+            elif isinstance(node, ast.AugAssign | ast.AnnAssign):
+                targets = [node.target]
+            for tgt in targets:
+                if isinstance(tgt, ast.Attribute) and tgt.attr == "is_closing_capture":
+                    hits.append(node.lineno)
+            # A keyword argument is an assignment too, but ONLY on the model
+            # constructor. `authorize_poll(is_closing_capture=...)` is a
+            # quota-priority argument that happens to share the name and has
+            # nothing to do with the column - flagging it was a false
+            # positive this audit produced against itself on its first run.
+            if isinstance(node, ast.Call) and _constructs_snapshot(node):
+                for kw in node.keywords:
+                    if kw.arg == "is_closing_capture" and not _is_false(kw.value):
+                        hits.append(node.lineno)
+        return hits
+
+    def test_no_source_file_sets_the_legacy_flag(self) -> None:
+        offenders: list[str] = []
+        for p in SRC_DIR.rglob("*.py"):
+            if "__pycache__" in p.parts:
+                continue
+            # The model DECLARES the column; declaring is not writing.
+            if p.name == "forward_models.py":
+                continue
+            offenders += [f"{p.name}:{ln}" for ln in self._assignments(p)]
+        assert not offenders, (
+            "the legacy closing flag is still being written:\n" + chr(10).join(offenders)
+        )
+
+    def test_the_column_still_exists_for_historical_rows(self) -> None:
+        """Removing it would be worse than leaving it: the flag is the only
+        record of which snapshot was the close before captures existed."""
+        from fde_api.db.forward_models import ConsensusSnapshot
+
+        assert "is_closing_capture" in ConsensusSnapshot.__table__.c
+
+    def test_the_capture_table_carries_its_rule_version(self) -> None:
+        """Without the version, a close captured under one rule and one
+        captured under a revised rule are indistinguishable."""
+        from fde_api.db.forward_models import ClosingCapture
+
+        for column in ("selection_rule", "selection_rule_version",
+                       "consensus_snapshot_id", "status", "missing_close_reason",
+                       "conflict_reason", "cohort", "provider_mode"):
+            assert column in ClosingCapture.__table__.c, f"missing {column}"
+
+
+def _is_false(node: ast.expr) -> bool:
+    """True for a literal `False`, which merely restates the default."""
+    return isinstance(node, ast.Constant) and node.value is False
+
+
+def _constructs_snapshot(node: ast.Call) -> bool:
+    """True when this call builds a ConsensusSnapshot."""
+    func = node.func
+    name = getattr(func, "id", None) or getattr(func, "attr", None)
+    return name == "ConsensusSnapshot"

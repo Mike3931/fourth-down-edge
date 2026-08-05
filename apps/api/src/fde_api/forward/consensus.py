@@ -132,7 +132,6 @@ def build_consensus(
     max_age_minutes: int = 60,
     min_books: int = 3,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
-    is_closing_capture: bool = False,
 ) -> tuple[ConsensusSnapshot | None, EligibilityReport]:
     """Compute and persist one consensus snapshot.
 
@@ -233,7 +232,9 @@ def build_consensus(
         oldest_quote_age_seconds=max(ages) if ages else None,
         newest_quote_age_seconds=min(ages) if ages else None,
         quote_ids={"quote_ids": [q.id for q in eligible], "books": sorted(books)},
-        is_closing_capture=is_closing_capture,
+        # Never set. The close is its own record now; a snapshot is an
+        # observation and marking one would edit it. The column remains
+        # so rows written before closing_captures existed stay readable.
         observed_at=as_of_at,
     )
     session.add(snap)

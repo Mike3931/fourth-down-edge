@@ -32,6 +32,7 @@ from chainkit import (
     drive,
 )
 from fde_api.db.forward_models import (
+    ClosingCapture,
     ConsensusSnapshot,
     ForwardLedgerEntry,
     ForwardPrediction,
@@ -202,12 +203,29 @@ class TestPostgresStoresWhatWeThinkItStores:
 
     def test_booleans_persist_as_booleans(self, chain) -> None:
         with chain.session() as s:
-            closes = list(s.scalars(select(ConsensusSnapshot).where(
-                ConsensusSnapshot.is_closing_capture.is_(True))))
+            snapshots = list(s.scalars(select(ConsensusSnapshot)))
             runs = list(s.scalars(select(ScheduledJobRun)))
-        assert closes, "no closing capture was recorded"
-        assert all(c.is_closing_capture is True for c in closes)
+        assert snapshots and runs
+        assert all(isinstance(c.is_closing_capture, bool) for c in snapshots)
         assert all(isinstance(r.administrative_override, bool) for r in runs)
+
+    def test_the_close_is_a_record_not_a_flag_on_a_snapshot(self, chain) -> None:
+        """The legacy flag stays readable and is never written again.
+
+        Dropping the column would destroy the only record of what was
+        treated as the close before the capture table existed, so it stays -
+        but nothing sets it, and every snapshot the chain writes now leaves
+        it False while the close lives in its own row.
+        """
+        with chain.session() as s:
+            snapshots = list(s.scalars(select(ConsensusSnapshot)))
+            captures = list(s.scalars(select(ClosingCapture)))
+        assert captures, "no closing capture was recorded"
+        assert all(c.is_closing_capture is False for c in snapshots), (
+            "a consensus snapshot was mutated to carry the legacy close flag"
+        )
+        assert all(c.status in {"CAPTURED", "MISSING", "CONFLICT"} for c in captures)
+        assert all(c.selection_rule_version for c in captures)
 
     def test_a_rollback_leaves_nothing_behind(self, factory) -> None:
         """SQLite's rollback is easy to get right by accident. This checks

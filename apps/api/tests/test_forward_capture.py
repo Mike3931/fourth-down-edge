@@ -469,16 +469,36 @@ class TestConsensus:
                                   kickoff_utc=KICK, max_age_before_kickoff_minutes=30)
         assert close is not None and close.median_line == -4.0  # last within window
 
-    def test_closing_capture_excluded_from_prediction_inputs(self, fsession: Session) -> None:
+    def test_a_snapshot_the_close_references_is_still_an_ordinary_consensus(
+        self, fsession: Session
+    ) -> None:
+        """Recording a close does not remove the snapshot from anything.
+
+        This test used to assert the opposite, because marking a snapshot as
+        the close hid it from `latest_consensus_at`. That exclusion existed
+        to stop a specially-captured closing snapshot being reused as a
+        normal consensus. It is obsolete: the close is now its own record
+        that REFERENCES an ordinary snapshot, so there is no special
+        snapshot to exclude, and hiding one would delete a real observation
+        from the record for no reason.
+
+        The legacy exclusion stays in the query for rows written before the
+        capture table existed - those genuinely carry the flag.
+        """
         gid = _seed_game(fsession)
         obs = KICK - timedelta(minutes=10)
         _capture(fsession, _event(obs.isoformat(), [
             ("draftkings", -6.0, -110, -110), ("fanduel", -6.0, -110, -110),
             ("betmgm", -6.0, -110, -110)]), observed_at=obs)
-        build_consensus(fsession, canonical_game_id=gid, market="SPREAD", as_of_at=obs,
-                        kickoff_utc=KICK, is_closing_capture=True)
-        assert latest_consensus_at(fsession, canonical_game_id=gid, market="SPREAD",
-                                   as_of_at=KICK) is None
+        snap, _ = build_consensus(fsession, canonical_game_id=gid, market="SPREAD",
+                                  as_of_at=obs, kickoff_utc=KICK)
+        assert snap is not None
+        assert snap.is_closing_capture is False, (
+            "build_consensus still marks snapshots as closes"
+        )
+        found = latest_consensus_at(fsession, canonical_game_id=gid, market="SPREAD",
+                                    as_of_at=KICK)
+        assert found is not None and found.id == snap.id
 
     def test_eligibility_counts_are_reported(self, fsession: Session) -> None:
         quotes: list[OddsQuote] = []
