@@ -116,7 +116,13 @@ jobs:
       # storage, rollback, unique constraints - and it makes no claim about
       # concurrency. Conflating the two would let a functional pass be read
       # as a concurrency result.
+      # `if: always()` on both PostgreSQL gates. Steps stop on the first
+      # failure by default, so a chain failure SKIPPED the concurrency gate
+      # entirely - and a skipped gate reports nothing while looking like it
+      # simply did not need to run. The two gates answer different
+      # questions; one failing must not erase the other's answer.
       - name: PostgreSQL record-chain gate
+        if: always()
         run: uv run pytest tests -m "pg_chain" -v -s
 
       # The dedicated PostgreSQL concurrency gate.
@@ -128,6 +134,7 @@ jobs:
       # Each test asserts the dialect and uses genuinely independent
       # connections released together from a barrier.
       - name: PostgreSQL recovery-lineage concurrency gate
+        if: always()
         run: uv run pytest tests -m "pg_concurrency" -v -s
 
   dependencies:

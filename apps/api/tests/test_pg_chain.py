@@ -216,10 +216,18 @@ class TestPostgresStoresWhatWeThinkItStores:
             before = len(list(s.scalars(select(ScheduleObservation))))
         try:
             with factory() as s:
+                # Every NOT NULL column is supplied: the probe must fail at
+                # the RuntimeError below, not at the insert. A probe that
+                # dies on its own invalid row tests the constraint, not the
+                # rollback - which is exactly what happened the first time
+                # this ran, because it only runs against PostgreSQL and the
+                # local suite deselects it.
                 s.add(ScheduleObservation(
                     data_mode=DATA_MODE.value, canonical_game_id=GAME,
-                    provider="fixture", season=2026, season_type="REG", week=2,
+                    provider="fixture", provider_game_id="rollback-probe-evt",
+                    season=2026, season_type="REG", week=2,
                     home_team_id="BUF", away_team_id="KC", kickoff_utc=KICK,
+                    neutral_site=False, international=False,
                     game_status="SCHEDULED", content_hash="rollback-probe",
                     observed_at=KICK - timedelta(days=1),
                 ))
