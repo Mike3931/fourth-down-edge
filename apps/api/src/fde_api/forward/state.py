@@ -54,6 +54,12 @@ class DomainState(StrEnum):
     STALE = "STALE"
     SUPPRESSED = "SUPPRESSED"
     NO_ELIGIBLE_RECORDS = "NO_ELIGIBLE_RECORDS"
+    # The data is present but self-contradictory, so no automatic path
+    # can proceed. Distinct from DATA_INCOMPLETE, which means something
+    # is absent: absence can be filled in by re-running, a contradiction
+    # cannot, and conflating them would send a disputed record back
+    # through a retry loop that can never resolve it.
+    NEEDS_REVIEW = "NEEDS_REVIEW"
 
     # Migrated history only. Legacy rows recorded an execution status that
     # does not establish what the DATA looked like — "finished" says the job

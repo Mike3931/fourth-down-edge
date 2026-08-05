@@ -386,6 +386,11 @@ class TestOutcomeDomainSeparation:
         assert {d.value for d in DomainState} == {
             "COMPLETE", "DATA_INCOMPLETE", "NOT_YET_AVAILABLE", "NOT_APPLICABLE",
             "STALE", "SUPPRESSED", "NO_ELIGIBLE_RECORDS",
+            # Present but self-contradictory. Distinct from DATA_INCOMPLETE:
+            # absence can be resolved by re-running, a contradiction cannot,
+            # and conflating them sends a disputed record into a retry loop
+            # that can never resolve it.
+            "NEEDS_REVIEW",
             # Migration-only; live handlers may never emit it.
             "UNKNOWN_LEGACY",
         }

@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 
 from fde_api.db.forward_models import ScheduleObservation
 from fde_api.forward.modes import DataMode
+from fde_api.forward.ordering import newest
 from fde_api.forward.schedule import current_schedule_state
 
 FINAL = "FINAL"
@@ -100,14 +101,15 @@ def final_observation(
     )
     if as_of is not None:
         stmt = stmt.where(ScheduleObservation.observed_at <= as_of)
-    rows = list(session.scalars(stmt))
-    if not rows:
-        return None
     # (observed_at, id) so two observations at the same instant still order
     # deterministically. Ordering by time alone made a simultaneous pair
-    # resolve differently on different runs.
-    rows.sort(key=lambda r: (r.observed_at, r.id))
-    return rows[-1]
+    # resolve differently on different runs - and on SQLite it resolved the
+    # same way by accident, which is why it went unnoticed.
+    return newest(
+        list(session.scalars(stmt)),
+        when=lambda r: r.observed_at,
+        ident=lambda r: r.id,
+    )
 
 
 def ingest_result(

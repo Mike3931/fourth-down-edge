@@ -316,19 +316,27 @@ class TestPointInTimeAcrossTheChain:
             assert p.as_of_at < KICK, f"{p.id} predicted at or after kickoff"
 
     def test_no_prediction_saw_the_closing_capture(self, chain: SchedulerChain) -> None:
-        """The close is recorded at kickoff; every vintage precedes it."""
+        """The close is captured at kickoff; every vintage precedes it.
+
+        Compared against the CAPTURE time, not the referenced snapshot's
+        observation time. The snapshot is an ordinary consensus that the
+        rule later selected, so it may legitimately predate a late vintage -
+        comparing against it would fail for a reason unrelated to leakage.
+        What must not precede a prediction is the moment the close became
+        known AS the close.
+        """
+        from fde_api.db.forward_models import ClosingCapture
+
         with chain.session() as s:
             preds = list(s.scalars(select(ForwardPrediction).where(
                 ForwardPrediction.canonical_game_id == GAME)))
-            from fde_api.db.forward_models import ConsensusSnapshot
-
-            closes = list(s.scalars(select(ConsensusSnapshot).where(
-                ConsensusSnapshot.canonical_game_id == GAME,
-                ConsensusSnapshot.is_closing_capture.is_(True))))
+            closes = list(s.scalars(select(ClosingCapture).where(
+                ClosingCapture.canonical_game_id == GAME)))
         assert closes, "no closing capture to test against"
-        earliest_close = min(c.observed_at for c in closes)
+        assert preds
+        earliest_capture = min(c.captured_at for c in closes)
         for p in preds:
-            assert p.as_of_at < earliest_close
+            assert p.as_of_at < earliest_capture
 
     def test_no_prediction_saw_the_final_result(self, chain: SchedulerChain) -> None:
         with chain.session() as s:

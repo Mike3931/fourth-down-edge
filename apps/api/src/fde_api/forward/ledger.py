@@ -30,7 +30,8 @@ from sqlalchemy.orm import Session
 
 from fde_api.backtest.execution import ExecutionModel, break_even_prob
 from fde_api.db.forward_models import ForwardLedgerEntry, ForwardPrediction
-from fde_api.forward.consensus import american_to_prob, closing_consensus, no_vig_two_way
+from fde_api.forward.cohort import Cohort
+from fde_api.forward.consensus import american_to_prob, no_vig_two_way
 from fde_api.forward.modes import DataMode
 from fde_api.forward.policy import ForwardTestPolicy
 from fde_api.util import utc_now
@@ -295,6 +296,18 @@ class ClvResult:
     note: str
 
 
+
+
+def _cohort_for(data_mode: DataMode) -> Cohort:
+    """Which cohort a data mode's records belong to.
+
+    A narrow mapping rather than a general one: the ledger only ever asks
+    about the cohort whose closes it is reading, and inventing a broader
+    translation would imply a correspondence the two axes do not have.
+    """
+    return Cohort.FIXTURE if data_mode is DataMode.DEMO else Cohort.BURN_IN
+
+
 def compute_clv(
     session: Session,
     *,
@@ -307,17 +320,49 @@ def compute_clv(
     if not entry.filled:
         return ClvResult(None, None, None, None, None, "not filled; CLV not applicable")
 
-    snap = closing_consensus(
-        session,
-        canonical_game_id=entry.canonical_game_id,
-        market=entry.market,
-        kickoff_utc=kickoff_utc,
-        max_age_before_kickoff_minutes=policy.closing_line.max_age_before_kickoff_minutes,
-        data_mode=data_mode,
+    # The close comes from the recorded CAPTURE, not from re-running the
+    # selection here. Two reasons, and the second is the important one:
+    #
+    #  * A capture states which snapshot was selected, under which rule
+    #    version, at which moment. Re-selecting now could pick a different
+    #    snapshot if anything arrived late, and CLV would then be measured
+    #    against a close nobody captured.
+    #  * A DISPUTED close must not produce a CLV at all. Re-selecting would
+    #    silently pick one side of the dispute and report a number, which
+    #    is worse than reporting nothing.
+    from fde_api.forward.closing import (
+        authoritative_capture,
+        closing_snapshot_for,
+        has_unresolved_conflict,
+    )
+
+    cohort = _cohort_for(data_mode)
+    if has_unresolved_conflict(
+        session, canonical_game_id=entry.canonical_game_id,
+        market=entry.market, cohort=cohort,
+    ):
+        return ClvResult(
+            None, None, None, None, None,
+            "the closing capture for this market is disputed; CLV is not finalised "
+            "until the conflict is resolved",
+        )
+
+    snap = closing_snapshot_for(
+        session, canonical_game_id=entry.canonical_game_id,
+        market=entry.market, cohort=cohort,
     )
     if snap is None:
+        capture = authoritative_capture(
+            session, canonical_game_id=entry.canonical_game_id,
+            market=entry.market, cohort=cohort,
+        )
+        reason = (
+            capture.missing_close_reason if capture is not None
+            and capture.missing_close_reason
+            else "no closing capture was recorded for this market"
+        )
         return ClvResult(None, None, None, None, None,
-                         "no eligible closing consensus within the policy window; CLV unavailable")
+                         f"CLV unavailable: {reason}")
 
     exec_price = entry.simulated_american or entry.qualifying_american
     exec_line = entry.simulated_line if entry.simulated_line is not None else entry.qualifying_line

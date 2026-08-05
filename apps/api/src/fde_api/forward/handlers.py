@@ -34,7 +34,6 @@ from typing import Any
 from sqlalchemy import select
 
 from fde_api.db.forward_models import (
-    ConsensusSnapshot,
     ForwardLedgerEntry,
     ForwardPrediction,
     ManualBookPriceEntry,
@@ -42,7 +41,7 @@ from fde_api.db.forward_models import (
     Venue,
 )
 from fde_api.forward.cohort import ProviderMode
-from fde_api.forward.consensus import build_all_consensus_for_game, closing_consensus
+from fde_api.forward.consensus import build_all_consensus_for_game
 from fde_api.forward.scheduler import JobContext, JobResult, JobSkipped
 from fde_api.forward.state import (
     DomainState,
@@ -877,7 +876,16 @@ def manual_price_expiration(ctx: JobContext) -> JobResult:
 
 
 def closing_capture(ctx: JobContext) -> JobResult:
-    """Record the rule-selected closing consensus for games at kickoff."""
+    """Record the rule-selected close as an immutable capture.
+
+    Selection happens before anything downstream of kickoff exists, so the
+    rule cannot see the outcome and the close cannot be chosen because it
+    flatters one. The capture REFERENCES the chosen consensus snapshot and
+    never modifies it - the previous implementation flipped a flag on the
+    snapshot, which edited a record whose contract is immutability and
+    could not express a missing or disputed close at all.
+    """
+    from fde_api.forward.closing import capture_close
     from fde_api.forward.policy import load_policy
 
     if not ctx.policy_version:
@@ -894,79 +902,70 @@ def closing_capture(ctx: JobContext) -> JobResult:
     if not due:
         raise JobSkipped("no games inside the closing-capture window")
 
-    found = unchanged = conflicts = 0
+    captured = unchanged = missing = conflicts = 0
     warnings: list[str] = []
     lineage: dict[str, Any] = {}
+
     for g in due:
         for market in policy.market_selection.markets:
-            # The rule picks the close BEFORE anyone can see the outcome:
-            # the last eligible consensus at or before kickoff, inside the
-            # policy window. Nothing about the result is available here, and
-            # nothing may be chosen because it looks favourable.
-            snap = closing_consensus(
-                ctx.session, canonical_game_id=g.canonical_game_id, market=market,
+            outcome = capture_close(
+                ctx.session,
+                canonical_game_id=g.canonical_game_id,
+                market=market,
                 kickoff_utc=_kick(g),
-                max_age_before_kickoff_minutes=policy.closing_line.max_age_before_kickoff_minutes,
+                selection_rule=policy.closing_line.rule,
+                max_age_before_kickoff_minutes=(
+                    policy.closing_line.max_age_before_kickoff_minutes
+                ),
+                cohort=ctx.cohort,
                 data_mode=ctx.data_mode,
+                provider_mode=ctx.provider_mode,
+                policy_version=ctx.policy_version,
+                scheduled_slot=ctx.slot,
+                now=ctx.now(),
             )
-            if snap is None:
-                # An explicit absence, not a silent one. A missing close
-                # means no CLV for this market, and that has to be visible.
-                warnings.append(f"{g.canonical_game_id}/{market}: no eligible closing consensus")
-                continue
-
-            # The selection used to be computed and thrown away, so the
-            # chain had no durable record that a close had ever been
-            # captured - and CLV had nothing to point at. Marking the
-            # rule-selected snapshot is what makes the close a record.
-            already = ctx.session.scalars(
-                select(ConsensusSnapshot).where(
-                    ConsensusSnapshot.canonical_game_id == g.canonical_game_id,
-                    ConsensusSnapshot.market == market,
-                    ConsensusSnapshot.data_mode == ctx.data_mode.value,
-                    ConsensusSnapshot.is_closing_capture.is_(True),
-                )
-            ).all()
-            if any(a.id == snap.id for a in already):
-                unchanged += 1  # idempotent: this close is already recorded
-                continue
-            if already:
-                # A different snapshot is already marked. Overwriting would
-                # silently restate what the close was, so this is reported
-                # for review instead.
-                conflicts += 1
-                warnings.append(
-                    f"{g.canonical_game_id}/{market}: closing capture conflict - "
-                    f"{[a.id for a in already]} already marked, rule now selects {snap.id}; "
-                    "not overwritten"
-                )
-                continue
-
-            snap.is_closing_capture = True
-            ctx.session.flush()
-            found += 1
-            lineage[str(snap.id)] = {
+            lineage[outcome.capture.id] = {
                 "canonical_game_id": g.canonical_game_id,
                 "market": market,
-                "observed_at": snap.observed_at.isoformat(),
-                "selected_by": "policy rule: last eligible consensus at or before kickoff",
+                "status": outcome.capture.status,
+                "consensus_snapshot_id": outcome.capture.consensus_snapshot_id,
+                "disposition": outcome.disposition,
             }
+            if outcome.disposition == "captured":
+                captured += 1
+            elif outcome.disposition == "unchanged":
+                unchanged += 1
+            elif outcome.disposition == "missing":
+                missing += 1
+                warnings.append(
+                    f"{g.canonical_game_id}/{market}: {outcome.capture.missing_close_reason}"
+                )
+            else:
+                conflicts += 1
+                warnings.append(
+                    f"{g.canonical_game_id}/{market}: {outcome.capture.conflict_reason}"
+                )
 
+    # A conflicting close is a domain question, not an execution failure:
+    # the run succeeded at recording what it found. The domain state is what
+    # carries "a human must look at this".
+    domain = DomainState.NEEDS_REVIEW if conflicts else DomainState.COMPLETE
     return HandlerResult(
         outcome=Outcome.SUCCESS_WITH_WARNINGS if warnings else Outcome.SUCCESS,
+        domain_state=domain,
         records_read=len(due),
-        records_created=found,
+        records_created=captured + missing + conflicts,
         records_skipped=unchanged,
         warnings=warnings[:25],
         lineage=lineage,
         detail={
-            "closes_recorded": found,
+            "closes_recorded": captured,
             "already_recorded": unchanged,
+            "missing_close": missing,
             "conflicts_requiring_review": conflicts,
-            "missing_close": len([w for w in warnings if "no eligible" in w]),
             "note": (
-                "the close is selected by a rule fixed before capture; it is not "
-                "guaranteed to exist, and a missing close stays explicit"
+                "the close is selected by a rule fixed before capture, recorded with "
+                "its rule version, and never guaranteed to exist"
             ),
         },
     ).to_job_result()

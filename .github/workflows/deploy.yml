@@ -84,16 +84,30 @@ jobs:
       - name: Type check
         run: uv run mypy
 
+      # --- independent gates -------------------------------------------- #
+      # Every gate below carries `if: always()`. Steps stop on the first
+      # failure by default, and that is how a failing chain test made the
+      # recovery-concurrency result unknowable: the gate never ran, and a
+      # step that never ran reports nothing while looking like it had no
+      # work to do. These gates answer different questions, so one failing
+      # must not erase another's answer.
+      #
+      # Lint and type check deliberately stay conditional: they decide
+      # whether the code is runnable at all, and cascading their failure
+      # into everything downstream produces noise, not information.
       - name: Migrations apply to PostgreSQL
+        if: always()
         run: uv run alembic upgrade head
 
       # Proves the data migration against a table that already has rows.
       # A fresh-database migration cannot catch NOT-NULL-without-default or
       # a wrong legacy-state mapping.
       - name: Upgrade migration from the prior revision (PostgreSQL)
+        if: always()
         run: uv run pytest tests/test_migration_upgrade.py -v
 
       - name: Downgrade and re-upgrade
+        if: always()
         run: |
           uv run alembic downgrade 34134455937d
           uv run alembic upgrade head
@@ -106,6 +120,7 @@ jobs:
       # independently visible rather than buried in a 500-test total where a
       # skip would look like a pass.
       - name: Tests
+        if: always()
         run: uv run pytest tests -m "not network and not pg_concurrency and not pg_chain"
 
       # The scheduler-driven record chain, against the real database.

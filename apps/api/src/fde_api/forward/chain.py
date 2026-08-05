@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 
 from fde_api.db.forward_models import (
     AvailabilityAssessment,
+    ClosingCapture,
     ConsensusSnapshot,
     ForwardLedgerEntry,
     ForwardPrediction,
@@ -211,8 +212,7 @@ def read_chain(
     count(Stage.ODDS_OBSERVATIONS, select(OddsQuote.id).where(
         OddsQuote.canonical_game_id == g, OddsQuote.data_mode == dm))
     count(Stage.CONSENSUS_SNAPSHOT, select(ConsensusSnapshot.id).where(
-        ConsensusSnapshot.canonical_game_id == g, ConsensusSnapshot.data_mode == dm,
-        ConsensusSnapshot.is_closing_capture.is_(False)))
+        ConsensusSnapshot.canonical_game_id == g, ConsensusSnapshot.data_mode == dm))
     count(Stage.WEATHER_VINTAGE, select(WeatherForecastVintage.id).where(
         WeatherForecastVintage.canonical_game_id == g,
         WeatherForecastVintage.data_mode == dm))
@@ -264,9 +264,13 @@ def read_chain(
     state.stages[Stage.FORWARD_PERFORMANCE] = len(performance)
     state.identifiers[Stage.FORWARD_PERFORMANCE] = [str(e.id) for e in performance][:50]
 
-    count(Stage.CLOSING_CAPTURE, select(ConsensusSnapshot.id).where(
-        ConsensusSnapshot.canonical_game_id == g, ConsensusSnapshot.data_mode == dm,
-        ConsensusSnapshot.is_closing_capture.is_(True)))
+    # The close is its own record now. A MISSING capture still counts as a
+    # close having been SOUGHT and answered, which is the distinction that
+    # matters: "we looked and there was nothing" is a result, and treating
+    # it as absence would make an explicit answer indistinguishable from
+    # never having asked.
+    count(Stage.CLOSING_CAPTURE, select(ClosingCapture.id).where(
+        ClosingCapture.canonical_game_id == g, ClosingCapture.data_mode == dm))
 
     obs = list(session.scalars(select(ScheduleObservation).where(
         ScheduleObservation.canonical_game_id == g, ScheduleObservation.data_mode == dm)))

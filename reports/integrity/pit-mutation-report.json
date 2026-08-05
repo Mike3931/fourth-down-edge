@@ -1,0 +1,93 @@
+{
+  "killed": 9,
+  "mutations": [
+    {
+      "description": "consensus stops excluding quotes observed after the cutoff, so a snapshot could be built from quotes that did not exist yet",
+      "file": "consensus.py",
+      "killed_by": [
+        "tests/test_pit_chain_guards.py::TestAQuoteAfterTheCutoffIsInvisible::test_a_later_quote_does_not_enter_the_snapshot"
+      ],
+      "mutation": "quote_visibility_after_cutoff",
+      "status": "KILLED"
+    },
+    {
+      "description": "weather lookup stops filtering on observation time, so a forecast issued after the cutoff becomes visible to it",
+      "file": "weather.py",
+      "killed_by": [
+        "tests/test_pit_chain_guards.py::TestAForecastAfterTheCutoffIsInvisible::test_a_later_vintage_is_not_returned"
+      ],
+      "mutation": "weather_visibility_after_cutoff",
+      "status": "KILLED"
+    },
+    {
+      "description": "injury lookup stops filtering on observation time, so a Sunday report becomes visible to a Tuesday prediction",
+      "file": "injuries.py",
+      "killed_by": [
+        "tests/test_pit_chain_guards.py::TestAnInjuryReportAfterTheCutoffIsInvisible::test_a_later_report_is_not_returned"
+      ],
+      "mutation": "injury_visibility_after_cutoff",
+      "status": "KILLED"
+    },
+    {
+      "description": "the closing rule stops requiring the snapshot to precede kickoff, so a post-kickoff quote could be recorded as the close",
+      "file": "closing.py",
+      "killed_by": [
+        "tests/test_execution_and_clv.py::TestClvHonoursTheClosingRecord::test_a_snapshot_after_kickoff_is_not_eligible"
+      ],
+      "mutation": "closing_snapshot_after_kickoff",
+      "status": "KILLED"
+    },
+    {
+      "description": "result ingestion stops refusing a result observed before kickoff, so a game could be final before it started",
+      "file": "results.py",
+      "killed_by": [
+        "tests/test_pit_chain_guards.py::TestAResultCannotReachItsOwnPrediction::test_a_result_observed_before_kickoff_is_refused"
+      ],
+      "mutation": "result_before_kickoff_accepted",
+      "status": "KILLED"
+    },
+    {
+      "description": "the result lookup stops applying the as-of filter, so a prediction could read the score of the game it is predicting",
+      "file": "results.py",
+      "killed_by": [
+        "tests/test_pit_chain_guards.py::TestAResultCannotReachItsOwnPrediction::test_the_result_is_invisible_before_it_is_observed",
+        "tests/test_pit_chain_guards.py::TestAResultCannotReachItsOwnPrediction::test_a_result_at_the_same_instant_as_the_cutoff_is_visible"
+      ],
+      "mutation": "result_visible_to_its_own_prediction",
+      "status": "KILLED"
+    },
+    {
+      "description": "price selection stops filtering on observation time, so an evaluation could use a price observed after its cutoff",
+      "file": "prices.py",
+      "killed_by": [
+        "tests/test_pit_chain_guards.py::TestALaterPriceCannotEnterAnEarlierEvaluation::test_the_as_of_lookup_ignores_a_later_price"
+      ],
+      "mutation": "later_price_enters_earlier_evaluation",
+      "status": "KILLED"
+    },
+    {
+      "description": "the shared newest() tie-break drops the identity, so two records sharing an instant resolve by input order instead of deterministically - stable on SQLite by accident, arbitrary on PostgreSQL",
+      "file": "ordering.py",
+      "killed_by": [
+        "tests/test_pit_chain_guards.py::TestSimultaneousResultsOrderDeterministically::test_two_results_at_one_instant_resolve_by_id",
+        "tests/test_pit_chain_guards.py::TestSimultaneousPricesOrderDeterministically::test_two_prices_at_one_instant_resolve_by_id",
+        "tests/test_pit_chain_guards.py::TestTheSharedTieBreakRule::test_a_tie_resolves_to_the_highest_identity",
+        "tests/test_pit_chain_guards.py::TestTheSharedTieBreakRule::test_the_answer_does_not_depend_on_input_order"
+      ],
+      "mutation": "simultaneous_ordering_becomes_arbitrary",
+      "status": "KILLED"
+    },
+    {
+      "description": "the shared ordering helper drops the identity tie-break, so a listing of records sharing an instant is not reproducible",
+      "file": "ordering.py",
+      "killed_by": [
+        "tests/test_pit_chain_guards.py::TestTheSharedTieBreakRule::test_a_listing_is_reproducible_regardless_of_input_order"
+      ],
+      "mutation": "ordered_listing_becomes_arbitrary",
+      "status": "KILLED"
+    }
+  ],
+  "note": "Each entry is a deliberately disabled point-in-time guard. KILLED means at least one test failed with the guard removed, so the guard is load-bearing. SURVIVED means nothing noticed, which is a finding: the guard could be deleted silently.",
+  "survived": 0,
+  "total": 9
+}

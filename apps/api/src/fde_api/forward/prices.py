@@ -43,6 +43,7 @@ from fde_api.backtest.execution import break_even_prob
 from fde_api.db.forward_models import ManualBookPriceEntry
 from fde_api.forward.cohort import Cohort, ProviderMode
 from fde_api.forward.modes import DataMode
+from fde_api.forward.ordering import newest
 from fde_api.util import current_code_commit, utc_now
 
 # Markets and selections a price may be entered against. Free text here
@@ -240,13 +241,15 @@ def current_price(
     )
     if as_of is not None:
         stmt = stmt.where(ManualBookPriceEntry.observed_at <= as_of)
-    rows = list(session.scalars(stmt))
-    if not rows:
-        return None
     # Deterministic even when two rows share an instant: id breaks the tie,
-    # so the same database always answers the same way.
-    rows.sort(key=lambda r: (r.observed_at, r.id))
-    return rows[-1]
+    # so the same database always answers the same way. The rule lives in
+    # `ordering` because all three call sites need the identical one, and an
+    # inline copy of it turned out to be untestable.
+    return newest(
+        list(session.scalars(stmt)),
+        when=lambda r: r.observed_at,
+        ident=lambda r: r.id,
+    )
 
 
 def price_age_seconds(entry: ManualBookPriceEntry, *, as_of: datetime) -> int:

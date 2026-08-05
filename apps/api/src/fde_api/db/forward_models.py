@@ -517,3 +517,92 @@ class MigrationAudit(Base):
         UniqueConstraint("revision", "migration_cycle", "table_name", "record_id",
                          name="uq_migration_audit_identity"),
     )
+
+
+class ClosingCapture(Base):
+    """The close, as an immutable record that REFERENCES a snapshot.
+
+    The previous implementation flipped `is_closing_capture` on the chosen
+    `ConsensusSnapshot`. That mutated a record whose whole contract is
+    immutability, and it made the close unable to carry anything the
+    snapshot did not already have: no rule version, no capture slot, no
+    conflict reason, no explicit missing-close state. A close that cannot
+    say "no eligible snapshot existed, and here is why" is a close that
+    disappears when it is most informative.
+
+    So the close is now its own entity. It points at a snapshot and never
+    touches it. Its identity is (game, market, selection, cohort, rule
+    version), which is what makes a repeat capture idempotent and a
+    DIFFERENT selection under the same identity a conflict rather than an
+    overwrite.
+    """
+
+    __tablename__ = "closing_captures"
+    id: Mapped[str] = mapped_column(String(48), primary_key=True)
+    canonical_game_id: Mapped[str] = mapped_column(String(32), index=True)
+    market: Mapped[str] = mapped_column(String(16))
+    # Null for markets whose close is a single two-sided snapshot; set where
+    # a selection genuinely has its own close.
+    selection: Mapped[str | None] = mapped_column(String(16))
+
+    # The referenced snapshot. Null when the status is MISSING: there was
+    # nothing eligible to point at, and inventing a reference would be a
+    # fabricated close.
+    consensus_snapshot_id: Mapped[int | None] = mapped_column(Integer, index=True)
+
+    # The rule is recorded WITH its version. Without the version a close
+    # captured under one rule and one captured under a revised rule are
+    # indistinguishable, so a rule change would silently restate history.
+    selection_rule: Mapped[str] = mapped_column(Text)
+    selection_rule_version: Mapped[str] = mapped_column(String(32), index=True)
+
+    scheduled_slot: Mapped[datetime | None] = mapped_column()
+    captured_at: Mapped[datetime] = mapped_column()
+
+    cohort: Mapped[str] = mapped_column(String(24), index=True)
+    data_mode: Mapped[str] = mapped_column(String(16), index=True)
+    provider_mode: Mapped[str] = mapped_column(String(16))
+    policy_version: Mapped[str | None] = mapped_column(String(32))
+    code_commit: Mapped[str | None] = mapped_column(String(48))
+
+    # CAPTURED | MISSING | CONFLICT
+    status: Mapped[str] = mapped_column(String(16), index=True)
+    missing_close_reason: Mapped[str | None] = mapped_column(Text)
+    conflict_reason: Mapped[str | None] = mapped_column(Text)
+    # The capture this one conflicts with. The original is never rewritten.
+    conflicts_with_id: Mapped[str | None] = mapped_column(String(48))
+
+    source_lineage: Mapped[dict[str, Any] | None] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column()
+
+    __table_args__ = (
+        Index(
+            "ix_closing_capture_identity",
+            "canonical_game_id", "market", "selection", "cohort", "selection_rule_version",
+        ),
+        CheckConstraint(
+            "status IN ('CAPTURED', 'MISSING', 'CONFLICT')",
+            name="ck_closing_captures_status_vocabulary",
+        ),
+        CheckConstraint(
+            "cohort IN ('fixture', 'demo', 'burn_in', 'official_forward_test')",
+            name="ck_closing_captures_cohort_vocabulary",
+        ),
+        # A CAPTURED close must reference a snapshot; a MISSING one must not.
+        # Enforced in the database because a captured close with no
+        # reference is unusable and a missing close with one is a lie.
+        CheckConstraint(
+            "(status = 'CAPTURED' AND consensus_snapshot_id IS NOT NULL) OR "
+            "(status = 'MISSING' AND consensus_snapshot_id IS NULL) OR "
+            "(status = 'CONFLICT')",
+            name="ck_closing_captures_reference_matches_status",
+        ),
+        CheckConstraint(
+            "status <> 'MISSING' OR missing_close_reason IS NOT NULL",
+            name="ck_closing_captures_missing_has_reason",
+        ),
+        CheckConstraint(
+            "status <> 'CONFLICT' OR conflict_reason IS NOT NULL",
+            name="ck_closing_captures_conflict_has_reason",
+        ),
+    )
