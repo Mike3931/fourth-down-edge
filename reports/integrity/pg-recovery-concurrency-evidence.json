@@ -1,0 +1,118 @@
+{
+  "artifact": "postgresql-recovery-lineage-concurrency-evidence",
+  "artifact_version": "1",
+  "backend": {
+    "database": "fde_test",
+    "default_transaction_isolation": "read committed",
+    "dialect": "postgresql",
+    "isolation_level": "read committed",
+    "lock_timeout": "0",
+    "max_connections": "100",
+    "psycopg": "3.2.13",
+    "server_version": "16.14 (Debian 16.14-1.pgdg13+1)",
+    "sqlalchemy": "2.0.51",
+    "statement_timeout": "0"
+  },
+  "ci": {
+    "branch": "feature/forward-data-capture",
+    "head_sha": "2e95f6e6f23b460cd2718fe291fe932a59cd54db",
+    "job": "Analytical engine (Python)",
+    "job_result": "success",
+    "provider": "github-actions",
+    "run_id": "30914640864",
+    "run_url": "https://github.com/Mike3931/fourth-down-edge/actions/runs/30914640864",
+    "step": "PostgreSQL recovery-lineage concurrency gate",
+    "step_result": "success",
+    "trigger": "workflow_dispatch",
+    "url_is_supplementary": true,
+    "workflow": "deploy.yml"
+  },
+  "claim": "The recovery-lineage concurrency invariants were verified against a real PostgreSQL server with genuinely independent connections. This is not a claim about concurrency elsewhere in the system, and not a claim about model quality, profitability, or readiness for real-money use.",
+  "defects_this_gate_found": [
+    {
+      "defect": "unbounded idempotency key overflowed VARCHAR(160)",
+      "fixed_in": "1391661",
+      "postgres_error": "psycopg.errors.StringDataRightTruncation",
+      "why_sqlite_missed_it": "SQLite does not enforce VARCHAR length"
+    },
+    {
+      "defect": "reconcile_startup was a non-atomic SELECT-then-write",
+      "fixed_in": "6c8732f",
+      "postgres_error": "none - a wrong count, not an exception",
+      "why_sqlite_missed_it": "the threads happened to serialise on Windows; the race is real on both backends and surfaced on Linux CI as a count of 2 where the invariant is 1"
+    }
+  ],
+  "evidence_sha256": "1d9bfb04dac8eaca4bed33c8a5587e698fceeb615dad514cf31ed5ceb2e52d23",
+  "execution": {
+    "connection_pool_max_overflow": 4,
+    "connection_pool_size": 8,
+    "fallback_to_sqlite": "impossible: pgconftest.require_pg_url raises when FDE_DATABASE_URL is absent or not a PostgreSQL URL, rather than defaulting",
+    "independence_method": "pg_backend_pid() compared between two concurrently open sessions; the suite fails if they match",
+    "independent_connections_asserted": true,
+    "isolation_between_tests": "one PostgreSQL schema per test via schema_translate_map, created and dropped around each case",
+    "race_synchronisation": "threading.Barrier(n) released simultaneously, so contention is repeatable rather than dependent on scheduling luck",
+    "racing_workers": 4
+  },
+  "locking_strategy": {
+    "advisory_locks": "none",
+    "documentation": "docs/recovery-concurrency.md",
+    "recovery_open": "recovery keys are derived, not random, so two workers compute the same key and the second insert loses on the same unique index",
+    "requires_stricter_isolation": false,
+    "select_for_update": "none",
+    "slot_claim": "UNIQUE index on scheduled_job_runs.idempotency_key; the insert is the lock",
+    "startup_reconciliation": "UPDATE ... WHERE id = :id AND job_outcome = 'RUNNING'; rowcount is the ownership signal",
+    "summary": "every mutual-exclusion point is a single atomic statement whose outcome the loser can observe"
+  },
+  "results": {
+    "administrative_recovery_race": "PASSED",
+    "initial_run_race": "PASSED",
+    "mixed_initial_versus_recovery_race": "PASSED",
+    "recovery_race": "PASSED"
+  },
+  "scope_limits": [
+    "Covers recovery-lineage races only, as enumerated under tests.groups.",
+    "Not a general statement about concurrency elsewhere in the system.",
+    "Not a statement about model quality, profitability, predictive superiority, production approval, or readiness for real-money use."
+  ],
+  "tests": {
+    "deselected_non_gate_tests": 614,
+    "duration_seconds": 4.39,
+    "failed": 0,
+    "groups": [
+      {
+        "count": 3,
+        "name": "TestBackendIsReallyPostgres",
+        "proves": "the dialect is postgresql, the module constructs no sqlite URL, and two sessions hold two different backend PIDs",
+        "result": "passed"
+      },
+      {
+        "count": 3,
+        "name": "TestInitialRunRace",
+        "proves": "four workers claiming the same slot produce exactly one finished run and one set of domain effects; the losers receive a typed skip",
+        "result": "passed"
+      },
+      {
+        "count": 3,
+        "name": "TestRecoveryRace",
+        "proves": "four workers recovering the same interrupted slot produce exactly one recovery branch at sequence 1, with a monotonic gap-free sequence, one root, and no duplicated domain effects",
+        "result": "passed"
+      },
+      {
+        "count": 1,
+        "name": "TestAdministrativeRecoveryRace",
+        "proves": "concurrent administrative overrides do not stack: at most one takes effect, and it carries operator and reason",
+        "result": "passed"
+      },
+      {
+        "count": 1,
+        "name": "TestInitialVersusRecoveryRace",
+        "proves": "ordinary recovery racing an administrative override yields exactly one active successor under one root",
+        "result": "passed"
+      }
+    ],
+    "passed": 11,
+    "selection": "pytest -m \"pg_concurrency\"",
+    "total": 11
+  },
+  "verified_at_utc": "2026-08-04T13:05:28Z"
+}

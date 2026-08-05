@@ -818,6 +818,13 @@ JOB_CADENCE: dict[str, timedelta] = {
     "availability_computation": timedelta(hours=6),
     "feature_snapshot": timedelta(hours=6),
     "prediction_vintage": timedelta(hours=1),
+    # A price is entered by a person, so the cadence is how often the
+    # scheduler LOOKS for newly entered ones, not how often anything is
+    # fetched. Nothing is fetched.
+    "price_observation": timedelta(minutes=15),
+    # Evaluation tracks prices: an evaluation older than the price it
+    # compares against is stale by construction.
+    "price_evaluation": timedelta(minutes=15),
     "manual_price_expiration": timedelta(minutes=15),
     "closing_capture": timedelta(minutes=2),
     "result_ingestion": timedelta(hours=1),

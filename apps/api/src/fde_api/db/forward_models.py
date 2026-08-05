@@ -188,6 +188,23 @@ class ManualBookPriceEntry(Base):
     correction_reason: Mapped[str | None] = mapped_column(Text)
     user_id: Mapped[str] = mapped_column(String(64))
 
+    # Governance. A manually entered price is the one record in the chain
+    # with no provider to vouch for it, so it carries MORE provenance than a
+    # captured quote, not less.
+    cohort: Mapped[str] = mapped_column(
+        String(24), default="fixture", server_default="fixture", index=True
+    )
+    provider_mode: Mapped[str] = mapped_column(
+        String(16), default="UNKNOWN_LEGACY", server_default="UNKNOWN_LEGACY"
+    )
+    policy_version: Mapped[str | None] = mapped_column(String(32))
+    code_commit: Mapped[str | None] = mapped_column(String(48))
+    # Stored, not recomputed on read: the record states the arithmetic it was
+    # evaluated under, so a later change to the conversion cannot silently
+    # restate history.
+    decimal_odds: Mapped[float | None] = mapped_column(Float)
+    break_even_probability: Mapped[float | None] = mapped_column(Float)
+
 
 class Venue(Base):
     """Governed stadium reference. Roof type and `weather_applicable`

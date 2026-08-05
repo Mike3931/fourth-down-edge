@@ -30,6 +30,7 @@ from fde_api.db.forward_models import (
     ForwardLedgerEntry,
     ForwardPrediction,
     InjuryObservation,
+    ManualBookPriceEntry,
     OddsQuote,
     ScheduledJobRun,
     ScheduleObservation,
@@ -202,6 +203,12 @@ JOB_CATEGORIES: dict[str, JobCategory] = {
     "availability_computation": JobCategory.SNAPSHOT,
     "feature_snapshot": JobCategory.SNAPSHOT,
     "prediction_vintage": JobCategory.SNAPSHOT,
+    # A price is an observation with immutable identity: entering the same
+    # price twice is deduplicated, not duplicated.
+    "price_observation": JobCategory.OBSERVATION,
+    # An evaluation is a SNAPSHOT: its identity is (game, market, selection,
+    # slot, policy, model), so regenerating one slot reproduces it exactly.
+    "price_evaluation": JobCategory.SNAPSHOT,
     "closing_capture": JobCategory.TERMINAL,
     "result_ingestion": JobCategory.TERMINAL,
     "settlement": JobCategory.TERMINAL,
@@ -262,6 +269,13 @@ _EFFECT_SOURCES: dict[str, EffectSource] = {
         AvailabilityAssessment, "as_of_at", Attribution.EXACT_SLOT),
     "prediction_vintage": EffectSource(
         ForwardPrediction, "as_of_at", Attribution.EXACT_SLOT),
+    # entered_at, not observed_at: observed_at is when the USER saw the
+    # price, which can precede the slot by hours. What attributes the row to
+    # this run is when the run WROTE it.
+    "price_observation": EffectSource(
+        ManualBookPriceEntry, "entered_at", Attribution.SLOT_WINDOW),
+    "price_evaluation": EffectSource(
+        ForwardLedgerEntry, "as_of_at", Attribution.EXACT_SLOT),
     "settlement": EffectSource(
         ForwardLedgerEntry, "settled_at", Attribution.SCOPE_REQUIRED),
     "forward_evaluation": EffectSource(

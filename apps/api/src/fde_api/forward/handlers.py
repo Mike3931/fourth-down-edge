@@ -34,7 +34,9 @@ from typing import Any
 from sqlalchemy import select
 
 from fde_api.db.forward_models import (
+    ConsensusSnapshot,
     ForwardLedgerEntry,
+    ForwardPrediction,
     ManualBookPriceEntry,
     ScheduleObservation,
     Venue,
@@ -573,6 +575,277 @@ def prediction_vintage(ctx: JobContext) -> JobResult:
     ).to_job_result()
 
 
+def price_observation(ctx: JobContext) -> JobResult:
+    """Record manually supplied prices for games on the governed slate.
+
+    The prices arrive in `ctx.params`; nothing is fetched. bet365 is never
+    retrieved, scraped, inspected, refreshed, automated, or contacted. This
+    handler exists so a human-entered price is written through the same
+    governed, idempotent path as every other record in the chain rather
+    than by hand at the console.
+
+    Idempotent by construction: a price identical to the current
+    non-superseded row for that selection is left alone rather than
+    duplicated, so re-running a slot adds nothing.
+    """
+    from fde_api.forward.prices import (
+        PriceEntryError,
+        PriceObservation,
+        current_price,
+        record_price_observation,
+    )
+
+    supplied: list[dict[str, Any]] = ctx.params.get("price_observations") or []
+    if not supplied:
+        raise JobSkipped("no manually entered prices supplied for this slot")
+
+    known = {g.canonical_game_id for g in _slate(ctx)}
+    created = skipped = 0
+    warnings: list[str] = []
+    lineage: dict[str, Any] = {}
+
+    for item in supplied:
+        game = item.get("canonical_game_id")
+        if game not in known:
+            # An unknown game is a data error, not a reason to fail the run:
+            # the other prices in the batch are still valid.
+            warnings.append(f"{game}: not on the governed slate; price not recorded")
+            skipped += 1
+            continue
+        existing = current_price(
+            ctx.session, canonical_game_id=game, market=item["market"],
+            selection=item["selection"], cohort=ctx.cohort,
+        )
+        if (
+            existing is not None
+            and existing.american == item["american"]
+            and existing.line == item.get("line")
+            and existing.observed_at == item["observed_at"]
+        ):
+            skipped += 1
+            continue
+        try:
+            entry = record_price_observation(
+                ctx.session,
+                PriceObservation(
+                    canonical_game_id=game,
+                    market=item["market"],
+                    selection=item["selection"],
+                    line=item.get("line"),
+                    american=item["american"],
+                    observed_at=item["observed_at"],
+                    user_id=item.get("user_id", "fixture-operator"),
+                    source=item.get("source", "fixture_price"),
+                    cohort=ctx.cohort,
+                    provider_mode=ctx.provider_mode,
+                    policy_version=ctx.policy_version,
+                    data_mode=ctx.data_mode,
+                    confirmed=bool(item.get("confirmed", False)),
+                ),
+                now=ctx.now(),
+            )
+        except PriceEntryError as e:
+            warnings.append(f"{game}: price refused - {e}")
+            skipped += 1
+            continue
+        created += 1
+        lineage[entry.id] = {
+            "canonical_game_id": entry.canonical_game_id,
+            "market": entry.market,
+            "selection": entry.selection,
+            "observed_at": entry.observed_at.isoformat(),
+            "source": entry.source,
+        }
+
+    return HandlerResult(
+        outcome=Outcome.SUCCESS_WITH_WARNINGS if warnings else Outcome.SUCCESS,
+        records_read=len(supplied),
+        records_created=created,
+        records_skipped=skipped,
+        provider_calls=0,  # no provider is contacted for a manual price
+        provider_credits=0,
+        warnings=warnings[:25],
+        lineage=lineage,
+        detail={"note": "prices are supplied by a person; no book is contacted"},
+    ).to_job_result()
+
+
+def price_evaluation(ctx: JobContext) -> JobResult:
+    """Evaluate the latest prediction against an actually observed price.
+
+    This is the price-SPECIFIC evaluation, distinct from the prediction
+    itself: a model probability is not a research candidate until it has
+    been compared with a price someone can point at. Every status is
+    retained - PASS and WATCH are results, not omissions - so the ledger
+    shows what was declined as well as what qualified.
+
+    Suppression is applied HERE, from the live health report. A suppressed
+    evaluation is still written, marked, and given its health lineage,
+    because "we declined to call this a candidate, and why" is the record
+    that matters afterwards.
+    """
+    from fde_api.forward.health import run_health_checks
+    from fde_api.forward.ledger import HealthGate, evaluate_candidate, record_evaluation
+    from fde_api.forward.policy import load_policy
+    from fde_api.forward.prices import current_price, price_age_seconds
+
+    if not ctx.policy_version:
+        raise JobSkipped("no policy in force")
+    policy = load_policy(ctx.session, ctx.policy_version)
+
+    report = run_health_checks(
+        ctx.session, data_mode=ctx.data_mode, provider_mode=ctx.provider_mode,
+        policy_version=ctx.policy_version, now=ctx.now(),
+    )
+    gate = HealthGate.from_report(report)
+
+    created = skipped = suppressed = 0
+    warnings: list[str] = []
+    lineage: dict[str, Any] = {}
+
+    # The evaluation is stamped with the LOGICAL SLOT, not with wall-clock
+    # now(). Two consequences, both wanted:
+    #
+    #   * It is point-in-time correct. The evaluation states what was
+    #     knowable at the slot, so a run that starts late does not quietly
+    #     evaluate against information the slot could not have seen.
+    #   * It is idempotent. `record_evaluation` appends unconditionally, so
+    #     without a stable identity a recovery would replay the slot and
+    #     write a second, near-identical ledger row. Identity is (game,
+    #     market, selection, slot, policy) - which is exactly what makes
+    #     this a SNAPSHOT job rather than a terminal one.
+    as_of = ctx.slot
+
+    for g in _slate(ctx):
+        if g.kickoff_utc is None or g.game_status in ("CANCELLED", "POSTPONED"):
+            skipped += 1
+            continue
+        pred = ctx.session.scalars(
+            select(ForwardPrediction)
+            .where(
+                ForwardPrediction.canonical_game_id == g.canonical_game_id,
+                ForwardPrediction.data_mode == ctx.data_mode.value,
+                ForwardPrediction.policy_version == ctx.policy_version,
+                ForwardPrediction.as_of_at <= as_of,
+            )
+            .order_by(ForwardPrediction.as_of_at.desc(), ForwardPrediction.id.desc())
+        ).first()
+        if pred is None:
+            skipped += 1
+            continue
+
+        for market in policy.market_selection.markets:
+            for selection in PRICE_SELECTIONS.get(market, ()):
+                price = current_price(
+                    ctx.session, canonical_game_id=g.canonical_game_id, market=market,
+                    selection=selection, cohort=ctx.cohort, as_of=as_of,
+                )
+                if price is None:
+                    skipped += 1
+                    continue
+                already = ctx.session.scalars(
+                    select(ForwardLedgerEntry).where(
+                        ForwardLedgerEntry.canonical_game_id == g.canonical_game_id,
+                        ForwardLedgerEntry.data_mode == ctx.data_mode.value,
+                        ForwardLedgerEntry.policy_version == ctx.policy_version,
+                        ForwardLedgerEntry.market == market,
+                        ForwardLedgerEntry.selection == selection,
+                        ForwardLedgerEntry.as_of_at == as_of,
+                    )
+                ).first()
+                if already is not None:
+                    # This slot has already been evaluated. Appending again
+                    # would duplicate the effect on a replay, and the second
+                    # row would be indistinguishable from a genuine second
+                    # evaluation at the same instant.
+                    skipped += 1
+                    continue
+                evaluation = evaluate_candidate(
+                    market=market,
+                    selection=selection,
+                    line=price.line,
+                    american=price.american,
+                    model_probability=model_probability(pred, market, selection),
+                    price_source=price.source,
+                    price_age_seconds=price_age_seconds(price, as_of=as_of),
+                    policy=policy,
+                    data_completeness=pred.data_completeness,
+                    health_gate=gate,
+                )
+                entry = record_evaluation(
+                    ctx.session,
+                    prediction=pred,
+                    canonical_game_id=g.canonical_game_id,
+                    evaluation=evaluation,
+                    policy=policy,
+                    horizon=pred.horizon,
+                    as_of_at=as_of,
+                    data_completeness=pred.data_completeness,
+                    data_mode=ctx.data_mode,
+                )
+                created += 1
+                if gate.suppressed:
+                    suppressed += 1
+                lineage[str(entry.id)] = {
+                    "prediction_id": pred.id,
+                    "price_entry_id": price.id,
+                    "market": market,
+                    "selection": selection,
+                    "status": evaluation.status,
+                    "health_suppressed": gate.suppressed,
+                    "health_reasons": gate.reasons[:5],
+                }
+
+    if not created:
+        raise JobSkipped("no prediction/price pair was evaluable in this slot")
+    if gate.suppressed:
+        warnings.append(f"health suppression active: {'; '.join(gate.reasons[:3])}")
+
+    return HandlerResult(
+        outcome=Outcome.SUCCESS_WITH_WARNINGS if warnings else Outcome.SUCCESS,
+        domain_state=DomainState.SUPPRESSED if gate.suppressed else DomainState.COMPLETE,
+        records_read=created + skipped,
+        records_created=created,
+        records_skipped=skipped,
+        warnings=warnings[:25],
+        lineage=lineage,
+        detail={"suppressed_evaluations": suppressed},
+    ).to_job_result()
+
+
+# Which selections carry a price in each market, and how the model's
+# probability for that selection is read off a prediction vintage. One table
+# rather than a branch inside the handler: the mapping is the thing an
+# auditor needs to check, so it should be readable in one place.
+PRICE_SELECTIONS: dict[str, tuple[str, ...]] = {
+    "SPREAD": ("HOME", "AWAY"),
+    "TOTAL": ("OVER", "UNDER"),
+    "MONEYLINE": ("HOME", "AWAY"),
+}
+
+
+def model_probability(
+    pred: ForwardPrediction, market: str, selection: str
+) -> float | None:
+    """The model's probability for one priced selection.
+
+    Returns None when the vintage does not carry it, which the evaluation
+    service treats as DATA_INCOMPLETE rather than as a probability of zero.
+    Complements are computed from the stored side rather than stored twice,
+    so the two can never disagree.
+    """
+    if market == "SPREAD":
+        p = pred.spread_cover_prob
+        return p if selection == "HOME" else (None if p is None else 1.0 - p)
+    if market == "TOTAL":
+        p = pred.total_over_prob
+        return p if selection == "OVER" else (None if p is None else 1.0 - p)
+    if market == "MONEYLINE":
+        p = pred.home_win_prob
+        return p if selection == "HOME" else (None if p is None else 1.0 - p)
+    return None
+
+
 def manual_price_expiration(ctx: JobContext) -> JobResult:
     """Mark manually entered prices that policy now considers stale.
 
@@ -621,10 +894,15 @@ def closing_capture(ctx: JobContext) -> JobResult:
     if not due:
         raise JobSkipped("no games inside the closing-capture window")
 
-    found = 0
+    found = unchanged = conflicts = 0
     warnings: list[str] = []
+    lineage: dict[str, Any] = {}
     for g in due:
         for market in policy.market_selection.markets:
+            # The rule picks the close BEFORE anyone can see the outcome:
+            # the last eligible consensus at or before kickoff, inside the
+            # policy window. Nothing about the result is available here, and
+            # nothing may be chosen because it looks favourable.
             snap = closing_consensus(
                 ctx.session, canonical_game_id=g.canonical_game_id, market=market,
                 kickoff_utc=_kick(g),
@@ -632,21 +910,90 @@ def closing_capture(ctx: JobContext) -> JobResult:
                 data_mode=ctx.data_mode,
             )
             if snap is None:
+                # An explicit absence, not a silent one. A missing close
+                # means no CLV for this market, and that has to be visible.
                 warnings.append(f"{g.canonical_game_id}/{market}: no eligible closing consensus")
-            else:
-                found += 1
+                continue
+
+            # The selection used to be computed and thrown away, so the
+            # chain had no durable record that a close had ever been
+            # captured - and CLV had nothing to point at. Marking the
+            # rule-selected snapshot is what makes the close a record.
+            already = ctx.session.scalars(
+                select(ConsensusSnapshot).where(
+                    ConsensusSnapshot.canonical_game_id == g.canonical_game_id,
+                    ConsensusSnapshot.market == market,
+                    ConsensusSnapshot.data_mode == ctx.data_mode.value,
+                    ConsensusSnapshot.is_closing_capture.is_(True),
+                )
+            ).all()
+            if any(a.id == snap.id for a in already):
+                unchanged += 1  # idempotent: this close is already recorded
+                continue
+            if already:
+                # A different snapshot is already marked. Overwriting would
+                # silently restate what the close was, so this is reported
+                # for review instead.
+                conflicts += 1
+                warnings.append(
+                    f"{g.canonical_game_id}/{market}: closing capture conflict - "
+                    f"{[a.id for a in already]} already marked, rule now selects {snap.id}; "
+                    "not overwritten"
+                )
+                continue
+
+            snap.is_closing_capture = True
+            ctx.session.flush()
+            found += 1
+            lineage[str(snap.id)] = {
+                "canonical_game_id": g.canonical_game_id,
+                "market": market,
+                "observed_at": snap.observed_at.isoformat(),
+                "selected_by": "policy rule: last eligible consensus at or before kickoff",
+            }
+
     return HandlerResult(
         outcome=Outcome.SUCCESS_WITH_WARNINGS if warnings else Outcome.SUCCESS,
         records_read=len(due),
-        records_updated=found,
+        records_created=found,
+        records_skipped=unchanged,
         warnings=warnings[:25],
-        detail={"missing_close": len(warnings)},
+        lineage=lineage,
+        detail={
+            "closes_recorded": found,
+            "already_recorded": unchanged,
+            "conflicts_requiring_review": conflicts,
+            "missing_close": len([w for w in warnings if "no eligible" in w]),
+            "note": (
+                "the close is selected by a rule fixed before capture; it is not "
+                "guaranteed to exist, and a missing close stays explicit"
+            ),
+        },
     ).to_job_result()
 
 
 def result_ingestion(ctx: JobContext) -> JobResult:
-    """Bring in final scores for completed games."""
+    """Persist final scores as FINAL schedule observations.
+
+    This used to count matching scores and write nothing, so the chain had
+    no domain record of a result at all - settlement read scores straight
+    out of job params, and nothing recorded WHEN the result became
+    knowable. Point-in-time enforcement depends on that timestamp: a
+    prediction cannot see an observation that did not exist at its cutoff,
+    and with no observation there was nothing for the rule to bite on.
+
+    A result is now an observation like any other: appended, superseding
+    its predecessor, never overwriting. Idempotent on an unchanged score;
+    a changed score is a correction and requires a reason.
+    """
+    from fde_api.forward.results import (
+        ResultIngestionError,
+        ResultObservation,
+        ingest_result,
+    )
+
     scores: dict[str, tuple[int, int]] = ctx.params.get("final_scores") or {}
+    corrections: dict[str, str] = ctx.params.get("result_corrections") or {}
     played = [
         g for g in _slate(ctx)
         if g.kickoff_utc is not None and g.kickoff_utc < ctx.now()
@@ -654,13 +1001,65 @@ def result_ingestion(ctx: JobContext) -> JobResult:
     ]
     if not played:
         raise JobSkipped("no completed games to ingest")
-    matched = sum(1 for g in played if g.canonical_game_id in scores)
+
+    recorded = unchanged = refused = corrected = 0
+    warnings: list[str] = []
+    lineage: dict[str, Any] = {}
+
+    for g in played:
+        pair = scores.get(g.canonical_game_id)
+        if pair is None:
+            continue
+        try:
+            obs, disposition = ingest_result(
+                ctx.session,
+                ResultObservation(
+                    canonical_game_id=g.canonical_game_id,
+                    home_score=pair[0],
+                    away_score=pair[1],
+                    observed_at=ctx.now(),
+                    provider=ctx.params.get("result_provider", "fixture"),
+                ),
+                data_mode=ctx.data_mode,
+                correction_reason=corrections.get(g.canonical_game_id),
+            )
+        except ResultIngestionError as e:
+            warnings.append(f"{g.canonical_game_id}: {e}")
+            refused += 1
+            continue
+        if disposition == "recorded":
+            recorded += 1
+        elif disposition == "unchanged":
+            unchanged += 1
+        elif disposition == "corrected":
+            corrected += 1
+        else:
+            refused += 1
+            warnings.append(
+                f"{g.canonical_game_id}: not played; no result recorded"
+            )
+        if obs is not None:
+            lineage[str(obs.id)] = {
+                "canonical_game_id": obs.canonical_game_id,
+                "observed_at": obs.observed_at.isoformat(),
+                "supersedes_id": obs.supersedes_id,
+                "disposition": disposition,
+            }
+
+    if not (recorded or unchanged or corrected):
+        raise JobSkipped("no final scores available yet")
+
     return HandlerResult(
-        outcome=Outcome.SUCCESS if matched else Outcome.SKIPPED,
+        outcome=Outcome.SUCCESS_WITH_WARNINGS if warnings else Outcome.SUCCESS,
         records_read=len(played),
-        records_updated=matched,
-        warnings=[] if matched else ["no final scores available yet"],
-        detail={"games_with_scores": matched},
+        records_created=recorded + corrected,
+        records_skipped=unchanged,
+        warnings=warnings[:25],
+        lineage=lineage,
+        detail={
+            "recorded": recorded, "unchanged": unchanged,
+            "corrected": corrected, "refused": refused,
+        },
     ).to_job_result()
 
 
@@ -760,6 +1159,8 @@ HANDLERS = {
     "availability_computation": availability_computation,
     "feature_snapshot": feature_snapshot,
     "prediction_vintage": prediction_vintage,
+    "price_observation": price_observation,
+    "price_evaluation": price_evaluation,
     "manual_price_expiration": manual_price_expiration,
     "closing_capture": closing_capture,
     "result_ingestion": result_ingestion,

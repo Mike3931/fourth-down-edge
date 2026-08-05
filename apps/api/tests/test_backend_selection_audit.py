@@ -24,7 +24,37 @@ import pytest
 TESTS_DIR = Path(__file__).resolve().parent
 SRC_DIR = TESTS_DIR.parent / "src"
 
-PG_MODULES = sorted(TESTS_DIR.glob("test_pg_*.py"))
+def _concurrency_modules() -> list[Path]:
+    """Modules that CLAIM to be PostgreSQL concurrency gates.
+
+    Selected by the marker they carry, not by filename. The filename glob
+    `test_pg_*.py` was a proxy for the real property, and a proxy is wrong
+    in both directions: it caught an evidence-artifact test that merely
+    started with the same prefix, and it would have missed a genuine gate
+    named anything else. The marker is what actually puts a module in the
+    CI gate step, so the marker is what the audit follows.
+
+    Detected by PARSING for a module-level `pytestmark` assignment that
+    names the marker, not by searching the text for it. A substring search
+    selected this very file, which merely mentions the marker in order to
+    audit it - the same false positive, one level up.
+    """
+    out: list[Path] = []
+    for path in sorted(TESTS_DIR.glob("test_*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in tree.body:  # module level only
+            if not isinstance(node, ast.Assign):
+                continue
+            names = {t.id for t in node.targets if isinstance(t, ast.Name)}
+            if "pytestmark" not in names:
+                continue
+            if "pg_concurrency" in ast.unparse(node.value):
+                out.append(path)
+                break
+    return out
+
+
+PG_MODULES = _concurrency_modules()
 
 
 def _detector_lines(tree: ast.AST) -> set[int]:
