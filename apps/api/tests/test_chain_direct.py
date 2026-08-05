@@ -254,15 +254,21 @@ class TestDirectAndSchedulerChainsAgree:
 
     @pytest.mark.skip(
         reason=(
-            "PARITY NOT YET ACHIEVED - reported as incomplete, not passing. "
-            "The comparison machinery works and the diff is readable; the two "
-            "chains are not yet driven from identical inputs. The scheduler "
-            "chain captures odds at three slots and generates every horizon "
-            "whose cutoff has passed, while the direct chain generates one "
-            "horizon. Aligning them means driving both from a single fixture "
-            "schedule rather than two hand-written sequences. Skipped rather "
-            "than xfailed so it is visible in the run, and rather than "
-            "loosened so it cannot pass without being true."
+            "PARITY STILL NOT ACHIEVED - two deltas remain, both identified. "
+            "Record identities, multiplicity and every governance field now "
+            "match exactly; the manifest closed the input drift. What differs: "
+            "(1) ledger `reasons_digest`, because the evaluation reason text "
+            "embeds Data Health output and the health report legitimately "
+            "differs - the scheduler database contains scheduler runs and the "
+            "direct one does not. The DECISION matches; only the explanatory "
+            "text differs. This is arguably scheduler-specific metadata that "
+            "the comparator should exclude, but excluding it is a judgement "
+            "about what parity means and is not made unilaterally here. "
+            "(2) prediction `artifact_hash` and `lineage_digest`, meaning the "
+            "vintage input sets still differ - the one substantive gap left. "
+            "Skipped rather than loosened so it cannot pass without being "
+            "true; the brief requires an unskipped passing test, and that "
+            "requirement is reported as UNMET rather than worked around."
         )
     )
     def test_the_semantic_hashes_match(self, direct_factory, factory) -> None:

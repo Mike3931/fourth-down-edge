@@ -182,27 +182,20 @@ settings.load_profile("fde")
 
 @pytest.fixture()
 def factory(tmp_path, monkeypatch):
-    """A SQLite database seeded with one governed game and a frozen policy."""
-    from chainkit import DATA_MODE, KICK, csv_bytes
+    """A SQLite database seeded from the scenario manifest.
+
+    Both execution paths seed through the same helper, so a difference in
+    the baseline cannot masquerade as a parity failure in records neither
+    path computed.
+    """
+    from chainkit import seed_venues_and_policy
     from fde_api.config import settings
-    from fde_api.forward.policy import build_policy_draft, freeze_policy
-    from fde_api.forward.schedule import ingest_schedule
-    from fde_api.forward.venues import seed_venues
 
     monkeypatch.setattr(settings, "data_dir", tmp_path)
     engine = create_engine("sqlite://", future=True)
     Base.metadata.create_all(engine)
     f = sessionmaker(bind=engine, future=True)
-    with f() as s:
-        seed_venues(s)
-        freeze_policy(s, build_policy_draft(
-            policy_version="ftp-2026-v1",
-            start=datetime(2026, 9, 1, tzinfo=UTC).date(),
-            end=datetime(2027, 2, 28, tzinfo=UTC).date(),
-        ))
-        ingest_schedule(s, csv_bytes(), season=2026,
-                        observed_at=KICK - timedelta(days=30), data_mode=DATA_MODE)
-        s.commit()
+    seed_venues_and_policy(f)
     return f
 
 

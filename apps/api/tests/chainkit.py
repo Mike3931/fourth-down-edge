@@ -1,159 +1,132 @@
-"""Shared harness for the record-chain tests.
+"""Shared harness for the record-chain tests, driven by the manifest.
 
-Deliberately NOT a `test_*` module: it holds the fixture data, the game
-definition, and the driver that walks one game through the scheduler, so
-three test modules can share them without importing each other. A test
-module that imports another test module's fixtures shadows them, which is
-both a lint error and a real source of confusion about which fixture ran.
+Deliberately NOT a `test_*` module: it holds the scheduler driver the chain
+tests share. The SCENARIO lives in `scenario_manifest.py` and is read from
+there — this file decides only how the scheduler executes it.
 
-The pytest fixtures themselves live in `conftest.py`, where pytest can find
-them by name without any import at all.
+That separation is the point. Two hand-maintained fixtures drifted apart
+and made the parity gate fail for a reason that had nothing to do with the
+system under test. Now a change to what happens in the world is a change to
+the manifest, visible as a changed content hash, and both paths see it.
+
+The pytest fixtures live in `conftest.py`, where pytest finds them by name
+without any import.
 """
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
+from sqlalchemy import select
+
+from fde_api.db.forward_models import ScheduledJobRun
 from fde_api.forward.cohort import Cohort, ProviderMode
 from fde_api.forward.handlers import register_all
 from fde_api.forward.modes import DataMode
 from fde_api.forward.scheduler import FrozenClock, Scheduler
+from scenario_manifest import COMPLETE_GAME, FixtureNws, ScenarioManifest, schedule_csv
 
-# A deterministic U.S. outdoor game at a governed venue.
-KICK = datetime(2026, 9, 13, 17, 0, tzinfo=UTC)
-GAME = "2026_02_KC_BUF"
-DATA_MODE = DataMode.DEMO  # fixture cohort never claims LIVE_RESEARCH
-
-HEADER = (
-    "game_id,season,game_type,week,gameday,weekday,gametime,away_team,away_score,home_team,"
-    "home_score,location,result,total,overtime,old_game_id,gsis,nfl_detail_id,pfr,pff,espn,ftn,"
-    "away_rest,home_rest,away_moneyline,home_moneyline,spread_line,away_spread_odds,"
-    "home_spread_odds,total_line,under_odds,over_odds,div_game,roof,surface,temp,wind,"
-    "away_qb_id,home_qb_id,away_qb_name,home_qb_name,away_coach,home_coach,referee,stadium_id,stadium"
-)
+# One import site for the scenario, so nothing re-declares it.
+MANIFEST: ScenarioManifest = COMPLETE_GAME
+KICK = MANIFEST.kickoff_utc
+GAME = MANIFEST.canonical_game_id
+DATA_MODE = DataMode(MANIFEST.data_mode)
+COHORT = Cohort(MANIFEST.cohort)
+POLICY = MANIFEST.policy_version
 
 
-def csv_bytes(*, status_fields: dict[str, str] | None = None) -> bytes:
-    base = dict.fromkeys(HEADER.split(","), "")
-    base.update({
-        "game_id": GAME, "season": "2026", "game_type": "REG", "week": "2",
-        "gameday": "2026-09-13", "gametime": "13:00", "away_team": "KC", "home_team": "BUF",
-        "location": "Home", "div_game": "0", "roof": "outdoors", "surface": "a_turf",
-        "stadium_id": "BUF00", "stadium": "Highmark Stadium", "away_rest": "7", "home_rest": "7",
-        "home_qb_name": "Josh Allen", "away_qb_name": "Patrick Mahomes",
-    })
-    base.update(status_fields or {})
-    return ("\n".join([HEADER, ",".join(base[k] for k in HEADER.split(","))]) + "\n").encode()
+def csv_bytes() -> bytes:
+    return schedule_csv(MANIFEST)
 
 
-def payload(ts: datetime, *, point: float = -2.5) -> list[dict]:
-    """Three eligible books, so consensus has something to agree about."""
+def payload(at: datetime, *, point: float | None = None) -> list[dict]:
+    """The provider payload for the manifest slot at `at`.
 
-    def book(key: str, adj: float) -> dict:
-        return {"key": key, "last_update": ts.isoformat(), "markets": [
-            {"key": "spreads", "outcomes": [
-                {"name": "Buffalo Bills", "price": -110, "point": point + adj},
-                {"name": "Kansas City Chiefs", "price": -110, "point": -(point + adj)}]},
-            {"key": "totals", "outcomes": [
-                {"name": "Over", "price": -110, "point": 47.5},
-                {"name": "Under", "price": -110, "point": 47.5}]}]}
-
-    return [{"id": "evt1", "commence_time": KICK.isoformat(),
-             "home_team": "Buffalo Bills", "away_team": "Kansas City Chiefs",
-             "bookmakers": [book("draftkings", 0.0), book("fanduel", 0.5),
-                            book("betmgm", -0.5)]}]
-
-
-def prices(observed_at: datetime, *, american: int = -110) -> list[dict]:
-    """Prices a person typed in. Nothing is fetched; no book is contacted."""
-    return [
-        {"canonical_game_id": GAME, "market": "SPREAD", "selection": "HOME",
-         "line": -3.0, "american": american, "observed_at": observed_at,
-         "user_id": "fixture-operator", "source": "fixture_price", "confirmed": True},
-        {"canonical_game_id": GAME, "market": "TOTAL", "selection": "OVER",
-         "line": 47.5, "american": american, "observed_at": observed_at,
-         "user_id": "fixture-operator", "source": "fixture_price", "confirmed": True},
-    ]
-
-
-# The market point captured at each slot. A replay must present the SAME
-# payload the original run saw: replaying with different quotes writes
-# genuinely different observations, which looks like a duplicate-effect bug
-# and is really a test feeding the handler new data.
-SLOT_POINTS: dict[str, float] = {}
+    A slot the manifest does not declare raises rather than being invented:
+    an unlisted payload is a fixture only one path would ever see, which is
+    exactly the drift this module exists to prevent.
+    """
+    for slot in MANIFEST.odds_slots:
+        if slot.at == at and (point is None or slot.spread_point == point):
+            return MANIFEST.payload_for(slot)
+    raise KeyError(
+        f"no odds slot at {at.isoformat()} (point={point}) in {MANIFEST.version}; "
+        "add it to the manifest rather than hand-building a payload"
+    )
 
 
 def payload_for_slot(slot: datetime) -> list[dict]:
-    """The payload that belongs to a slot, stable across replays."""
-    point = SLOT_POINTS.setdefault(slot.isoformat(), -2.5)
-    return payload(slot, point=point)
+    """The payload belonging to a slot, stable across replays."""
+    return payload(slot)
 
 
-def register_slot_point(slot: datetime, point: float) -> list[dict]:
-    SLOT_POINTS[slot.isoformat()] = point
-    return payload(slot, point=point)
+def prices(observed_at: datetime | None = None) -> list[dict]:
+    """The manifest's price observations, in handler-parameter shape.
 
-
-class FixtureNws:
-    """A deterministic stand-in for the NWS client.
-
-    Returns the same forecast every time so the vintage is stable, and its
-    presence is what tells `weather_capture` it is running against a fixture
-    rather than reaching out to weather.gov. Nothing here opens a socket.
+    `observed_at` is accepted and ignored: the manifest states when each
+    price was SEEN, and letting a caller override that is how the two paths
+    came to record different observation times for the same price.
     """
-
-    def __init__(self, *, temp_f: int = 62, wind: str = "8 mph") -> None:
-        self.temp_f = temp_f
-        self.wind = wind
-
-    def resolve_grid(self, lat: float, lon: float) -> dict:
-        return {"office": "BUF", "grid_x": 10, "grid_y": 20,
-                "forecast_url": "fixture://forecast"}
-
-    def fetch_forecast(self, url: str) -> tuple[dict, bytes]:
-        body = {"properties": {"periods": [{
-            "startTime": (KICK - timedelta(hours=1)).isoformat(),
-            "endTime": (KICK + timedelta(hours=3)).isoformat(),
-            "temperature": self.temp_f, "temperatureUnit": "F",
-            "windSpeed": self.wind, "probabilityOfPrecipitation": {"value": 10},
-            "relativeHumidity": {"value": 55},
-            "shortForecast": "Partly Cloudy",
-            "detailedForecast": "Partly cloudy with light wind.",
-        }]}}
-        raw = repr(sorted(body["properties"]["periods"][0].items())).encode()
-        return body, raw
+    return [
+        {
+            "canonical_game_id": MANIFEST.canonical_game_id,
+            "market": p.market,
+            "selection": p.selection,
+            "line": p.line,
+            "american": p.american,
+            "observed_at": p.observed_at,
+            "user_id": p.user_id,
+            "source": p.source,
+            "confirmed": p.confirmed,
+        }
+        for p in MANIFEST.price_observations
+    ]
 
 
-def seed_injuries(factory, *, observed_at: datetime) -> None:
-    """A resolved starting quarterback and one listed player.
+def seed_injuries(factory, *, observed_at: datetime | None = None) -> None:
+    """The manifest's injury vintages.
 
     Injury entry is manual by design, so the chain needs observations to
-    exist before `injury_reconciliation` and `availability_computation` have
-    anything to reconcile or assess.
+    exist before reconciliation and assessment have anything to work on.
     """
     from fde_api.forward.injuries import SourceCategory, record_injury_observation
 
     with factory() as s:
-        for team, player, designation in (
-            ("BUF", "BUF_QB_ALLEN", None),
-            ("KC", "KC_QB_MAHOMES", None),
-            ("BUF", "BUF_WR_DIGGS", "QUESTIONABLE"),
-        ):
+        for v in MANIFEST.injury_vintages:
             record_injury_observation(
                 s,
-                canonical_game_id=GAME,
-                team_id=team,
-                player_id=player,
-                report_date="2026-09-11",
-                observed_at=observed_at,
-                source_category=SourceCategory.OFFICIAL_VERIFIED,
-                practice_status="FULL" if designation is None else "LIMITED",
-                game_designation=designation,
-                body_part=None if designation is None else "hamstring",
+                canonical_game_id=MANIFEST.canonical_game_id,
+                team_id=v.team_id,
+                player_id=v.player_id,
+                report_date=v.report_date,
+                observed_at=v.at,
+                source_category=SourceCategory(v.source_category),
+                practice_status=v.practice_status,
+                game_designation=v.game_designation,
+                body_part=v.body_part,
                 source_reference="fixture injury report",
                 data_mode=DATA_MODE,
-                now=observed_at,
+                now=v.at,
             )
+        s.commit()
+
+
+def seed_venues_and_policy(factory) -> None:
+    """Everything the scenario needs before either path can run."""
+    from fde_api.forward.policy import build_policy_draft, freeze_policy
+    from fde_api.forward.schedule import ingest_schedule
+    from fde_api.forward.venues import seed_venues
+
+    m = MANIFEST
+    with factory() as s:
+        seed_venues(s)
+        freeze_policy(s, build_policy_draft(
+            policy_version=m.policy_version,
+            start=(m.kickoff_utc - timedelta(days=60)).date(),
+            end=(m.kickoff_utc + timedelta(days=160)).date(),
+        ))
+        ingest_schedule(s, csv_bytes(), season=m.season,
+                        observed_at=m.schedule_observed_at, data_mode=DATA_MODE)
         s.commit()
 
 
@@ -162,11 +135,11 @@ class SchedulerChain:
 
     def __init__(self, factory) -> None:
         self.factory = factory
-        self.clock = FrozenClock(KICK - timedelta(days=7))
+        self.clock = FrozenClock(MANIFEST.odds_slots[0].at)
         self.sched = Scheduler(
             factory, clock=self.clock,
-            cohort=Cohort.FIXTURE, provider_mode=ProviderMode.FIXTURE,
-            policy_version="ftp-2026-v1", data_mode=DATA_MODE,
+            cohort=COHORT, provider_mode=ProviderMode(MANIFEST.provider_mode),
+            policy_version=POLICY, data_mode=DATA_MODE,
         )
         register_all(self.sched)
         self.log: list[tuple[str, str]] = []
@@ -186,8 +159,15 @@ class SchedulerChain:
     def session(self):
         return self.factory()
 
+    def runs(self) -> list[ScheduledJobRun]:
+        with self.factory() as s:
+            rows = list(s.scalars(select(ScheduledJobRun)))
+            for r in rows:
+                s.expunge(r)
+            return rows
 
-# The §14 sequence, in logical order. Named so a failure says which step.
+
+# The required sequence, in logical order. Named so a failure says which step.
 REQUIRED_SEQUENCE = (
     "schedule_refresh",
     "odds_capture",
@@ -208,47 +188,53 @@ REQUIRED_SEQUENCE = (
 
 
 def drive(chain: SchedulerChain, *, with_injuries: bool = True) -> None:
-    """The full week, in the order it actually becomes knowable.
+    """Execute the manifest through the scheduler.
 
-    `seed_injuries` is False on a replay. Injury entry is manual by design,
-    so seeding again genuinely appends new superseding observations - that
-    is the immutable-history behaviour working, not a duplicate effect. A
-    replay must exercise the SCHEDULER, so it re-runs the handlers over the
-    observations that already exist.
+    Every moment and every input comes from the manifest. `with_injuries`
+    is False on a replay: injury entry is manual, so re-seeding appends
+    genuinely new superseding observations - the immutable-history
+    behaviour working, not a duplicate effect. A replay must exercise the
+    SCHEDULER over the observations that already exist.
     """
-    # T-7d: the slate is known and the market has opened.
-    chain.at(KICK - timedelta(days=7))
+    m = MANIFEST
+    opening, mid, closing = m.odds_slots
+
+    # The market opens; slate, weather and injury picture become known.
+    chain.at(opening.at)
     chain.run("schedule_refresh")
-    chain.run("odds_capture",
-              fixture_payload=register_slot_point(chain.clock.now(), -2.5))
+    chain.run("odds_capture", fixture_payload=m.payload_for(opening))
     chain.run("consensus_build")
-    chain.run("weather_capture", nws_client=FixtureNws())
+    chain.run("weather_capture", nws_client=FixtureNws(m.weather_vintages[0]))
     if with_injuries:
-        seed_injuries(chain.factory, observed_at=chain.clock.now())
+        seed_injuries(chain.factory)
     chain.run("injury_reconciliation")
     chain.run("availability_computation")
     chain.run("feature_snapshot")
 
-    # T-2d: the market has moved. Recapture, then predict and price.
-    chain.at(KICK - timedelta(days=2))
-    chain.run("odds_capture",
-              fixture_payload=register_slot_point(chain.clock.now(), -3.0))
+    # The market has moved. Recapture, predict, price, evaluate.
+    chain.at(mid.at)
+    chain.run("odds_capture", fixture_payload=m.payload_for(mid))
     chain.run("consensus_build")
-    chain.run("prediction_vintage")
-    chain.run("price_observation",
-              price_observations=prices(chain.clock.now() - timedelta(minutes=2)))
+    # The manifest owns the model output. Without it the handler generates
+    # DATA_INCOMPLETE vintages carrying no probabilities, while the direct
+    # chain - which was passed the moments - produces real ones. That is
+    # not a disagreement about the chain; it is one path being handed the
+    # model and the other not.
+    chain.run("prediction_vintage", moments=m.moments,
+              home_qb=m.home_qb_id, away_qb=m.away_qb_id)
+    chain.run("price_observation", price_observations=prices())
     chain.run("price_evaluation")
 
     # Kickoff: the close is captured without anyone seeing the outcome.
-    chain.at(KICK - timedelta(minutes=5))
-    chain.run("odds_capture",
-              fixture_payload=register_slot_point(chain.clock.now(), -3.5))
+    chain.at(closing.at)
+    chain.run("odds_capture", fixture_payload=m.payload_for(closing))
     chain.run("consensus_build")
     chain.run("closing_capture")
 
     # After the whistle.
-    chain.at(KICK + timedelta(hours=4))
-    chain.run("result_ingestion", final_scores={GAME: (24, 20)})
-    chain.run("settlement", final_scores={GAME: (24, 20)})
+    chain.at(m.result_observed_at)
+    scores = {m.canonical_game_id: (m.home_score, m.away_score)}
+    chain.run("result_ingestion", final_scores=scores)
+    chain.run("settlement", final_scores=scores)
     chain.run("forward_evaluation")
     chain.run("data_health_reconciliation")
