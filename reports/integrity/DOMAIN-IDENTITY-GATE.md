@@ -1,9 +1,31 @@
 # Closing the domain-identity database gate
 
-Branch `feature/forward-data-capture`, commit `b3cf8d7`.
-CI run [31096650022](https://github.com/Mike3931/fourth-down-edge/actions/runs/31096650022),
-head SHA `b3cf8d7ed1f573869ba773493fc5073e08b7588e` — matched by exact SHA,
-not by "the latest run on the branch".
+Branch `feature/forward-data-capture`.
+
+## Verification status of this branch
+
+| | |
+|---|---|
+| Last CI-verified commit | `b3cf8d7ed1f573869ba773493fc5073e08b7588e` |
+| Verifying run | [31096650022](https://github.com/Mike3931/fourth-down-edge/actions/runs/31096650022), conclusion **success**, `headSha` `b3cf8d7e…` |
+| Branch head | later than the verified commit — see below |
+
+Matched by exact SHA, never by "the latest run on the branch". The commits
+after `b3cf8d7` change only `reports/integrity/` — this report and the
+parity artifact — and touch no file under `apps/`, `packages/`, or
+`.github/`. That is context, **not** verification: an unverified commit is
+unverified whatever it contains, and the gate is not closed until a
+successful run reports the branch head as its `headSha`.
+
+Three dispatches against the later head (`31124432427`, `31125229281`,
+`31125888607`) were each cancelled by GitHub after ~15 minutes without ever
+being assigned a runner — no job started, no gate ran, no gate failed. The
+first dispatch attempt also returned HTTP 500. This is runner capacity on
+GitHub's side; nothing in this repository was executed and found wanting.
+Re-dispatch when Actions recovers.
+
+**The closure statement is therefore withheld.** It is recorded only when a
+successful run reports the branch head as its `headSha`.
 
 Four deficiencies were outstanding. Three of them shared a shape: the
 mechanism existed and nothing forced anyone to use it.
