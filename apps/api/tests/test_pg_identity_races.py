@@ -450,18 +450,28 @@ class TestAvailabilityConflictRace:
         assert "CONFLICT" in {o.value for o in IdentityOutcome}
 
 
-def _policy(session):
-    from fde_api.forward.policy import build_policy_draft, freeze_policy, load_policy
+def _seed_policy(factory) -> None:
+    """Freeze the policy BEFORE any race starts.
 
-    try:
-        return load_policy(session, "ftp-2026-v1")
-    except Exception:
-        freeze_policy(session, build_policy_draft(
+    Freezing it lazily inside the racing callable made the workers race to
+    insert the policy as well as the evaluation, and the policy's primary
+    key is not the identity under test. That failure is a fixture artefact
+    and would have masked whatever the evaluation identity actually did.
+    """
+    from fde_api.forward.policy import build_policy_draft, freeze_policy
+
+    with factory() as s:
+        freeze_policy(s, build_policy_draft(
             policy_version="ftp-2026-v1",
             start=(KICK - timedelta(days=60)).date(),
             end=(KICK + timedelta(days=160)).date()))
-        session.commit()
-        return load_policy(session, "ftp-2026-v1")
+        s.commit()
+
+
+def _policy(session):
+    from fde_api.forward.policy import load_policy
+
+    return load_policy(session, "ftp-2026-v1")
 
 
 def _record_evaluation(
@@ -491,6 +501,7 @@ def _record_evaluation(
 
 class TestEvaluationRaces:
     def test_exact_retry_race_yields_one_row(self, factory) -> None:
+        _seed_policy(factory)
         results = outcomes(race(lambda i: _record_evaluation(factory)))
         assert results.count("CREATED") <= 1, results
         assert all(r in {"CREATED", "EXISTING_IDENTICAL"} for r in results), results
@@ -499,6 +510,7 @@ class TestEvaluationRaces:
         assert len(rows) == 1, [r.id for r in rows]
 
     def test_conflicting_content_at_one_slot(self, factory) -> None:
+        _seed_policy(factory)
         probabilities = [0.62, 0.71]
         results = outcomes(race(
             lambda i: _record_evaluation(factory,
@@ -514,6 +526,7 @@ class TestEvaluationRaces:
         """A different evaluation type is a different slot, not a conflict -
         the same shape as a remediated decision context creating a new
         immutable evaluation."""
+        _seed_policy(factory)
         horizons = ["OPENING", "EARLY_WEEK"]
         results = outcomes(race(
             lambda i: _record_evaluation(factory, horizon=horizons[i % 2]), n=2))
