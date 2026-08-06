@@ -12,7 +12,16 @@ mechanism existed and nothing forced anyone to use it.
 
 ## 1. The populated-database duplicate block
 
+```text
+POPULATED DATABASE UPGRADE:
+BLOCKED — MANUAL_REVIEW_UNRESOLVED
+```
+
 **Status: formally governed, deliberately not resolved.**
+
+Gate closure does not mean this database is migration-ready. It is not, and
+nothing below should be read as saying otherwise. The fresh-database and
+governed test-database migrations are verified separately and remain so.
 
 `apps/api/scripts/identity_duplicate_inventory.py` reads the development
 database and classifies every logical-identity group. It reuses the
@@ -94,6 +103,20 @@ classifies as `CONFLICTING_DUPLICATE`, and `plan.resolved` is `False`.
 somebody with the authority decides. Fresh databases and CI are unaffected —
 the constraint is declared on the model, so `create_all` builds it, and the
 PostgreSQL race tests exercise it.
+
+Six things were available and were not done, each of which would have
+produced a green migration and a false record:
+
+- select the newest row
+- select the oldest row
+- average the three probabilities
+- infer authority from insertion order
+- reset the database and describe the populated upgrade as verified
+- change the disposition solely to permit the migration
+
+The first four invent a provenance the data does not have. The fifth
+reports a test that was never run. The sixth is the disposition doing the
+opposite of its job.
 
 `MANUAL_REVIEW_UNRESOLVED` refuses exactly as hard as no manifest at all.
 That is tested directly, because the alternative is that "a human looked at
