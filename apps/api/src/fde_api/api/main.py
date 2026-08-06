@@ -490,3 +490,78 @@ def get_forward_live(data_mode: str = "LIVE_RESEARCH", hours: int = 72) -> dict[
             "readiness for real money."
         ),
     }
+
+
+@app.get("/v1/forward/health", dependencies=[Auth])
+def get_forward_health(data_mode: str = "LIVE_RESEARCH") -> dict[str, Any]:
+    """Data-health checks, grouped by the scope each one speaks for.
+
+    Scope is the whole point: an expired provider key and a leaked future
+    feature are both "unhealthy", and treating them as one number is how a
+    platform problem gets mistaken for a reason to distrust a decision.
+    """
+    from fde_api.forward.health import HealthScope, run_health_checks, scope_of
+    from fde_api.forward.modes import DataMode
+
+    now = utc_now()
+    report = run_health_checks(get_session(), now=now, data_mode=DataMode(data_mode))
+    checks = report["checks"]
+
+    grouped: dict[str, list[dict[str, Any]]] = {s.value: [] for s in HealthScope}
+    for c in checks:
+        try:
+            scope = scope_of(c["id"]).value
+        except Exception:
+            scope = HealthScope.GOVERNANCE_INTEGRITY.value
+        grouped[scope].append(c)
+
+    return {
+        "generated_at_utc": now.isoformat(),
+        "data_mode": data_mode,
+        "total": len(checks),
+        "ok": sum(1 for c in checks if c.get("status") == "OK"),
+        "by_scope": grouped,
+        "worst_severity": (
+            "CRITICAL" if any(c.get("severity") == "CRITICAL" and c.get("status") != "OK" for c in checks)
+            else "WARNING" if any(c.get("severity") == "WARNING" and c.get("status") != "OK" for c in checks)
+            else "OK"
+        ),
+        "research_banner": RESEARCH_BANNER,
+    }
+
+
+@app.get("/v1/forward/slate", dependencies=[Auth])
+def get_forward_slate(data_mode: str = "LIVE_RESEARCH", limit: int = 400) -> dict[str, Any]:
+    """The ingested slate, newest observation per game."""
+    from fde_api.db.forward_models import ScheduleObservation
+    from fde_api.forward.modes import DataMode
+
+    mode = DataMode(data_mode)
+    with session_scope() as s:
+        rows = list(s.scalars(
+            select(ScheduleObservation)
+            .where(ScheduleObservation.data_mode == mode.value)
+            .order_by(ScheduleObservation.kickoff_utc)
+        ))
+        latest: dict[str, Any] = {}
+        for o in rows:
+            latest[o.canonical_game_id] = o
+        games = [
+            {
+                "canonical_game_id": o.canonical_game_id,
+                "away_team_id": o.away_team_id,
+                "home_team_id": o.home_team_id,
+                "kickoff_utc": o.kickoff_utc.isoformat(),
+                "season": o.season, "season_type": o.season_type, "week": o.week,
+                "venue": o.stadium_name, "neutral_site": bool(o.neutral_site),
+                "game_status": o.game_status, "schedule_provider": o.provider,
+            }
+            for o in sorted(latest.values(), key=lambda x: x.kickoff_utc)[:limit]
+        ]
+    return {
+        "generated_at_utc": utc_now().isoformat(),
+        "data_mode": mode.value,
+        "count": len(games),
+        "games": games,
+        "research_banner": RESEARCH_BANNER,
+    }

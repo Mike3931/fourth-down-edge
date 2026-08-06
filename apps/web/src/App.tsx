@@ -5,6 +5,9 @@ import Shell from './components/Shell';
 import SignIn from './pages/SignIn';
 import TodaysPicks from './pages/TodaysPicks';
 import LiveSlate from './pages/LiveSlate';
+import SlateLive from './pages/SlateLive';
+import DataHealthLive from './pages/DataHealthLive';
+import ModelAuditLive from './pages/ModelAuditLive';
 import WeeklySlate from './pages/WeeklySlate';
 import GameLab from './pages/GameLab';
 import InjuryCenter from './pages/InjuryCenter';
@@ -39,14 +42,17 @@ export default function App() {
       <Route element={<Shell />}>
         <Route path="/" element={<TodaysPicks />} />
         <Route path="/live" element={<LiveSlate />} />
-        <Route path="/slate" element={<WeeklySlate />} />
+        <Route path="/slate" element={<SlateLive />} />
+        <Route path="/slate-demo" element={<WeeklySlate />} />
         <Route path="/game/:gameId" element={<GameLab />} />
         <Route path="/injuries" element={<InjuryCenter />} />
         <Route path="/market" element={<MarketMonitor />} />
         <Route path="/portfolio" element={<BetPortfolio />} />
         <Route path="/performance" element={<PerformanceLab />} />
-        <Route path="/models" element={<ModelAudit />} />
-        <Route path="/health" element={<DataHealth />} />
+        <Route path="/models" element={<ModelAuditLive />} />
+        <Route path="/models-demo" element={<ModelAudit />} />
+        <Route path="/health" element={<DataHealthLive />} />
+        <Route path="/health-demo" element={<DataHealth />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

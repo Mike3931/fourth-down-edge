@@ -404,14 +404,27 @@ def run_health_checks(
         slate[o.canonical_game_id] = o
     games = list(slate.values())
 
+    # EXPECTED_2026_GAMES is the REGULAR-season count, so only regular-season
+    # fixtures may be counted against it. Counting the whole slate meant that
+    # ingesting a legitimate preseason game raised a CRITICAL claiming the
+    # schedule was corrupt — a correct capture reported as data loss, and one
+    # that suppresses candidates for every other game in the season.
+    regular = [g for g in games if g.season_type == "REG"]
+    other = len(games) - len(regular)
+    suffix = f" (+{other} non-regular-season)" if other else ""
+
     checks.append(
         _ok("schedule_game_count", Severity.CRITICAL,
-            f"{len(games)} games observed", now, detail={"count": len(games)})
-        if len(games) == EXPECTED_2026_GAMES
+            f"{len(regular)} regular-season games observed{suffix}", now,
+            detail={"regular_season": len(regular), "other": other,
+                    "expected": EXPECTED_2026_GAMES})
+        if len(regular) == EXPECTED_2026_GAMES
         else _fail("schedule_game_count", Severity.CRITICAL,
-                   f"{len(games)} games observed, expected {EXPECTED_2026_GAMES}",
+                   f"{len(regular)} regular-season games observed, "
+                   f"expected {EXPECTED_2026_GAMES}{suffix}",
                    "re-run schedule_refresh and inspect the source", now,
-                   detail={"count": len(games), "expected": EXPECTED_2026_GAMES})
+                   detail={"regular_season": len(regular), "other": other,
+                           "expected": EXPECTED_2026_GAMES})
     )
 
     intl = [g for g in games if g.international]

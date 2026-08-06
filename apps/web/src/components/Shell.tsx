@@ -8,18 +8,22 @@ import { useAuth } from '../lib/auth';
 import ErrorBoundary from './ErrorBoundary';
 import { fmtAgo, fmtMoney, fmtPct } from '../lib/format';
 
+// `live` marks a screen backed by the analytical engine. The rest read the
+// demonstration generator, and the nav says which is which — mixing real
+// and generated data behind identical labels is the one thing that makes
+// the whole terminal untrustworthy.
 const NAV = (firstGameId: string | undefined) => [
-  { to: '/', label: "Today's Picks", icon: '★' },
-  { to: '/live', label: 'Live Slate', icon: '◉' },
-  { to: '/slate', label: 'Weekly Slate', icon: '▤' },
-  { to: firstGameId ? `/game/${firstGameId}` : '/slate', label: 'Game Lab', icon: '⚗' },
-  { to: '/injuries', label: 'Injury Center', icon: '✚' },
-  { to: '/market', label: 'Market Monitor', icon: '≋' },
-  { to: '/portfolio', label: 'Bet Portfolio', icon: '▦' },
-  { to: '/performance', label: 'Performance Lab', icon: '∿' },
-  { to: '/models', label: 'Model Audit', icon: '⌘' },
-  { to: '/health', label: 'Data Health', icon: '♥' },
-  { to: '/settings', label: 'Settings', icon: '⚙' },
+  { to: '/live', label: 'Live Slate', icon: '◉', live: true },
+  { to: '/slate', label: 'Slate', icon: '▤', live: true },
+  { to: '/models', label: 'Model Audit', icon: '⌘', live: true },
+  { to: '/health', label: 'Data Health', icon: '♥', live: true },
+  { to: '/', label: "Today's Picks", icon: '★', live: false },
+  { to: firstGameId ? `/game/${firstGameId}` : '/slate', label: 'Game Lab', icon: '⚗', live: false },
+  { to: '/injuries', label: 'Injury Center', icon: '✚', live: false },
+  { to: '/market', label: 'Market Monitor', icon: '≋', live: false },
+  { to: '/portfolio', label: 'Bet Portfolio', icon: '▦', live: false },
+  { to: '/performance', label: 'Performance Lab', icon: '∿', live: false },
+  { to: '/settings', label: 'Settings', icon: '⚙', live: false },
 ];
 
 export default function Shell() {
@@ -49,12 +53,19 @@ export default function Shell() {
           <div className="mt-0.5 hidden text-[10px] uppercase tracking-widest text-ink-faint lg:block">Research Terminal</div>
         </div>
         <ul className="flex-1 overflow-y-auto py-2">
-          {NAV(ds?.games[0]?.id).map((item) => (
+          {NAV(ds?.games[0]?.id).map((item, i, all) => (
             <li key={item.label}>
+              {/* One heading at each boundary, so the split is impossible
+                  to miss without repeating a badge on every row. */}
+              {(i === 0 || all[i - 1]?.live !== item.live) && (
+                <div className="mt-2 mb-1 hidden px-4 text-[10px] uppercase tracking-widest text-ink-faint lg:block">
+                  {item.live ? 'Live engine data' : 'Demonstration data'}
+                </div>
+              )}
               <NavLink
                 to={item.to}
                 end={item.to === '/'}
-                title={item.label}
+                title={item.live ? `${item.label} — live engine data` : `${item.label} — demonstration data`}
                 className={({ isActive }) =>
                   cn(
                     'mx-2 my-0.5 flex items-center justify-center gap-2.5 rounded px-2.5 py-1.5 text-[13px] lg:justify-start',
@@ -67,6 +78,12 @@ export default function Shell() {
                 <span aria-hidden="true" className="w-4 text-center">{item.icon}</span>
                 {/* Label stays in the accessibility tree when the rail collapses. */}
                 <span className="sr-only lg:not-sr-only">{item.label}</span>
+                {item.live && (
+                  <span
+                    aria-hidden="true"
+                    className="ml-auto hidden h-1.5 w-1.5 rounded-full bg-emerald-400 lg:block"
+                  />
+                )}
               </NavLink>
             </li>
           ))}
