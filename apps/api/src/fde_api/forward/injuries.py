@@ -24,6 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fde_api.db.forward_models import AvailabilityAssessment, InjuryObservation
+from fde_api.forward.domain_identity import IdentityResult
 from fde_api.forward.modes import DataMode
 from fde_api.pit.guards import LookaheadError
 from fde_api.util import utc_now
@@ -227,7 +228,7 @@ def classify(obs: InjuryObservation | None) -> AvailabilityState:
     return AvailabilityState.UNKNOWN
 
 
-def assess_player(
+def assess_player_result(
     session: Session,
     *,
     canonical_game_id: str,
@@ -237,8 +238,8 @@ def assess_player(
     position: str | None = None,
     is_starting_qb: bool = False,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
-) -> AvailabilityAssessment:
-    """Build one availability assessment at a cutoff."""
+) -> IdentityResult:
+    """Build one availability assessment at a cutoff, with its outcome."""
     obs = next(
         (
             o
@@ -307,13 +308,10 @@ def assess_player(
         "observation_lineage": assessment.missing_data,
         "missing_data": assessment.missing_data,
     }
-    result = upsert_by_identity(
+    return upsert_by_identity(
         session, AvailabilityAssessment, identity=AVAILABILITY,
         logical_values=logical, content_values=content, build=lambda: assessment,
     )
-    return result.record
-    session.flush()
-    return result.record
 
 
 @dataclass
@@ -405,3 +403,27 @@ def availability_snapshot(
         "observation_ids": [o.id for o in obs],
         "as_of_at": as_of_at.isoformat(),
     }
+
+
+def assess_player(
+    session: Session,
+    *,
+    canonical_game_id: str,
+    team_id: str,
+    player_id: str,
+    as_of_at: datetime,
+    position: str | None = None,
+    is_starting_qb: bool = False,
+    data_mode: DataMode = DataMode.LIVE_RESEARCH,
+) -> AvailabilityAssessment:
+    """The authoritative assessment, for callers that do not need the outcome.
+
+    Callers that DO need it must use the result form: inferring whether a
+    row was created by counting before and after is unreliable under
+    concurrency, since another caller can insert between the two reads.
+    """
+    return assess_player_result(
+        session, canonical_game_id=canonical_game_id, team_id=team_id,
+        player_id=player_id, as_of_at=as_of_at, position=position,
+        is_starting_qb=is_starting_qb, data_mode=data_mode,
+    ).record

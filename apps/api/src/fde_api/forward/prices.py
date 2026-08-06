@@ -42,6 +42,7 @@ from sqlalchemy.orm import Session
 from fde_api.backtest.execution import break_even_prob
 from fde_api.db.forward_models import ManualBookPriceEntry
 from fde_api.forward.cohort import Cohort, ProviderMode
+from fde_api.forward.domain_identity import IdentityResult
 from fde_api.forward.modes import DataMode
 from fde_api.forward.ordering import newest
 from fde_api.util import current_code_commit, utc_now
@@ -136,15 +137,15 @@ def _validate(obs: PriceObservation, *, now: datetime) -> None:
         )
 
 
-def record_price_observation(
+def record_price_observation_result(
     session: Session,
     obs: PriceObservation,
     *,
     now: datetime | None = None,
     correction_of_id: str | None = None,
     correction_reason: str | None = None,
-) -> ManualBookPriceEntry:
-    """Persist one immutable price observation.
+) -> IdentityResult:
+    """Persist one immutable price observation, returning its outcome.
 
     A correction supersedes rather than edits: the prior row keeps its
     values and gains a `superseded_by_id`, and the new row records what it
@@ -233,7 +234,29 @@ def record_price_observation(
     if prior is not None and result.created:
         prior.superseded_by_id = result.record.id
         session.flush()
-    return result.record
+    return result
+
+
+def record_price_observation(
+    session: Session,
+    obs: PriceObservation,
+    *,
+    now: datetime | None = None,
+    correction_of_id: str | None = None,
+    correction_reason: str | None = None,
+) -> ManualBookPriceEntry:
+    """The authoritative row, for callers that do not need the outcome.
+
+    A thin wrapper over `record_price_observation_result`. Callers that DO
+    need to know whether they created the row - a race test, an operator
+    tool reporting what happened - must use the result form: inferring the
+    outcome by counting rows before and after is unreliable under
+    concurrency, because another caller can insert between the two reads.
+    """
+    return record_price_observation_result(
+        session, obs, now=now, correction_of_id=correction_of_id,
+        correction_reason=correction_reason,
+    ).record
 
 
 def confirm_price_observation(

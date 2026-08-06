@@ -200,15 +200,21 @@ class TestConsensusRaces:
 
 
 def _assess(factory, *, at: datetime, player: str = "BUF_QB_ALLEN") -> str:
-    from fde_api.forward.injuries import assess_player
+    """The service's own typed outcome.
+
+    Counting rows before and after cannot work here: another worker can
+    insert between the two reads, so every caller sees a higher count and
+    every caller claims CREATED. The service knows what it did; the test
+    must ask it rather than guess.
+    """
+    from fde_api.forward.injuries import assess_player_result
 
     with factory() as s:
-        before = len(list(s.scalars(select(AvailabilityAssessment))))
-        assess_player(s, canonical_game_id=GAME, team_id="BUF", player_id=player,
-                      as_of_at=at, data_mode=MODE)
+        result = assess_player_result(
+            s, canonical_game_id=GAME, team_id="BUF", player_id=player,
+            as_of_at=at, data_mode=MODE)
         s.commit()
-        after = len(list(s.scalars(select(AvailabilityAssessment))))
-    return "CREATED" if after > before else "EXISTING_IDENTICAL"
+        return result.outcome.value
 
 
 class TestAvailabilityRaces:
@@ -244,14 +250,13 @@ def _record_price(
     from fde_api.forward.prices import (
         PriceEntryError,
         PriceObservation,
-        record_price_observation,
+        record_price_observation_result,
     )
 
     observed = at or CUTOFF
     with factory() as s:
-        before = len(list(s.scalars(select(ManualBookPriceEntry))))
         try:
-            record_price_observation(
+            result = record_price_observation_result(
                 s,
                 PriceObservation(
                     canonical_game_id=GAME, market="SPREAD", selection="HOME",
@@ -262,13 +267,12 @@ def _record_price(
                 now=observed + timedelta(minutes=1),
             )
             s.commit()
+            return result.outcome.value
         except PriceEntryError as e:
             s.rollback()
             if "different content" in str(e):
                 return "CONFLICT"
             raise
-        after = len(list(s.scalars(select(ManualBookPriceEntry))))
-    return "CREATED" if after > before else "EXISTING_IDENTICAL"
 
 
 class TestPriceObservationRaces:
