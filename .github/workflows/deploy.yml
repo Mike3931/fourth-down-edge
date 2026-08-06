@@ -200,6 +200,19 @@ jobs:
         if: always()
         run: uv run python scripts/audit_identity_callers.py
 
+      # The runner is the only way to start the scheduler outside a test,
+      # which makes its refusals the last thing standing between a careless
+      # flag and a permanently wrong record.
+      - name: Scheduler runner refusals
+        if: always()
+        run: uv run pytest tests/test_run_scheduler_preflight.py -q
+
+      # Quota thresholds must track the plan the account actually has. As
+      # absolutes they classified a 500-credit balance as CRITICAL forever.
+      - name: Provider quota governance
+        if: always()
+        run: uv run pytest tests/test_quota.py -q
+
       - name: PostgreSQL record-chain gate
         if: always()
         run: uv run pytest tests -m "pg_chain" -v -s
