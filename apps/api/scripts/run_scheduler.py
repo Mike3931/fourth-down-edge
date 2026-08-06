@@ -68,6 +68,30 @@ def _build(args: argparse.Namespace):
     return scheduler, factory
 
 
+def _policies_in_force(session, at: datetime) -> tuple[list[str], list[str]]:
+    """(versions in force at `at`, all known windows as text).
+
+    Deliberately NOT imported from the readiness script. A cross-script
+    import depends on `scripts` resolving as a package, which it does under
+    some pytest invocations and not others - it passed locally and failed
+    in CI on exactly that difference. An operational script that refuses to
+    start should not be able to fail because a REPORTING script moved.
+    """
+    from sqlalchemy import select
+
+    from fde_api.db.forward_models import ForwardTestPolicyRecord
+
+    in_force: list[str] = []
+    windows: list[str] = []
+    for p in session.scalars(select(ForwardTestPolicyRecord)):
+        windows.append(f"{p.policy_version} [{p.start_date}..{p.end_date}]")
+        start = datetime.fromisoformat(f"{p.start_date}T00:00:00+00:00")
+        end = datetime.fromisoformat(f"{p.end_date}T23:59:59+00:00")
+        if start <= at <= end:
+            in_force.append(p.policy_version)
+    return in_force, windows
+
+
 def _preflight(args: argparse.Namespace, factory) -> list[str]:
     """Reasons this run must not proceed."""
     from fde_api.forward.cohort import ProviderMode
@@ -75,13 +99,10 @@ def _preflight(args: argparse.Namespace, factory) -> list[str]:
     problems: list[str] = []
 
     with factory() as session:
-        from scripts.operational_readiness import _policy
+        in_force, known_windows = _policies_in_force(session, datetime.now(UTC))
 
-        policy = _policy(session, datetime.now(UTC))
-
-    if not policy["window_open"] and not args.allow_closed_window:
-        windows = ", ".join(f"{p['version']} [{p['start']}..{p['end']}]"
-                            for p in policy["policies"]) or "none frozen"
+    if not in_force and not args.allow_closed_window:
+        windows = ", ".join(known_windows) or "none frozen"
         problems.append(
             f"no forward-test policy is in force right now ({windows}). "
             "Captured records would belong to no evaluation cohort. Pass "
