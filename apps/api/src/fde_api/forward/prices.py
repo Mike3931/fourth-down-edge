@@ -166,24 +166,12 @@ def record_price_observation(
                 f"{prior.superseded_by_id}; correct the current row instead"
             )
 
-    # An identical price for the same selection at the same observed
-    # instant is ONE observation, however many times it is submitted. A
-    # correction is explicit and takes the branch above; this only
-    # collapses exact repeats.
-    if correction_of_id is None:
-        duplicate = session.scalars(
-            select(ManualBookPriceEntry).where(
-                ManualBookPriceEntry.canonical_game_id == obs.canonical_game_id,
-                ManualBookPriceEntry.market == obs.market,
-                ManualBookPriceEntry.selection == obs.selection,
-                ManualBookPriceEntry.cohort == obs.cohort.value,
-                ManualBookPriceEntry.observed_at == obs.observed_at,
-                ManualBookPriceEntry.american == obs.american,
-                ManualBookPriceEntry.superseded_by_id.is_(None),
-            )
-        ).first()
-        if duplicate is not None and duplicate.line == obs.line:
-            return duplicate
+    # Line and price are NOT in the logical identity. The same submission
+    # reporting a different number is exactly the case that must surface: a
+    # person re-entering one observation with a different price has either
+    # mistyped or is looking at a changed market, and storing both as
+    # equally valid observations of one moment hides that.
+    from fde_api.forward.domain_identity import PRICE_OBSERVATION, upsert_by_identity
 
     entry = ManualBookPriceEntry(
         id=f"px_{uuid.uuid4().hex[:20]}",
@@ -207,13 +195,45 @@ def record_price_observation(
         decimal_odds=american_to_decimal(obs.american),
         break_even_probability=break_even_prob(obs.american),
     )
-    session.add(entry)
-    session.flush()
+    logical = {
+        "canonical_game_id": obs.canonical_game_id,
+        "market": obs.market,
+        "selection": obs.selection,
+        "observed_at": obs.observed_at,
+        "cohort": obs.cohort.value,
+        "provider_mode": obs.provider_mode.value,
+        # A correction is a NEW governed identity, never an edit, so the
+        # correction target participates in the slot.
+        "source_identity": f"{obs.user_id}|{correction_of_id or '-'}",
+    }
+    content = {
+        "line": obs.line,
+        "american": obs.american,
+        "decimal_odds": entry.decimal_odds,
+        "break_even_probability": entry.break_even_probability,
+        "confirmed": obs.confirmed,
+        "source": obs.source,
+        "policy_version": obs.policy_version,
+        "code_commit": entry.code_commit,
+    }
+    result = upsert_by_identity(
+        session, ManualBookPriceEntry, identity=PRICE_OBSERVATION,
+        logical_values=logical, content_values=content, build=lambda: entry,
+    )
+    if result.conflicted:
+        raise PriceEntryError(
+            f"a price for {obs.market}/{obs.selection} observed at "
+            f"{obs.observed_at.isoformat()} was already submitted under this "
+            f"identity with different content (existing "
+            f"{(result.existing_content_hash or '')[:12]}, submitted "
+            f"{result.content_hash[:12]}). The original stands; submit a "
+            "correction if the new value is right."
+        )
 
-    if prior is not None:
-        prior.superseded_by_id = entry.id
+    if prior is not None and result.created:
+        prior.superseded_by_id = result.record.id
         session.flush()
-    return entry
+    return result.record
 
 
 def confirm_price_observation(

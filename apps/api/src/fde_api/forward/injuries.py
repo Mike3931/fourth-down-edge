@@ -52,6 +52,10 @@ PRODUCTION_SOURCE_CATEGORIES = frozenset(
     {SourceCategory.OFFICIAL_VERIFIED, SourceCategory.LICENSED_PROVIDER, SourceCategory.USER_VERIFIED}
 )
 
+# The method a version of this assessor implements. A change here is
+# a legitimate new version of every assessment, never a conflict.
+AVAILABILITY_METHOD_VERSION = "availability-v0"
+
 VALID_PRACTICE = {"DNP", "LIMITED", "FULL", None}
 VALID_DESIGNATION = {"OUT", "DOUBTFUL", "QUESTIONABLE", "NONE", None}
 
@@ -280,23 +284,36 @@ def assess_player(
         as_of_at=as_of_at,
         created_at=utc_now(),
     )
-    # One assessment per (game, player, cutoff, cohort). Recomputing the
-    # same cutoff is not a new fact about the player, and appending would
-    # make a rerun of any caller look like new information.
-    existing = session.scalars(
-        select(AvailabilityAssessment).where(
-            AvailabilityAssessment.canonical_game_id == canonical_game_id,
-            AvailabilityAssessment.player_id == player_id,
-            AvailabilityAssessment.data_mode == data_mode.value,
-            AvailabilityAssessment.as_of_at == as_of_at,
-        )
-    ).first()
-    if existing is not None:
-        return existing
+    # One assessment per (game, player, cutoff, cohort, method). The
+    # database enforces it; the pre-check inside `upsert_by_identity` is
+    # only an optimisation for the common retry.
+    from fde_api.forward.domain_identity import AVAILABILITY, upsert_by_identity
 
-    session.add(assessment)
+    logical = {
+        "canonical_game_id": canonical_game_id,
+        "player_id": player_id,
+        "cutoff": as_of_at,
+        "cohort": data_mode.value,
+        "method_version": AVAILABILITY_METHOD_VERSION,
+    }
+    content = {
+        "state": assessment.state,
+        "active_prob_low": assessment.active_prob_low,
+        "active_prob_high": assessment.active_prob_high,
+        "snap_share_low": assessment.snap_share_low,
+        "snap_share_high": assessment.snap_share_high,
+        "confidence_tier": assessment.confidence_tier,
+        "is_starting_qb": assessment.is_starting_qb,
+        "observation_lineage": assessment.missing_data,
+        "missing_data": assessment.missing_data,
+    }
+    result = upsert_by_identity(
+        session, AvailabilityAssessment, identity=AVAILABILITY,
+        logical_values=logical, content_values=content, build=lambda: assessment,
+    )
+    return result.record
     session.flush()
-    return assessment
+    return result.record
 
 
 @dataclass

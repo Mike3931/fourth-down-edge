@@ -281,14 +281,17 @@ class TestSimultaneousResultsOrderDeterministically:
 # --------------------------------------------------------------------------- #
 
 
-def _price(db: Session, *, observed_at: datetime, american: int) -> ManualBookPriceEntry:
+def _price(
+    db: Session, *, observed_at: datetime, american: int,
+    user_id: str = "fixture-operator",
+) -> ManualBookPriceEntry:
     from fde_api.forward.prices import PriceObservation, record_price_observation
 
     return record_price_observation(
         db,
         PriceObservation(
             canonical_game_id=GAME, market="SPREAD", selection="HOME", line=-3.0,
-            american=american, observed_at=observed_at, user_id="fixture-operator",
+            american=american, observed_at=observed_at, user_id=user_id,
             cohort=Cohort.FIXTURE, provider_mode=ProviderMode.FIXTURE,
             data_mode=MODE,
         ),
@@ -320,11 +323,20 @@ class TestSimultaneousPricesOrderDeterministically:
     """Killed by: simultaneous_price_ordering_becomes_arbitrary."""
 
     def test_two_prices_at_one_instant_resolve_by_id(self, db: Session) -> None:
+        """Two DIFFERENT submissions at the same instant.
+
+        Different submitters, so these are two legitimate slots rather than
+        one contradicted slot - the same observer reporting two prices for
+        one instant is now a CONFLICT the database refuses, which is a
+        separate property tested elsewhere. What is exercised here is the
+        tie-break: two valid rows sharing a timestamp must resolve the same
+        way on every read and every backend.
+        """
         from fde_api.forward.prices import current_price
 
         instant = CUTOFF - timedelta(hours=2)
-        a = _price(db, observed_at=instant, american=-110)
-        b = _price(db, observed_at=instant, american=-105)
+        a = _price(db, observed_at=instant, american=-110, user_id="operator-a")
+        b = _price(db, observed_at=instant, american=-105, user_id="operator-b")
         db.commit()
 
         picked = {

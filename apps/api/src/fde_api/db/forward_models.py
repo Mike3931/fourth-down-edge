@@ -26,6 +26,26 @@ from sqlalchemy.orm import Mapped, mapped_column
 from fde_api.db.models import Base
 
 
+class DomainIdentityMixin:
+    """Logical identity and content hashes, persisted beside the record.
+
+    Two hashes because two different questions were being conflated: WHICH
+    record this is (the slot), and WHAT it says. Same slot with the same
+    content is a retry; same slot with different content is a
+    contradiction. The unique index is on the LOGICAL identity, so the
+    database is what decides which of two racing callers established the
+    slot - a service-level pre-check cannot.
+
+    The versions travel with the hashes because a stored hash is
+    uninterpretable without the rules that produced it.
+    """
+
+    logical_identity_version: Mapped[str | None] = mapped_column(String(48))
+    logical_identity_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    content_hash_version: Mapped[str | None] = mapped_column(String(48))
+    content_hash: Mapped[str | None] = mapped_column(String(64))
+
+
 class ForwardTestPolicyRecord(Base):
     """A frozen forward-test policy. Immutable: changing any rule requires a
     new policy_version, which starts a separate evaluation cohort."""
@@ -127,7 +147,7 @@ class OddsQuote(Base):
     )
 
 
-class ConsensusSnapshot(Base):
+class ConsensusSnapshot(Base, DomainIdentityMixin):
     """A versioned consensus computed from eligible raw quotes at an
     instant. Additive: never mutates or replaces the underlying quotes."""
 
@@ -167,7 +187,7 @@ class ConsensusSnapshot(Base):
     )
 
 
-class ManualBookPriceEntry(Base):
+class ManualBookPriceEntry(Base, DomainIdentityMixin):
     """A price the user personally observed at bet365 and typed in. The
     software never retrieves, refreshes, or communicates with bet365."""
 
@@ -297,7 +317,7 @@ class InjuryObservation(Base):
     user_id: Mapped[str | None] = mapped_column(String(64))
 
 
-class AvailabilityAssessment(Base):
+class AvailabilityAssessment(Base, DomainIdentityMixin):
     """Rules-based availability state derived from injury observations at a
     cutoff. Ranges, not false precision."""
 
@@ -365,7 +385,7 @@ class ForwardPrediction(Base):
     )
 
 
-class ForwardLedgerEntry(Base):
+class ForwardLedgerEntry(Base, DomainIdentityMixin):
     """The forward evaluation cohort. Retains every state including PASS and
     DATA_INCOMPLETE; never merged with historical backtest rows."""
 

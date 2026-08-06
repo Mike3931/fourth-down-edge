@@ -121,7 +121,7 @@ jobs:
       # skip would look like a pass.
       - name: Tests
         if: always()
-        run: uv run pytest tests -m "not network and not pg_concurrency and not pg_chain"
+        run: uv run pytest tests -m "not network and not pg_concurrency and not pg_chain and not pg_identity"
 
       # The scheduler-driven record chain, against the real database.
       #
@@ -158,6 +158,14 @@ jobs:
         if: always()
         run: >
           uv run pytest tests/test_concurrency_evidence_artifact.py -q
+
+      # The four domain identities under contention. Separate from the
+      # chain gate: this one proves the DATABASE enforces the identity when
+      # two callers race, which a sequential test cannot show and which the
+      # previous service-level pre-check silently failed.
+      - name: PostgreSQL domain-identity race gate
+        if: always()
+        run: uv run pytest tests -m "pg_identity" -v -s
 
       - name: PostgreSQL record-chain gate
         if: always()

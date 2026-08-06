@@ -1,0 +1,50 @@
+{
+  "generated_at_utc": "2026-08-06T03:28:18.097751+00:00",
+  "revision": "b7e2f9c41a68",
+  "tables": {
+    "availability_assessments": {
+      "CONFLICTING_DUPLICATE": 0,
+      "EXACT_DUPLICATE": 0,
+      "UNIQUE": 0,
+      "conflicting_duplicate_identities": [],
+      "conflicting_duplicate_row_ids": [],
+      "distinct_logical_identities": 0,
+      "entity": "availability_assessment",
+      "exact_duplicate_identities": [],
+      "rows": 0
+    },
+    "consensus_snapshots": {
+      "CONFLICTING_DUPLICATE": 0,
+      "EXACT_DUPLICATE": 0,
+      "UNIQUE": 0,
+      "conflicting_duplicate_identities": [],
+      "conflicting_duplicate_row_ids": [],
+      "distinct_logical_identities": 0,
+      "entity": "consensus_snapshot",
+      "exact_duplicate_identities": [],
+      "rows": 0
+    },
+    "forward_ledger": {
+      "CONFLICTING_DUPLICATE": 0,
+      "EXACT_DUPLICATE": 0,
+      "UNIQUE": 0,
+      "conflicting_duplicate_identities": [],
+      "conflicting_duplicate_row_ids": [],
+      "distinct_logical_identities": 0,
+      "entity": "research_evaluation",
+      "exact_duplicate_identities": [],
+      "rows": 0
+    },
+    "manual_book_price_entries": {
+      "CONFLICTING_DUPLICATE": 0,
+      "EXACT_DUPLICATE": 0,
+      "UNIQUE": 0,
+      "conflicting_duplicate_identities": [],
+      "conflicting_duplicate_row_ids": [],
+      "distinct_logical_identities": 0,
+      "entity": "price_observation",
+      "exact_duplicate_identities": [],
+      "rows": 0
+    }
+  }
+}
