@@ -41,10 +41,16 @@ Status = Literal["RESEARCH_CANDIDATE", "WATCH", "PASS", "DATA_INCOMPLETE"]
 
 @dataclass(frozen=True)
 class HealthGate:
-    """Data Health verdict passed into the evaluation service."""
+    """Data Health verdict passed into the evaluation service.
+
+    `codes` is what participates in semantics; `reasons` is what a person
+    reads. Keeping both means the explanation can be reworded without any
+    risk of changing a decision.
+    """
 
     suppressed: bool
     reasons: list[str] = dc_field(default_factory=list)
+    codes: list[str] = dc_field(default_factory=list)
 
     @classmethod
     def from_report(cls, report: dict[str, Any]) -> HealthGate:
@@ -60,10 +66,16 @@ class HealthGate:
         Failures that genuinely damaged a game's data still suppress it -
         they surface as decision-input checks on that game.
         """
+        from fde_api.forward.decision_codes import ReasonCode
         from fde_api.forward.health import evaluation_health_context
 
         ctx = evaluation_health_context(report)
-        return cls(suppressed=ctx.suppressed, reasons=list(ctx.rendered_reasons))
+        return cls(
+            suppressed=ctx.suppressed,
+            reasons=list(ctx.rendered_reasons),
+            codes=[(ReasonCode.HEALTH_GATE_SUPPRESSED if ctx.suppressed
+                    else ReasonCode.HEALTH_GATE_CLEAR).value],
+        )
 
 
 @dataclass
@@ -85,6 +97,9 @@ class CandidateEvaluation:
     invalidation_american: int | None
     status: Status
     reasons: list[str]
+    # Emitted where each condition is decided, never reconstructed from the
+    # sentences above. `reasons` explains; `codes` means.
+    codes: list[str] = dc_field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -103,6 +118,7 @@ class CandidateEvaluation:
             "invalidation_american": self.invalidation_american,
             "status": self.status,
             "reasons": self.reasons,
+            "codes": self.codes,
         }
 
 
@@ -137,22 +153,33 @@ def evaluate_candidate(
     call cannot obtain a RESEARCH CANDIDATE while Data Health is critical.
     Suppressing candidates only in the UI would leave the API a bypass.
     """
+    from fde_api.forward.decision_codes import ReasonCode, normalise_codes
+
     reasons = list(extra_reasons or [])
+    codes: list[str] = list(health_gate.codes) if health_gate is not None else [
+        ReasonCode.HEALTH_GATE_CLEAR.value
+    ]
     be = break_even_prob(american)
 
     if health_gate is not None and health_gate.suppressed:
         reasons.extend(health_gate.reasons[:3])
         reasons.append("RESEARCH CANDIDATE suppressed by Data Health")
+        codes += [ReasonCode.HEALTH_GATE_SUPPRESSED.value,
+                  ReasonCode.DATA_INCOMPLETE.value, ReasonCode.NOT_EXECUTED.value]
         return CandidateEvaluation(
             market, selection, line, american, price_source, price_age_seconds,
-            model_probability, None, be, None, None, None, None, "DATA_INCOMPLETE", reasons,
+            model_probability, None, be, None, None, None, None, "DATA_INCOMPLETE",
+            reasons, normalise_codes(codes),
         )
 
     if model_probability is None:
         reasons.append("no model probability at this cutoff")
+        codes += [ReasonCode.NO_MODEL_PROBABILITY.value,
+                  ReasonCode.DATA_INCOMPLETE.value, ReasonCode.NOT_EXECUTED.value]
         return CandidateEvaluation(
             market, selection, line, american, price_source, price_age_seconds,
-            None, None, be, None, None, None, None, "DATA_INCOMPLETE", reasons,
+            None, None, be, None, None, None, None, "DATA_INCOMPLETE",
+            reasons, normalise_codes(codes),
         )
 
     if data_completeness < policy.missing_data.min_data_completeness_for_candidate:
@@ -161,10 +188,13 @@ def evaluate_candidate(
             f"{policy.missing_data.min_data_completeness_for_candidate:.2f}"
         )
         conservative = max(0.0, model_probability - UNCERTAINTY_HAIRCUT)
+        codes += [ReasonCode.COMPLETENESS_BELOW_MINIMUM.value,
+                  ReasonCode.DATA_INCOMPLETE.value, ReasonCode.NOT_EXECUTED.value]
         return CandidateEvaluation(
             market, selection, line, american, price_source, price_age_seconds,
             model_probability, conservative, be, None,
-            prob_to_american(model_probability), None, None, "DATA_INCOMPLETE", reasons,
+            prob_to_american(model_probability), None, None, "DATA_INCOMPLETE",
+            reasons, normalise_codes(codes),
         )
 
     if (
@@ -172,10 +202,12 @@ def evaluate_candidate(
         and price_age_seconds > policy.price_staleness.max_consensus_age_minutes * 60
     ):
         reasons.append(f"price age {price_age_seconds}s exceeds policy staleness limit")
+        codes += [ReasonCode.PRICE_STALE.value, ReasonCode.DATA_INCOMPLETE.value,
+                  ReasonCode.NOT_EXECUTED.value]
         return CandidateEvaluation(
             market, selection, line, american, price_source, price_age_seconds,
             model_probability, None, be, None, prob_to_american(model_probability),
-            None, None, "DATA_INCOMPLETE", reasons,
+            None, None, "DATA_INCOMPLETE", reasons, normalise_codes(codes),
         )
 
     conservative = max(0.0, model_probability - UNCERTAINTY_HAIRCUT)
@@ -192,23 +224,29 @@ def evaluate_candidate(
 
     if edge >= threshold:
         status: Status = "RESEARCH_CANDIDATE"
+        codes.append(ReasonCode.EDGE_ABOVE_THRESHOLD.value)
         reasons.append(
             f"conservative probability {conservative:.3f} exceeds break-even {be:.3f} "
             f"by {edge:.3f}, at or above the {threshold:.3f} policy threshold"
         )
     elif edge >= threshold - policy.watch_band_width:
         status = "WATCH"
+        codes.append(ReasonCode.EDGE_IN_WATCH_BAND.value)
         reasons.append(
             f"edge {edge:.3f} is within {policy.watch_band_width:.3f} of the "
             f"{threshold:.3f} threshold but does not meet it"
         )
     else:
         status = "PASS"
+        codes.append(ReasonCode.EDGE_BELOW_THRESHOLD.value)
         reasons.append(f"edge {edge:.3f} is below the {threshold:.3f} policy threshold")
 
+    if status != "RESEARCH_CANDIDATE":
+        codes.append(ReasonCode.NOT_EXECUTED.value)
     return CandidateEvaluation(
         market, selection, line, american, price_source, price_age_seconds,
-        model_probability, conservative, be, ev, fair, target, invalidation, status, reasons,
+        model_probability, conservative, be, ev, fair, target, invalidation, status,
+        reasons, normalise_codes(codes),
     )
 
 
@@ -278,7 +316,8 @@ def record_evaluation(
         expected_value=evaluation.expected_value,
         data_completeness=data_completeness,
         exclusion_reason=exclusion_reason,
-        reasons={"reasons": evaluation.reasons, "fair_american": evaluation.fair_american,
+        reasons={"reasons": evaluation.reasons, "codes": evaluation.codes,
+                 "fair_american": evaluation.fair_american,
                  "target_american": evaluation.target_american,
                  "invalidation_american": evaluation.invalidation_american},
         as_of_at=as_of_at,
@@ -296,6 +335,15 @@ def record_evaluation(
         )
         entry.filled = fill.filled
         entry.fill_note = fill.reason
+        from fde_api.forward.decision_codes import ReasonCode as _RC
+        from fde_api.forward.decision_codes import normalise_codes as _norm
+
+        stored = dict(entry.reasons or {})
+        stored["codes"] = _norm(
+            [*stored.get("codes", []),
+             (_RC.FILLED if fill.filled else _RC.NOT_FILLED).value]
+        )
+        entry.reasons = stored
         entry.simulated_delay_seconds = policy.execution.manual_entry_delay_seconds
         if fill.filled:
             entry.simulated_line = fill.line

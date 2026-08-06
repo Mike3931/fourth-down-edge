@@ -53,7 +53,7 @@ from fde_api.db.forward_models import (
     ScheduleObservation,
     WeatherForecastVintage,
 )
-from fde_api.forward.decision_codes import decision_context_hash, reason_codes
+from fde_api.forward.decision_codes import decision_context_hash, normalise_codes
 
 # Bump when the FIELD SET or the rendering changes. Every stored digest is
 # meaningless without it, so it travels with the hash everywhere.
@@ -478,11 +478,11 @@ def build_semantic_chain(
             # does not - a presentation difference, not a disagreement about
             # the decision. The prose is reported separately so a genuine
             # wording change is still visible.
-            "decision_reason_codes": reason_codes(
-                status=e.status,
-                reasons=(e.reasons or {}).get("reasons") if e.reasons else None,
-                filled=e.filled,
-            ),
+            # The codes the services EMITTED, validated and ordered. Never
+            # re-derived from the rendered sentences: that bridge made a
+            # decision depend on its own prose.
+            "decision_reason_codes": normalise_codes(
+                (e.reasons or {}).get("codes") if e.reasons else None),
             "decision_context_hash": decision_context_hash(
                 prediction_identity=pred_identity.get(e.forward_prediction_id or ""),
                 price_identity=(
@@ -494,11 +494,8 @@ def build_semantic_chain(
                 cohort=cohort,
                 cutoff=_utc(e.as_of_at) or "",
                 health_suppressed=(
-                    "HEALTH_GATE_SUPPRESSED" in reason_codes(
-                        status=e.status,
-                        reasons=(e.reasons or {}).get("reasons") if e.reasons else None,
-                        filled=e.filled,
-                    )
+                    "HEALTH_GATE_SUPPRESSED"
+                    in ((e.reasons or {}).get("codes") or [] if e.reasons else [])
                 ),
             ),
             "fair_american": (e.reasons or {}).get("fair_american") if e.reasons else None,

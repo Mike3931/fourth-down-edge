@@ -32,7 +32,7 @@ from typing import Any
 
 # Bump when the code vocabulary or the context field set changes. A stored
 # context hash is not interpretable without it.
-DECISION_CODEC_VERSION = "decision-v1"
+DECISION_CODEC_VERSION = "decision-v2"
 
 
 class ReasonCode(StrEnum):
@@ -44,7 +44,7 @@ class ReasonCode(StrEnum):
     """
 
     EDGE_ABOVE_THRESHOLD = "EDGE_ABOVE_THRESHOLD"
-    EDGE_WITHIN_WATCH_BAND = "EDGE_WITHIN_WATCH_BAND"
+    EDGE_IN_WATCH_BAND = "EDGE_IN_WATCH_BAND"
     EDGE_BELOW_THRESHOLD = "EDGE_BELOW_THRESHOLD"
     DATA_INCOMPLETE = "DATA_INCOMPLETE"
     HEALTH_GATE_CLEAR = "HEALTH_GATE_CLEAR"
@@ -55,61 +55,51 @@ class ReasonCode(StrEnum):
     FILLED = "FILLED"
     NOT_FILLED = "NOT_FILLED"
     NOT_EXECUTED = "NOT_EXECUTED"
+    PRICE_INVALID = "PRICE_INVALID"
+    MISSING_MARKET = "MISSING_MARKET"
+    MISSING_QUARTERBACK = "MISSING_QUARTERBACK"
+    POLICY_REJECTED = "POLICY_REJECTED"
 
 
-# Status -> the edge code it implies. One table rather than a chain of
-# branches, so the mapping is the thing an auditor reads.
-_STATUS_CODES: dict[str, ReasonCode] = {
+# The edge code each status implies. Documentation of the correspondence,
+# not the derivation: `evaluate_candidate` emits the code where it decides,
+# and this table is what an auditor checks that emission against.
+STATUS_TO_EDGE_CODE: dict[str, ReasonCode] = {
     "RESEARCH_CANDIDATE": ReasonCode.EDGE_ABOVE_THRESHOLD,
-    "WATCH": ReasonCode.EDGE_WITHIN_WATCH_BAND,
+    "WATCH": ReasonCode.EDGE_IN_WATCH_BAND,
     "PASS": ReasonCode.EDGE_BELOW_THRESHOLD,
     "DATA_INCOMPLETE": ReasonCode.DATA_INCOMPLETE,
 }
 
-# Phrases the evaluation service emits that carry decision meaning. Matching
-# on them is a bridge, not the design: the codes above are derived
-# structurally wherever possible, and these cover the cases where the
-# service records a condition only in prose. Each is a literal this codebase
-# controls, not free text from elsewhere.
-_PHRASE_CODES: tuple[tuple[str, ReasonCode], ...] = (
-    ("suppressed by Data Health", ReasonCode.HEALTH_GATE_SUPPRESSED),
-    ("staleness limit", ReasonCode.PRICE_STALE),
-    ("no model probability", ReasonCode.NO_MODEL_PROBABILITY),
-    ("below policy minimum", ReasonCode.COMPLETENESS_BELOW_MINIMUM),
-)
+def normalise_codes(codes: list[str] | tuple[str, ...] | None) -> list[str]:
+    """Validate, deduplicate and order a set of emitted codes.
 
+    Codes now arrive from the service that evaluated the condition. This
+    used to reconstruct them by searching rendered sentences for phrases -
+    a bridge that worked only while nobody reworded an explanation, and
+    that made the decision depend on its own prose. Wording is
+    presentation; a decision is not.
 
-def reason_codes(
-    *,
-    status: str,
-    reasons: list[str] | None,
-    filled: bool | None,
-) -> list[str]:
-    """The typed reasons for one evaluation, deterministically ordered.
-
-    Sorted, so two paths that derived the same set in a different order
-    still agree. Duplicates collapse: a code is a fact about the decision,
-    not a count of how many sentences mentioned it.
+    Unknown codes raise rather than being dropped. A code the vocabulary
+    does not contain is either a typo or a condition nobody registered, and
+    silently ignoring it would let a real reason vanish from the semantics.
     """
-    codes: set[ReasonCode] = set()
-    if status in _STATUS_CODES:
-        codes.add(_STATUS_CODES[status])
+    seen = list(codes or [])
+    valid = {c.value for c in ReasonCode}
+    unknown = sorted({c for c in seen if c not in valid})
+    if unknown:
+        raise UnknownReasonCode(
+            f"unknown decision reason code(s): {unknown}; "
+            f"add them to ReasonCode or fix the emitter"
+        )
+    # Sorted and deduplicated: a code is a fact about the decision, not a
+    # count of how many times something mentioned it, and two paths that
+    # emitted the same set in a different order must agree.
+    return sorted(set(seen))
 
-    blob = " ".join(reasons or [])
-    for phrase, code in _PHRASE_CODES:
-        if phrase in blob:
-            codes.add(code)
-    if ReasonCode.HEALTH_GATE_SUPPRESSED not in codes:
-        codes.add(ReasonCode.HEALTH_GATE_CLEAR)
 
-    if status == "RESEARCH_CANDIDATE":
-        codes.add(ReasonCode.FILLED if filled else ReasonCode.NOT_FILLED)
-    else:
-        # Only candidates are executed, so "not filled" would misdescribe a
-        # PASS: nothing was attempted.
-        codes.add(ReasonCode.NOT_EXECUTED)
-
-    return sorted(c.value for c in codes)
+class UnknownReasonCode(ValueError):
+    """A code outside the controlled vocabulary reached the semantics."""
 
 
 def decision_context_hash(

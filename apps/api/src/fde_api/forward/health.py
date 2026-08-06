@@ -79,6 +79,136 @@ class HealthCheck:
         }
 
 
+class HealthScope(StrEnum):
+    """What KIND of health a check reports, and therefore what it may do.
+
+    Two very different questions used to wear the same word, and conflating
+    them made the scheduler suppress every candidate because 273 games were
+    observed where 272 were expected. That says nothing about whether any
+    particular game's inputs were sound.
+
+    DECISION_INPUT       are THIS game's analytical inputs sound? May
+                         suppress its pregame evaluation when critical.
+    OPERATIONAL_PLATFORM is the platform working? Must never suppress an
+                         otherwise sound decision about an unrelated game.
+    POSTGAME_EVALUATION  is the after-the-fact record complete? May make
+                         reporting incomplete, never rewrites a pregame
+                         decision that was correct when it was made.
+    GOVERNANCE_INTEGRITY is the policy, model, lineage or cohort sound?
+                         Blocks the affected operation.
+
+    The scope is REQUIRED. An unclassified check raises at construction
+    rather than defaulting, because a default is how a platform check
+    silently acquires the power to suppress an analysis.
+    """
+
+    DECISION_INPUT = "DECISION_INPUT"
+    OPERATIONAL_PLATFORM = "OPERATIONAL_PLATFORM"
+    POSTGAME_EVALUATION = "POSTGAME_EVALUATION"
+    GOVERNANCE_INTEGRITY = "GOVERNANCE_INTEGRITY"
+
+
+# Scopes whose failures may suppress a pregame candidate. Derived from the
+# scope, not from a list of check ids: an exclusion list has to be edited
+# every time a check is added, and the edit that never happens is the one
+# that matters.
+SUPPRESSING_SCOPES: frozenset[HealthScope] = frozenset({
+    HealthScope.DECISION_INPUT,
+    HealthScope.GOVERNANCE_INTEGRITY,
+})
+
+
+# Every registered check id and its scope. A check missing from this table
+# fails registration, so adding one forces the author to decide what kind of
+# health it reports.
+CHECK_SCOPES: dict[str, HealthScope] = {
+    # --- platform: never suppresses an unrelated sound decision --------- #
+    "schedule_game_count": HealthScope.OPERATIONAL_PLATFORM,
+    "schedule_freshness": HealthScope.OPERATIONAL_PLATFORM,
+    "odds_key_configured": HealthScope.OPERATIONAL_PLATFORM,
+    "odds_freshness": HealthScope.OPERATIONAL_PLATFORM,
+    "quota_headroom": HealthScope.OPERATIONAL_PLATFORM,
+    "quota_state": HealthScope.OPERATIONAL_PLATFORM,
+    "scheduler_heartbeat": HealthScope.OPERATIONAL_PLATFORM,
+    "scheduler_running": HealthScope.OPERATIONAL_PLATFORM,
+    "job_failure_rate": HealthScope.OPERATIONAL_PLATFORM,
+    "database_readiness": HealthScope.OPERATIONAL_PLATFORM,
+    "weather_provider": HealthScope.OPERATIONAL_PLATFORM,
+    "provider_mode_disclosed": HealthScope.OPERATIONAL_PLATFORM,
+    "automatic_recovery_permitted": HealthScope.OPERATIONAL_PLATFORM,
+    "failed_jobs": HealthScope.OPERATIONAL_PLATFORM,
+    "dead_letter_jobs": HealthScope.OPERATIONAL_PLATFORM,
+    "interrupted_jobs": HealthScope.OPERATIONAL_PLATFORM,
+    "provider_mode": HealthScope.OPERATIONAL_PLATFORM,
+    "provider_quota": HealthScope.OPERATIONAL_PLATFORM,
+    # Slate-wide venue and international coverage. A gap is an ingestion or
+    # reference-data problem; whether a PARTICULAR game's venue resolved is
+    # answered by that game's own inputs.
+    "international_game_count": HealthScope.OPERATIONAL_PLATFORM,
+    "international_stadium_count": HealthScope.OPERATIONAL_PLATFORM,
+    "unmapped_venues": HealthScope.OPERATIONAL_PLATFORM,
+    "international_venue_metadata": HealthScope.OPERATIONAL_PLATFORM,
+    # --- decision input: this game's analytical inputs ------------------ #
+    "consensus_availability": HealthScope.DECISION_INPUT,
+    "weather_freshness": HealthScope.DECISION_INPUT,
+    "injury_freshness": HealthScope.DECISION_INPUT,
+    "prediction_vintage_coverage": HealthScope.DECISION_INPUT,
+    # --- governance: blocks the affected operation ---------------------- #
+    "policy_frozen": HealthScope.GOVERNANCE_INTEGRITY,
+    "policy_integrity": HealthScope.GOVERNANCE_INTEGRITY,
+    "model_registry": HealthScope.GOVERNANCE_INTEGRITY,
+    "model_integrity": HealthScope.GOVERNANCE_INTEGRITY,
+    "cohort_separation": HealthScope.GOVERNANCE_INTEGRITY,
+    "unknown_legacy_origin": HealthScope.GOVERNANCE_INTEGRITY,
+    "compatibility_status_drift": HealthScope.GOVERNANCE_INTEGRITY,
+    "policy_hash_integrity": HealthScope.GOVERNANCE_INTEGRITY,
+    "model_artifact_integrity": HealthScope.GOVERNANCE_INTEGRITY,
+    # Provenance: a record claiming an origin it does not have is a
+    # governance failure, not a platform inconvenience.
+    "provenance_live_claim_without_live_provider": HealthScope.GOVERNANCE_INTEGRITY,
+    "provenance_unrecorded": HealthScope.GOVERNANCE_INTEGRITY,
+    "provenance_non_live_in_live_research": HealthScope.GOVERNANCE_INTEGRITY,
+    # --- postgame: completeness of the after-the-fact record ------------ #
+    "missing_close": HealthScope.POSTGAME_EVALUATION,
+    "missing_result": HealthScope.POSTGAME_EVALUATION,
+    "missing_settlement": HealthScope.POSTGAME_EVALUATION,
+    "missing_clv": HealthScope.POSTGAME_EVALUATION,
+    "forward_evaluation_complete": HealthScope.POSTGAME_EVALUATION,
+}
+
+# Lineage checks are governance: a corrupt recovery chain means records for
+# the affected game may not be trustworthy. Matched by prefix because they
+# are generated per violation type rather than declared individually.
+_LINEAGE_PREFIX = "lineage_"
+
+
+class UnclassifiedHealthCheck(ValueError):
+    """A check was registered without declaring what kind of health it is."""
+
+
+def scope_of(check_id: str) -> HealthScope:
+    """The declared scope, or a refusal.
+
+    Deliberately raises rather than defaulting. The previous design was a
+    two-entry exclusion list, which meant every NEW check silently gained
+    the power to suppress an analysis until somebody remembered to add it.
+    """
+    if check_id in CHECK_SCOPES:
+        return CHECK_SCOPES[check_id]
+    if check_id.startswith(_LINEAGE_PREFIX):
+        return HealthScope.GOVERNANCE_INTEGRITY
+    raise UnclassifiedHealthCheck(
+        f"health check {check_id!r} declares no scope. Add it to CHECK_SCOPES "
+        f"with one of {[s.value for s in HealthScope]}: an unscoped check "
+        "would inherit the power to suppress an analytical decision by default."
+    )
+
+
+def may_suppress(check_id: str) -> bool:
+    """True when a failure of this check may suppress a pregame candidate."""
+    return scope_of(check_id) in SUPPRESSING_SCOPES
+
+
 class CandidateSuppressedError(RuntimeError):
     """Raised by the domain service when health forbids candidate output."""
 
@@ -569,36 +699,6 @@ def run_health_checks(
 # suppresses it: such a failure shows up as a decision-input check on that
 # game (missing consensus, missing vintage, broken lineage), which is
 # exactly where it should be visible.
-OPERATIONAL_CHECK_IDS: frozenset[str] = frozenset({
-    # Slate-wide coverage. A miscount is an ingestion problem; it says
-    # nothing about whether a particular game's inputs are sound.
-    "schedule_game_count",
-    # Provider configuration and provenance. FIXTURE mode is a labelling
-    # fact carried on every record, and cohort separation is what keeps
-    # fixture output out of official metrics - it does not make a game's
-    # inputs unsound.
-    "odds_key_configured",
-})
-
-
-def is_operational(check_id: str) -> bool:
-    """True for platform health, false for decision-input health.
-
-    The list is deliberately SHORT. A first attempt also classified every
-    `lineage_*` and recovery check as operational, which left nothing at all
-    able to suppress a candidate - the gate became inert, and "critical
-    failures suppress candidate generation" stopped being enforceable. An
-    over-broad exclusion is a worse failure than the one it fixes: it is
-    silent.
-
-    So only checks demonstrated to fire for reasons unrelated to the
-    evaluated game are excluded. Recovery-lineage corruption stays
-    decision-input: a broken chain can mean the game's own records are
-    untrustworthy, which is exactly when suppression should bite.
-    """
-    return check_id in OPERATIONAL_CHECK_IDS
-
-
 @dataclass(frozen=True)
 class EvaluationHealthContext:
     """The decision-input health of one evaluation, and nothing else.
@@ -636,11 +736,14 @@ def evaluation_health_context(report: dict[str, Any]) -> EvaluationHealthContext
         if check.get("status") == "OK" or not check.get("suppresses_candidates"):
             continue
         cid = check.get("id", "")
-        if is_operational(cid):
-            operational.append(cid)
-        else:
+        # Scope decides, not a list of exceptions. A check whose scope is
+        # undeclared raises here rather than being treated as suppressing:
+        # inheriting that power by default is the failure this replaced.
+        if may_suppress(cid):
             failing.append(cid)
             rendered.append(f"{cid}: {check.get('explanation', '')}")
+        else:
+            operational.append(cid)
     return EvaluationHealthContext(
         suppressed=bool(failing),
         failing_check_ids=tuple(sorted(failing)),

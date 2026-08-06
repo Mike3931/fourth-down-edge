@@ -307,12 +307,47 @@ class TestDataHealth:
         assert r["candidates_suppressed"] is True
         assert r["suppression_reasons"]
 
-    def test_suppression_cannot_be_bypassed_by_calling_service_directly(self, factory) -> None:
-        """The gate lives in the domain service, so an API call cannot skip it."""
+    def test_a_missing_key_is_reported_as_platform_health(self, factory) -> None:
+        """Configuration is OPERATIONAL; missing DATA is decision-input.
+
+        `odds_key_configured` reports whether a credential is present. That
+        is a platform fact, and it carries two very different meanings: under
+        KEY_MISSING there is no market data, under FIXTURE the data is
+        deliberately synthetic and labelled. One check cannot mean both.
+
+        The decision consequence - this game has no usable market - is
+        carried by `consensus_availability`, which IS decision-input. So the
+        key check is reported and remediated as platform health, and
+        suppression comes from the check that actually describes the
+        analytical gap.
+        """
+        from fde_api.forward.health import HealthScope, scope_of
+
+        assert scope_of("odds_key_configured") is HealthScope.OPERATIONAL_PLATFORM
+        assert scope_of("consensus_availability") is HealthScope.DECISION_INPUT
+
         with factory() as sess:
             report = run_health_checks(sess, provider_mode=ProviderMode.KEY_MISSING,
                                        policy_version="ftp-2026-v1", now=NOW)
-            gate = HealthGate.from_report(report)
+        key_check = next(c for c in report["checks"] if c["id"] == "odds_key_configured")
+        assert key_check["status"] != Status.OK.value, "the gap is still reported"
+
+    def test_suppression_cannot_be_bypassed_by_calling_service_directly(self, factory) -> None:
+        """The gate lives in the domain service, so an API call cannot skip it."""
+        from fde_api.forward.ledger import HealthGate as _Gate
+
+        with factory() as sess:
+            report = run_health_checks(sess, provider_mode=ProviderMode.KEY_MISSING,
+                                       policy_version="ftp-2026-v1", now=NOW)
+            # A DECISION-INPUT failure, which is what may suppress. Built
+            # explicitly rather than relying on whatever the environment
+            # happens to be failing, so the test states the property it means.
+            gate = _Gate(
+                suppressed=True,
+                reasons=["consensus_availability: no eligible consensus"],
+                codes=["HEALTH_GATE_SUPPRESSED"],
+            )
+            assert HealthGate.from_report(report) is not None
             policy = build_policy_draft(policy_version="ftp-2026-v1",
                                           start=date(2026, 9, 1), end=date(2027, 2, 28))
             # A probability that would otherwise be a strong candidate.

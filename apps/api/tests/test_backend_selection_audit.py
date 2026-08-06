@@ -412,3 +412,110 @@ class TestTheParityTestCannotBeSilenced:
             encoding="utf-8")
         assert "test_the_semantic_hashes_match" in gate
         assert "TestDirectAndSchedulerChainsAgree" in gate
+
+
+class TestTheLegacyClosingFlagIsNeverRead:
+    """`closing_captures` is the sole current authority.
+
+    The no-write audit already exists. Reading is the other half: a service
+    that SELECTs on `is_closing_capture` is deciding from archival state,
+    and every row written since the capture table landed carries False. It
+    would silently find nothing, or worse, find only pre-migration rows.
+
+    Reads are permitted in code explicitly classified as historical audit,
+    migration, or compatibility reporting - so the flag stays inspectable
+    without being authoritative.
+    """
+
+    # Modules allowed to read the flag, each for a stated reason.
+    CLASSIFIED_READERS: ClassVar[dict[str, str]] = {
+        # Reports what the chain holds, including legacy rows; the reader is
+        # a census, not a decision.
+        "chain.py": "compatibility reporting - counts legacy rows for audit",
+        # `latest_consensus_at` excludes rows carrying the legacy flag. Every
+        # row written since the capture table landed has it False, so the
+        # filter only ever affects PRE-MIGRATION rows - which is exactly what
+        # it is for. It selects a consensus, never a close.
+        "consensus.py": (
+            "compatibility filtering - excludes pre-migration rows that were "
+            "marked as closes before closing_captures existed"
+        ),
+    }
+
+    AUTHORITY_MODULES: ClassVar[tuple[str, ...]] = (
+        "closing.py",      # closing selection
+        "ledger.py",       # CLV, settlement, forward performance
+        "semantic_hash.py",  # parity and semantic hashing
+        "handlers.py",     # candidate evaluation and capture
+        "prices.py",
+        "results.py",
+        "vintages.py",
+    )
+
+    def _reads(self, path: Path) -> list[int]:
+        """Lines that READ the flag. Assignment is the no-write audit's job."""
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        assigned: set[int] = set()
+        for node in ast.walk(tree):
+            targets: list[ast.expr] = []
+            if isinstance(node, ast.Assign):
+                targets = list(node.targets)
+            elif isinstance(node, ast.AugAssign | ast.AnnAssign):
+                targets = [node.target]
+            for tgt in targets:
+                if isinstance(tgt, ast.Attribute) and tgt.attr == "is_closing_capture":
+                    assigned.add(node.lineno)
+        hits: list[int] = []
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Attribute)
+                and node.attr == "is_closing_capture"
+                and node.lineno not in assigned
+            ):
+                hits.append(node.lineno)
+        return hits
+
+    @pytest.mark.parametrize("module", AUTHORITY_MODULES)
+    def test_no_authority_module_reads_the_legacy_flag(self, module: str) -> None:
+        path = SRC_DIR / "fde_api" / "forward" / module
+        if not path.exists():
+            pytest.skip(f"{module} does not exist in this checkout")
+        hits = self._reads(path)
+        assert not hits, (
+            f"{module} reads the legacy closing flag at line(s) {hits}. "
+            "closing_captures is the sole current authority; classify the "
+            "module as historical-audit code if the read is deliberate."
+        )
+
+    def test_every_reader_outside_the_authority_set_is_classified(self) -> None:
+        unclassified: list[str] = []
+        for path in sorted((SRC_DIR / "fde_api").rglob("*.py")):
+            if "__pycache__" in path.parts or path.name == "forward_models.py":
+                continue
+            if not self._reads(path):
+                continue
+            if path.name in self.AUTHORITY_MODULES:
+                continue  # covered by the parametrised test above
+            if path.name not in self.CLASSIFIED_READERS:
+                unclassified.append(f"{path.name}:{self._reads(path)}")
+        assert not unclassified, (
+            "unclassified reads of the legacy closing flag:\n"
+            + chr(10).join(unclassified)
+            + "\nAdd the module to CLASSIFIED_READERS with a reason, or stop reading it."
+        )
+
+    def test_migrations_may_reference_the_flag(self) -> None:
+        """Migration code is explicitly permitted: the column exists because
+        historical rows carry it, and a migration is where that is handled."""
+        migrations = SRC_DIR.parent / "migrations" / "versions"
+        assert migrations.exists()
+        # No assertion about content - this documents the exemption and
+        # fails only if the directory disappears, which would mean the
+        # exemption no longer has a subject.
+
+    def test_closing_selection_uses_the_capture_table(self) -> None:
+        """Behavioural counterpart: the selector reads ClosingCapture."""
+        src = (SRC_DIR / "fde_api" / "forward" / "closing.py").read_text(
+            encoding="utf-8")
+        assert "ClosingCapture" in src
+        assert "is_closing_capture" not in src

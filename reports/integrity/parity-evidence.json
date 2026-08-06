@@ -1,0 +1,106 @@
+{
+  "artifact": "direct-scheduler-parity-evidence",
+  "artifact_schema_version": "parity-evidence-v1",
+  "artifact_sha256": "46f9a58763b20d93ce70a351380a873c718da3b6c496d1db056698b63485d2b1",
+  "ci_run": "local",
+  "decision_context_hashes": {
+    "direct": {
+      "2026_02_KC_BUF|SPREAD|HOME|PRACTICE_UPDATE|2026-09-11T17:00:00+00:00|ftp-2026-v1": "f94b9e26bd6413c6afeed10d4699289a1ff8cb95f171636670e12dc66ebf896a",
+      "2026_02_KC_BUF|TOTAL|OVER|PRACTICE_UPDATE|2026-09-11T17:00:00+00:00|ftp-2026-v1": "ec4e54aca5490af0552cfcb5e8dc38c2d23db071d364a805d21b40f38e7ad6a1"
+    },
+    "scheduler": {
+      "2026_02_KC_BUF|SPREAD|HOME|PRACTICE_UPDATE|2026-09-11T17:00:00+00:00|ftp-2026-v1": "f94b9e26bd6413c6afeed10d4699289a1ff8cb95f171636670e12dc66ebf896a",
+      "2026_02_KC_BUF|TOTAL|OVER|PRACTICE_UPDATE|2026-09-11T17:00:00+00:00|ftp-2026-v1": "ec4e54aca5490af0552cfcb5e8dc38c2d23db071d364a805d21b40f38e7ad6a1"
+    }
+  },
+  "decision_reason_codes": {
+    "direct": {
+      "2026_02_KC_BUF|SPREAD|HOME|PRACTICE_UPDATE|2026-09-11T17:00:00+00:00|ftp-2026-v1": [
+        "EDGE_ABOVE_THRESHOLD",
+        "FILLED",
+        "HEALTH_GATE_CLEAR"
+      ],
+      "2026_02_KC_BUF|TOTAL|OVER|PRACTICE_UPDATE|2026-09-11T17:00:00+00:00|ftp-2026-v1": [
+        "EDGE_BELOW_THRESHOLD",
+        "HEALTH_GATE_CLEAR",
+        "NOT_EXECUTED"
+      ]
+    },
+    "scheduler": {
+      "2026_02_KC_BUF|SPREAD|HOME|PRACTICE_UPDATE|2026-09-11T17:00:00+00:00|ftp-2026-v1": [
+        "EDGE_ABOVE_THRESHOLD",
+        "FILLED",
+        "HEALTH_GATE_CLEAR"
+      ],
+      "2026_02_KC_BUF|TOTAL|OVER|PRACTICE_UPDATE|2026-09-11T17:00:00+00:00|ftp-2026-v1": [
+        "EDGE_BELOW_THRESHOLD",
+        "HEALTH_GATE_CLEAR",
+        "NOT_EXECUTED"
+      ]
+    }
+  },
+  "direct_chain_hash": "747707117a200ffc7264c35f73eb0ae57325c94a0bb95feac26f2736ebca50d1",
+  "domain_field_differences": 0,
+  "generated_at_utc": "2026-08-06T02:22:53.558298+00:00",
+  "governance_differences": 0,
+  "hashes_equal": true,
+  "lineage_differences": 0,
+  "multiplicity_differences": 0,
+  "parity_test_junit": {
+    "collected": 1,
+    "errors": 0,
+    "failed": 0,
+    "passed": 1,
+    "skipped": 0
+  },
+  "prediction_lineage_hashes_by_horizon": {
+    "direct": {
+      "EARLY_WEEK": "f9ea319e0edcc7c21d566f985d61c0a94664c43eefe8e93e3b5505b2ea4babea",
+      "OPENING": "f9ea319e0edcc7c21d566f985d61c0a94664c43eefe8e93e3b5505b2ea4babea",
+      "PRACTICE_UPDATE": "323d31c39ee7e797db747bbfcb050997ea9c07aa794b980fe1e99c961018d409"
+    },
+    "scheduler": {
+      "EARLY_WEEK": "f9ea319e0edcc7c21d566f985d61c0a94664c43eefe8e93e3b5505b2ea4babea",
+      "OPENING": "f9ea319e0edcc7c21d566f985d61c0a94664c43eefe8e93e3b5505b2ea4babea",
+      "PRACTICE_UPDATE": "323d31c39ee7e797db747bbfcb050997ea9c07aa794b980fe1e99c961018d409"
+    }
+  },
+  "record_counts_by_type": {
+    "direct": {
+      "availability_assessment": 3,
+      "closing_capture": 3,
+      "consensus_snapshot": 6,
+      "forward_performance": 2,
+      "injury_observation": 3,
+      "odds_quote": 36,
+      "prediction_vintage": 3,
+      "price_observation": 2,
+      "schedule_observation": 2,
+      "weather_vintage": 1
+    },
+    "scheduler": {
+      "availability_assessment": 3,
+      "closing_capture": 3,
+      "consensus_snapshot": 6,
+      "forward_performance": 2,
+      "injury_observation": 3,
+      "odds_quote": 36,
+      "prediction_vintage": 3,
+      "price_observation": 2,
+      "schedule_observation": 2,
+      "weather_vintage": 1
+    }
+  },
+  "records_only_in_direct": 0,
+  "records_only_in_scheduler": 0,
+  "rendered_text_differences": 0,
+  "scenario_manifest_hash": "e567704fce1fa3b575d2fe362808d958b131151b0c58650935839904a06a05a3",
+  "scenario_manifest_version": "scenario-manifest-v1",
+  "scheduler_chain_hash": "747707117a200ffc7264c35f73eb0ae57325c94a0bb95feac26f2736ebca50d1",
+  "scope_limits": [
+    "Covers the single scenario declared by the manifest above.",
+    "Not a statement about model quality, profitability, predictive superiority, production approval, or readiness for real-money use."
+  ],
+  "semantic_chain_version": "chain-semantic-v2",
+  "source_commit": "9b45dcb3c6a9dd3989367040f24353a8a55248d5"
+}

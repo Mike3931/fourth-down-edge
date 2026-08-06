@@ -145,6 +145,20 @@ jobs:
         if: always()
         run: uv run python scripts/verify_parity_junit.py
 
+      # Health scope and the closing-authority audits report on their own.
+      # Both replaced designs that were quietly wrong rather than loudly
+      # broken, so a shared gate would let one hide the other.
+      - name: Health-scope and closing-authority audits
+        if: always()
+        run: >
+          uv run pytest tests/test_health_scope.py
+          tests/test_backend_selection_audit.py -q
+
+      - name: Parity evidence artifact
+        if: always()
+        run: >
+          uv run pytest tests/test_concurrency_evidence_artifact.py -q
+
       - name: PostgreSQL record-chain gate
         if: always()
         run: uv run pytest tests -m "pg_chain" -v -s

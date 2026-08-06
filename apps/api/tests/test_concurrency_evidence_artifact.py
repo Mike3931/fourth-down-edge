@@ -128,3 +128,92 @@ class TestTheArtifactDoesNotOverclaim:
             "profitable", "predictive superiority", "real-money ready",
         ):
             assert phrase not in blob, f"artifact claims {phrase!r}"
+
+
+PARITY_ARTIFACT = ROOT / "reports" / "integrity" / "parity-evidence.json"
+PARITY_GENERATOR = (
+    Path(__file__).resolve().parents[1] / "scripts" / "write_parity_evidence.py"
+)
+
+
+@pytest.fixture(scope="module")
+def parity() -> dict:
+    assert PARITY_ARTIFACT.exists(), (
+        f"{PARITY_ARTIFACT} is missing; run scripts/write_parity_evidence.py"
+    )
+    return json.loads(PARITY_ARTIFACT.read_text(encoding="utf-8"))
+
+
+class TestTheParityEvidenceIsDurable:
+    """A passing test proves parity at the moment it ran and does not
+    survive the run. The artifact is what survives."""
+
+    def test_the_content_hash_matches(self, parity: dict) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "write_parity_evidence_probe", PARITY_GENERATOR)
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        assert parity["artifact_sha256"] == mod.content_hash(parity)
+
+    def test_the_two_chain_hashes_are_equal(self, parity: dict) -> None:
+        assert parity["direct_chain_hash"] == parity["scheduler_chain_hash"]
+        assert parity["hashes_equal"] is True
+        assert len(parity["direct_chain_hash"]) == 64
+
+    @pytest.mark.parametrize("field", [
+        "multiplicity_differences",
+        "domain_field_differences",
+        "governance_differences",
+        "lineage_differences",
+        "records_only_in_direct",
+        "records_only_in_scheduler",
+    ])
+    def test_the_difference_count_is_zero(self, parity: dict, field: str) -> None:
+        assert parity[field] == 0, f"{field} = {parity[field]}"
+
+    def test_the_junit_counts_show_a_real_pass(self, parity: dict) -> None:
+        """Zero skipped specifically: a run whose only test was skipped
+        exits 0 and looks identical to a pass."""
+        junit = parity["parity_test_junit"]
+        assert junit["collected"] >= 1
+        assert junit["passed"] >= 1
+        assert junit["skipped"] == 0
+        assert junit["failed"] == 0
+        assert junit["errors"] == 0
+
+    def test_the_versions_are_recorded(self, parity: dict) -> None:
+        from fde_api.forward.semantic_hash import CANONICALIZATION_VERSION
+
+        assert parity["artifact_schema_version"]
+        assert parity["scenario_manifest_version"]
+        assert len(parity["scenario_manifest_hash"]) == 64
+        assert parity["semantic_chain_version"] == CANONICALIZATION_VERSION
+
+    def test_record_counts_match_between_paths(self, parity: dict) -> None:
+        counts = parity["record_counts_by_type"]
+        assert counts["direct"] == counts["scheduler"], counts
+
+    def test_reason_codes_match_between_paths(self, parity: dict) -> None:
+        codes = parity["decision_reason_codes"]
+        assert codes["direct"] == codes["scheduler"], codes
+
+    def test_context_hashes_match_between_paths(self, parity: dict) -> None:
+        ctx = parity["decision_context_hashes"]
+        assert ctx["direct"] == ctx["scheduler"], ctx
+
+    def test_no_raw_database_id_appears(self, parity: dict) -> None:
+        """The artifact must be reproducible on another machine, which it
+        cannot be if it carries autoincrement keys."""
+        blob = json.dumps(parity)
+        for forbidden in ('"id":', "consensus_snapshot_id", "run_id"):
+            assert forbidden not in blob, f"artifact carries {forbidden}"
+
+    def test_the_artifact_does_not_overclaim(self, parity: dict) -> None:
+        limits = " ".join(parity["scope_limits"]).lower()
+        assert "profitability" in limits
+        assert "real-money" in limits
+        body = {k: v for k, v in parity.items() if k != "scope_limits"}
+        blob = json.dumps(body).lower()
+        for phrase in ("profitable", "production ready", "predictive superiority"):
+            assert phrase not in blob
