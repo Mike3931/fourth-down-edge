@@ -213,6 +213,12 @@ jobs:
         if: always()
         run: uv run pytest tests/test_quota.py -q
 
+      # The whole machine, in order, through the real scheduler. "Every
+      # unit passes" and "the lifecycle runs" are different claims.
+      - name: Forward lifecycle rehearsal
+        if: always()
+        run: uv run pytest tests/test_rehearsal.py -q
+
       - name: PostgreSQL record-chain gate
         if: always()
         run: uv run pytest tests -m "pg_chain" -v -s
