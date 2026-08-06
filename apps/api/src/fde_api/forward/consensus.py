@@ -165,19 +165,31 @@ def build_consensus(
 
     if market == "SPREAD":
         home_q, away_q = side("HOME"), side("AWAY")
-        lines = [q.line for q in eligible if q.line is not None]
-        if not lines or not home_q or not away_q:
+        # A spread is stored as the provider gives it: -3 on the favourite
+        # and +3 on the underdog, one row each. Taking the median across
+        # BOTH rows measured the sign convention rather than the market -
+        # three books all posting home -3 yielded a median of 0.0 and a
+        # dispersion of 3.0, reading as total disagreement between books
+        # that agreed exactly. For any balanced two-sided market it
+        # returned approximately zero, always, and `median_line` is what
+        # CLV is measured against.
+        #
+        # So: one line per book, all from the HOME side. Folding the away
+        # mirrors back in would double-count every book.
+        home_lines = [q.line for q in home_q if q.line is not None]
+        if not home_lines or not home_q or not away_q:
             rep.reasons.append("spread requires both sides and a line")
             return None, rep
-        median_line = float(statistics.median(lines))
+        median_line = float(statistics.median(home_lines))
         # Price the consensus at the median line only — averaging prices
         # across different lines would invent a quote nobody offered.
+        # The away side is matched at its own mirror of that line.
         at_line_home = [q for q in home_q if q.line == median_line] or home_q
-        at_line_away = [q for q in away_q if q.line == median_line] or away_q
+        at_line_away = [q for q in away_q if q.line == -median_line] or away_q
         home_price = int(statistics.median([q.american for q in at_line_home]))
         away_price = int(statistics.median([q.american for q in at_line_away]))
         no_vig_home, _ = no_vig_two_way(home_price, away_price)
-        line_disp = float(statistics.pstdev(lines)) if len(lines) > 1 else 0.0
+        line_disp = float(statistics.pstdev(home_lines)) if len(home_lines) > 1 else 0.0
         prices = [q.american for q in at_line_home]
         price_disp = float(statistics.pstdev(prices)) if len(prices) > 1 else 0.0
 
