@@ -6,6 +6,36 @@ Branch `feature/forward-data-capture`.
 
 | | |
 |---|---|
+| Verified commit | `96eb6f3783609893841fc8ce52cae831be263ffa` |
+| Verifying run | [31128616314](https://github.com/Mike3931/fourth-down-edge/actions/runs/31128616314) — conclusion **success** |
+| CI `headSha` | `96eb6f3783609893841fc8ce52cae831be263ffa` |
+| Local HEAD / remote HEAD | identical to the above; working tree clean |
+
+Matched by exact SHA, never by "the latest run on the branch". All four
+identifiers agree.
+
+An earlier report named a final commit alongside a run that had not covered
+it. The two differed only in documentation, which is an explanation and not
+a defence: an unverified commit is unverified whatever it contains.
+
+## Domain-identity database gate: CLOSED
+
+```text
+Domain-identity database gate: CLOSED
+All four public services return typed identity outcomes.
+All four logical identities are database-enforced on migration-ready databases.
+All twelve PostgreSQL semantic race families pass.
+Direct/scheduler parity remains zero-difference.
+Closing authority remains immutable and independent of the legacy flag.
+The populated development database remains intentionally blocked by
+MANUAL_REVIEW_UNRESOLVED for three conflicting historical evaluations.
+Nothing was merged or deployed.
+```
+
+Gate closure is a statement about the code, not about that one database.
+See the blocker below, which stands.
+
+---|---|
 | Last CI-verified commit | `b3cf8d7ed1f573869ba773493fc5073e08b7588e` |
 | Verifying run | [31096650022](https://github.com/Mike3931/fourth-down-edge/actions/runs/31096650022), conclusion **success**, `headSha` `b3cf8d7e…` |
 | Branch head | later than the verified commit — see below |
