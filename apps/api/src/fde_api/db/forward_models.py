@@ -178,6 +178,20 @@ class ConsensusSnapshot(Base, DomainIdentityMixin):
     is_closing_capture: Mapped[bool] = mapped_column(Boolean, default=False)
     observed_at: Mapped[datetime] = mapped_column(index=True)
     __table_args__ = (
+        # The logical-identity constraint is declared HERE as well as in
+        # migration b7e2f9c41a68. The migration alone is not enough: every
+        # test database is built by `Base.metadata.create_all`, which reads
+        # the model and not the migration history - so the constraint was
+        # absent everywhere except a migrated database, and four concurrent
+        # callers all reported CREATED. The PostgreSQL race gate is what
+        # surfaced it; sequential tests could not, because they never
+        # contend.
+        UniqueConstraint(
+            "logical_identity_version",
+            "logical_identity_hash",
+            name="uq_consensus_snapshots_logical_identity",
+        ),
+
         Index("ix_consensus_game_market_observed", "canonical_game_id", "market", "observed_at"),
         CheckConstraint(
             "provider_mode IN ('FIXTURE', 'SANDBOX', 'LIVE', 'UNAVAILABLE', "
@@ -225,6 +239,21 @@ class ManualBookPriceEntry(Base, DomainIdentityMixin):
     decimal_odds: Mapped[float | None] = mapped_column(Float)
     break_even_probability: Mapped[float | None] = mapped_column(Float)
 
+    __table_args__ = (
+        # The logical-identity constraint is declared HERE as well as in
+        # migration b7e2f9c41a68. The migration alone is not enough: every
+        # test database is built by `Base.metadata.create_all`, which reads
+        # the model and not the migration history - so the constraint was
+        # absent everywhere except a migrated database, and four concurrent
+        # callers all reported CREATED. The PostgreSQL race gate is what
+        # surfaced it; sequential tests could not, because they never
+        # contend.
+        UniqueConstraint(
+            "logical_identity_version",
+            "logical_identity_hash",
+            name="uq_manual_book_price_entries_logical_identity",
+        ),
+    )
 
 class Venue(Base):
     """Governed stadium reference. Roof type and `weather_applicable`
@@ -341,6 +370,21 @@ class AvailabilityAssessment(Base, DomainIdentityMixin):
     as_of_at: Mapped[datetime] = mapped_column(index=True)
     created_at: Mapped[datetime] = mapped_column()
 
+    __table_args__ = (
+        # The logical-identity constraint is declared HERE as well as in
+        # migration b7e2f9c41a68. The migration alone is not enough: every
+        # test database is built by `Base.metadata.create_all`, which reads
+        # the model and not the migration history - so the constraint was
+        # absent everywhere except a migrated database, and four concurrent
+        # callers all reported CREATED. The PostgreSQL race gate is what
+        # surfaced it; sequential tests could not, because they never
+        # contend.
+        UniqueConstraint(
+            "logical_identity_version",
+            "logical_identity_hash",
+            name="uq_availability_assessments_logical_identity",
+        ),
+    )
 
 class ForwardPrediction(Base):
     """An immutable forward prediction vintage with full source lineage."""
@@ -427,6 +471,21 @@ class ForwardLedgerEntry(Base, DomainIdentityMixin):
     created_at: Mapped[datetime] = mapped_column()
     settled_at: Mapped[datetime | None] = mapped_column()
 
+    __table_args__ = (
+        # The logical-identity constraint is declared HERE as well as in
+        # migration b7e2f9c41a68. The migration alone is not enough: every
+        # test database is built by `Base.metadata.create_all`, which reads
+        # the model and not the migration history - so the constraint was
+        # absent everywhere except a migrated database, and four concurrent
+        # callers all reported CREATED. The PostgreSQL race gate is what
+        # surfaced it; sequential tests could not, because they never
+        # contend.
+        UniqueConstraint(
+            "logical_identity_version",
+            "logical_identity_hash",
+            name="uq_forward_ledger_logical_identity",
+        ),
+    )
 
 class ScheduledJobRun(Base):
     """One execution of a scheduled job. `idempotency_key` is unique so a

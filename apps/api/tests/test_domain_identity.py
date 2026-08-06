@@ -366,3 +366,77 @@ class TestTheUpsertPrimitive:
         assert AVAILABILITY.conflict_requires_review is False
         assert CONSENSUS.conflict_requires_review is True
         assert PRICE_OBSERVATION.conflict_requires_review is True
+
+
+class TestTheConstraintExistsInBothPlaces:
+    """The model and the migration must agree.
+
+    The constraint was originally declared only in migration b7e2f9c41a68.
+    Every test database is built by `Base.metadata.create_all`, which reads
+    the MODEL - so the constraint was absent everywhere except a migrated
+    database, four concurrent callers all reported CREATED, and four rows
+    appeared. Sequential tests could not see it because they never contend;
+    the PostgreSQL race gate did, on its first run.
+
+    This is the cheap guard that catches the same drift without a database.
+    """
+
+    MODELS = (
+        (ConsensusSnapshot, "uq_consensus_snapshots_logical_identity"),
+        (AvailabilityAssessment, "uq_availability_assessments_logical_identity"),
+        (ManualBookPriceEntry, "uq_manual_book_price_entries_logical_identity"),
+    )
+
+    @pytest.mark.parametrize("model,name", MODELS, ids=lambda v: getattr(v, "__name__", v))
+    def test_the_model_declares_the_unique_constraint(self, model, name) -> None:
+        names = {c.name for c in model.__table__.constraints if c.name}
+        assert name in names, (
+            f"{model.__tablename__} has no logical-identity constraint in the MODEL. "
+            "A migration-only constraint is absent from every create_all database."
+        )
+
+    @pytest.mark.parametrize("model,name", MODELS, ids=lambda v: getattr(v, "__name__", v))
+    def test_the_constraint_covers_version_and_hash(self, model, name) -> None:
+        constraint = next(
+            c for c in model.__table__.constraints if c.name == name)
+        columns = {c.name for c in constraint.columns}
+        assert columns == {"logical_identity_version", "logical_identity_hash"}, columns
+
+    def test_the_migration_declares_the_same_names(self) -> None:
+        migration = (
+            Path(__file__).resolve().parents[1] / "migrations" / "versions"
+            / "b7e2f9c41a68_domain_identity_hashes.py"
+        ).read_text(encoding="utf-8")
+        for _model, name in self.MODELS:
+            table = name.removeprefix("uq_").removesuffix("_logical_identity")
+            assert table in migration, f"{table} missing from the migration"
+
+    def test_a_duplicate_identity_is_refused_by_the_database(
+        self, db: Session
+    ) -> None:
+        """The behavioural half: bypass the service and insert directly."""
+        from sqlalchemy.exc import IntegrityError
+
+        from fde_api.forward.domain_identity import (
+            CONTENT_HASH_VERSION,
+            LOGICAL_IDENTITY_VERSION,
+        )
+
+        def row(content: str) -> AvailabilityAssessment:
+            return AvailabilityAssessment(
+                data_mode=MODE.value, canonical_game_id=GAME, team_id="BUF",
+                player_id="BUF_QB_ALLEN", state="EXPECTED_ACTIVE",
+                active_prob_low=0.9, active_prob_high=1.0,
+                confidence_tier="HIGH", is_starting_qb=True, as_of_at=CUTOFF,
+                created_at=CUTOFF, reason="fixture",
+                logical_identity_version=LOGICAL_IDENTITY_VERSION,
+                logical_identity_hash="a" * 64,
+                content_hash_version=CONTENT_HASH_VERSION,
+                content_hash=content,
+            )
+
+        db.add(row("b" * 64))
+        db.commit()
+        db.add(row("c" * 64))
+        with pytest.raises(IntegrityError):
+            db.commit()
