@@ -109,3 +109,29 @@ class TestAMissingStageIsCaughtNotSmoothedOver:
         failed = sorted(j for j, s in statuses.items()
                         if s not in ("finished", "skipped"))
         assert failed == ["settlement"]
+
+
+class TestTheRehearsalIsRepeatable:
+    """A report that differs run to run is not evidence of anything.
+
+    Worth the second execution: the artifact is meant to be compared
+    across commits, and a hash that moves on its own makes every such
+    comparison meaningless without anyone noticing why.
+    """
+
+    @pytest.fixture(scope="class")
+    def second(self, rehearsal, tmp_path_factory):
+        db = tmp_path_factory.mktemp("rehearsal2") / "r.db"
+        return rehearsal.rehearse(f"sqlite:///{db.as_posix()}")
+
+    def test_the_semantic_hash_is_stable(self, report, second) -> None:
+        assert report["semantic_chain_hash"] == second["semantic_chain_hash"]
+
+    def test_the_ledger_is_stable(self, report, second) -> None:
+        assert report["ledger_entries"] == second["ledger_entries"]
+
+    def test_the_record_counts_are_stable(self, report, second) -> None:
+        assert report["record_counts"] == second["record_counts"]
+
+    def test_the_stage_statuses_are_stable(self, report, second) -> None:
+        assert report["job_statuses"] == second["job_statuses"]
