@@ -108,6 +108,42 @@ def _provider() -> dict[str, Any]:
     }
 
 
+def _budget(session) -> dict[str, Any]:
+    """What the plan buys against what the cadence costs.
+
+    Both numbers already exist; nothing compared them. A plan is not "small"
+    or "large" in the abstract - it is either enough for the cadence the
+    scheduler is configured to run, or it is not, and finding that out in
+    week 3 is finding it out too late.
+    """
+    from fde_api.forward.quota import (
+        budget_report,
+        observed_plan_credits,
+        plan_capacity,
+    )
+
+    plan = observed_plan_credits(session)
+    budget = budget_report()
+    required = budget["monthly_requirement_credits"]
+    out: dict[str, Any] = {
+        "observed_plan_credits": plan,
+        "monthly_requirement_credits": required,
+        "regular_season_credits": budget["regular_season_credits"],
+        "minimum_viable_plan_credits": budget["minimum_viable_plan_credits"],
+        "capacity": plan_capacity(plan),
+    }
+    if plan:
+        out["shortfall_multiple"] = round(required / plan, 1) if plan else None
+        out["sufficient_for_configured_cadence"] = plan >= required
+    else:
+        out["note"] = (
+            "The plan is unknown until the provider answers once. Until then "
+            "the configured absolutes apply, which assume a "
+            f"{budget['configured']['monthly_plan_credits']}-credit plan."
+        )
+    return out
+
+
 def _health(session, at: datetime) -> dict[str, Any]:
     from fde_api.forward.health import HealthScope, run_health_checks, scope_of
     from fde_api.forward.modes import DataMode
@@ -135,6 +171,7 @@ def assess(session, at: datetime) -> dict[str, Any]:
     policy = _policy(session, at)
     provider = _provider()
     health = _health(session, at)
+    budget = _budget(session)
 
     blockers: list[str] = []
     if not slate["target_in_slate"]:
@@ -170,9 +207,19 @@ def assess(session, at: datetime) -> dict[str, Any]:
     if policy["window_open"] and provider["configured"] and slate["target_in_slate"]:
         capable.append("evaluation, ledger, closing capture and settlement")
 
+    if budget.get("sufficient_for_configured_cadence") is False:
+        blockers.append(
+            f"PROVIDER PLAN TOO SMALL for the configured cadence: "
+            f"{budget['observed_plan_credits']} credit(s) against a "
+            f"{budget['monthly_requirement_credits']}/month requirement "
+            f"({budget['shortfall_multiple']}x short). The scheduler will shed "
+            "distant-game cadence and protect closes, but the intended research "
+            "cadence cannot run. This is a subscription decision, not a bug."
+        )
+
     if not blockers:
         verdict = VERDICT_READY
-    elif len(blockers) == 3:
+    elif len(blockers) >= 3:
         verdict = VERDICT_BLOCKED
     else:
         verdict = VERDICT_PARTIAL
@@ -190,6 +237,7 @@ def assess(session, at: datetime) -> dict[str, Any]:
                   "latest_kickoff": _fmt(slate["latest_kickoff"])},
         "policy": policy,
         "provider": provider,
+        "budget": budget,
         "health": health,
         "not_a_claim": (
             "Readiness is about plumbing and governance only. It says nothing "
@@ -239,6 +287,14 @@ def main() -> int:
           f"in force at target: {report['policy']['in_force_at_target'] or 'none'}")
     print(f"  provider : {report['provider']['env_var']} "
           f"{'configured' if report['provider']['configured'] else 'NOT SET'}")
+    b = report["budget"]
+    cap = b.get("capacity", {})
+    print(f"  budget   : plan {b['observed_plan_credits'] or 'unknown'} credit(s); "
+          f"cadence needs {b['monthly_requirement_credits']}/month, "
+          f"season {b['regular_season_credits']}")
+    if cap.get("plan_credits"):
+        print(f"             = {cap['polls_per_window']} polls/window "
+              f"(~{cap['polls_per_day']}/day), reserve {cap['reserve_credits']}")
     fails = report["health"]["not_ok_by_scope"]
     print(f"  health   : {report['health']['total_checks']} checks, "
           f"{sum(len(v) for v in fails.values())} not OK")

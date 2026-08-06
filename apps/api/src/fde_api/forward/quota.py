@@ -37,7 +37,21 @@ class QuotaState:
 
 @dataclass(frozen=True)
 class QuotaConfig:
-    """All ceilings are configurable; none are inferred from the provider."""
+    """Ceilings for the assumed plan, plus the fractions used to rescale
+    them to whatever plan the account is ACTUALLY on.
+
+    The absolute values below describe a 20,000-credit plan. Left as
+    absolutes they are wrong in a way that fails silently on a smaller
+    plan: an account with 500 credits classifies as CRITICAL at every
+    remaining value from 1 to 1,500, so the scheduler drops to
+    closing-captures-only on its first call and never comes back. The
+    numbers all look deliberate, and nothing reports a misconfiguration -
+    only a permanently unhappy quota state that reads like a real warning.
+
+    So thresholds are fractions of the observed plan, capped by these
+    absolutes. On a 20,000 plan nothing changes; on a 500 plan the reserve
+    becomes proportionate to what 500 credits can actually buy.
+    """
 
     monthly_plan_credits: int = 20_000
     daily_ceiling_credits: int = 1_000
@@ -45,6 +59,90 @@ class QuotaConfig:
     warn_at_remaining: int = 5_000
     critical_at_remaining: int = 2_000
     credits_per_request: int = CREDITS_PER_REQUEST
+
+    # Chosen to reproduce the absolutes above at a 20,000-credit plan:
+    # 1500/20000 and 5000/20000. The defaults are therefore unchanged for
+    # the plan they were written for.
+    reserve_fraction: float = 0.075
+    warn_fraction: float = 0.25
+    # A month of daily ceilings should not exceed the month's credits.
+    days_per_window: int = 30
+
+
+def thresholds_for(plan_credits: int | None, cfg: QuotaConfig) -> tuple[int, int]:
+    """(reserve, warn) scaled to the plan in force.
+
+    An unknown plan keeps the configured absolutes: guessing small would
+    throttle a large plan for no reason, and guessing large is what this
+    function exists to stop.
+    """
+    if not plan_credits or plan_credits <= 0:
+        return cfg.emergency_reserve_credits, cfg.warn_at_remaining
+    # Never smaller than a handful of requests: a reserve that cannot pay
+    # for one closing capture is not a reserve.
+    floor = cfg.credits_per_request * 5
+    reserve = min(cfg.emergency_reserve_credits,
+                  max(floor, round(plan_credits * cfg.reserve_fraction)))
+    warn = min(cfg.warn_at_remaining,
+               max(reserve * 2, round(plan_credits * cfg.warn_fraction)))
+    return reserve, warn
+
+
+def daily_ceiling_for(plan_credits: int | None, cfg: QuotaConfig) -> int:
+    """The daily ceiling, never exceeding an even share of the window.
+
+    A 1,000/day ceiling against a 500-credit month is not a ceiling; it is
+    the absence of one, expressed as a number.
+    """
+    if not plan_credits or plan_credits <= 0:
+        return cfg.daily_ceiling_credits
+    share = max(cfg.credits_per_request, plan_credits // max(1, cfg.days_per_window))
+    return min(cfg.daily_ceiling_credits, share)
+
+
+def observed_plan_credits(session: Session, provider: str = "the-odds-api") -> int | None:
+    """The plan size the provider's own headers imply.
+
+    `x-requests-used` + `x-requests-remaining` is the plan, and the
+    provider reports both on every response. Taking the MAX across
+    observations rather than the latest keeps a single truncated or
+    mid-reset response from shrinking the apparent plan.
+
+    Only the RECORDED limit counts. Reconstructing it as
+    `calls_used + calls_remaining` was tempting and is wrong: `calls_used`
+    is this call's cost, so the sum would read a 20,000-credit account with
+    496 left as a 497-credit plan — a fabricated plan that looks precise.
+    Rows written before the limit was captured report the plan as unknown,
+    which is true, and which the first real response corrects.
+    """
+    rows = session.scalars(
+        select(ProviderQuotaUsage).where(ProviderQuotaUsage.provider == provider)
+    ).all()
+    known = [r.quota_limit for r in rows if r.quota_limit]
+    return max(known) if known else None
+
+
+def plan_capacity(plan_credits: int | None, cfg: QuotaConfig | None = None) -> dict[str, Any]:
+    """What a plan can actually buy, in requests rather than credits.
+
+    Credits hide the cost: one poll of us/h2h+spreads+totals is three of
+    them. Stating the budget in polls is the difference between "500
+    credits" and "about five polls a day".
+    """
+    cfg = cfg or QuotaConfig()
+    if not plan_credits or plan_credits <= 0:
+        return {"plan_credits": None, "note": "plan unknown until the provider responds"}
+    reserve, warn = thresholds_for(plan_credits, cfg)
+    polls = plan_credits // cfg.credits_per_request
+    return {
+        "plan_credits": plan_credits,
+        "credits_per_poll": cfg.credits_per_request,
+        "polls_per_window": polls,
+        "polls_per_day": round(polls / max(1, cfg.days_per_window), 1),
+        "reserve_credits": reserve,
+        "warn_at_remaining": warn,
+        "daily_ceiling_credits": daily_ceiling_for(plan_credits, cfg),
+    }
 
 
 @dataclass
@@ -67,6 +165,24 @@ class QuotaDecision:
         }
 
 
+def month_to_date_used(session: Session, provider: str = "the-odds-api") -> int | None:
+    """Credits the provider says have been spent this window.
+
+    Derived rather than stored: `quota_limit - calls_remaining` is exactly
+    the provider's own `x-requests-used`, and deriving it means there is no
+    second copy to drift.
+    """
+    row = session.scalars(
+        select(ProviderQuotaUsage)
+        .where(ProviderQuotaUsage.provider == provider)
+        .order_by(ProviderQuotaUsage.window_start.desc())
+        .limit(1)
+    ).first()
+    if row is None or row.calls_remaining is None or not row.quota_limit:
+        return None
+    return row.quota_limit - row.calls_remaining
+
+
 def credits_used_since(session: Session, provider: str, since: datetime) -> int:
     rows = session.scalars(
         select(ProviderQuotaUsage).where(
@@ -87,14 +203,22 @@ def latest_remaining(session: Session, provider: str) -> int | None:
     return row.calls_remaining if row else None
 
 
-def classify(remaining: int | None, cfg: QuotaConfig) -> str:
+def classify(
+    remaining: int | None, cfg: QuotaConfig, plan_credits: int | None = None
+) -> str:
+    """Classify the credit balance against the plan actually in force.
+
+    `plan_credits` defaults to None, which keeps the configured absolutes -
+    so every existing caller behaves exactly as before.
+    """
     if remaining is None:
         return QuotaState.OK  # unknown until the provider tells us
     if remaining <= 0:
         return QuotaState.EXHAUSTED
-    if remaining <= cfg.emergency_reserve_credits:
+    reserve, warn = thresholds_for(plan_credits, cfg)
+    if remaining <= reserve:
         return QuotaState.CRITICAL
-    if remaining <= cfg.warn_at_remaining:
+    if remaining <= warn:
         return QuotaState.CONSTRAINED
     return QuotaState.OK
 
@@ -119,7 +243,9 @@ def authorize_poll(
     day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     used_today = credits_used_since(session, provider, day_start) * cfg.credits_per_request
     remaining = latest_remaining(session, provider)
-    state = classify(remaining, cfg)
+    plan = observed_plan_credits(session, provider)
+    state = classify(remaining, cfg, plan)
+    daily_ceiling = daily_ceiling_for(plan, cfg)
 
     if state == QuotaState.EXHAUSTED:
         return QuotaDecision(False, state, "provider credits exhausted", 0.0, remaining, used_today)
@@ -130,10 +256,10 @@ def authorize_poll(
             1.0, remaining, used_today,
         )
 
-    if used_today + cfg.credits_per_request > cfg.daily_ceiling_credits:
+    if used_today + cfg.credits_per_request > daily_ceiling:
         return QuotaDecision(
             False, state,
-            f"daily ceiling {cfg.daily_ceiling_credits} would be exceeded ({used_today} used)",
+            f"daily ceiling {daily_ceiling} would be exceeded ({used_today} used)",
             0.0, remaining, used_today,
         )
 
@@ -202,12 +328,25 @@ def record_usage(
         except (KeyError, TypeError, ValueError):
             return None
 
+    cumulative = as_int("x-requests-used")
+    remaining = as_int("x-requests-remaining")
+    # The provider never states the plan, but it states both halves of it
+    # on every response. Recording the sum is what lets the thresholds
+    # scale to the real plan instead of an assumed one.
+    limit = (cumulative + remaining) if (cumulative is not None and remaining is not None) else None
     row = ProviderQuotaUsage(
         provider=provider,
         window_start=now,
-        calls_used=as_int("x-requests-used") or calls,
-        calls_remaining=as_int("x-requests-remaining"),
-        quota_limit=None,
+        # THIS call's requests, not the provider's month-to-date counter.
+        # `credits_used_since` SUMS this column, and summing a cumulative
+        # counter grows quadratically: after n polls it reports
+        # 1+2+...+n requests instead of n, so the daily ceiling slams shut
+        # after a handful of calls and blames a budget that was never
+        # spent. The month-to-date figure is not lost - it is
+        # `quota_limit - calls_remaining`, exactly.
+        calls_used=calls,
+        calls_remaining=remaining,
+        quota_limit=limit,
         last_response_at=now,
     )
     session.add(row)

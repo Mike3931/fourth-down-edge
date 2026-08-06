@@ -29,7 +29,22 @@ def qsession() -> Session:
     return sessionmaker(bind=engine, future=True)()
 
 
-def _seed_remaining(qsession: Session, remaining: int, used: int = 1) -> None:
+PLAN = QuotaConfig().monthly_plan_credits
+
+
+def _seed_remaining(
+    qsession: Session, remaining: int, used: int | None = None, plan: int = PLAN
+) -> None:
+    """Seed a balance ON A STATED PLAN.
+
+    `used` used to default to 1, which made the implied plan
+    `remaining + 1` - so "900 credits left" described a 901-credit account
+    rather than a nearly-spent 20,000 one. That was invisible while the
+    thresholds were absolute and became visible the moment they scaled,
+    which is the behaviour under test working as intended.
+    """
+    if used is None:
+        used = max(0, plan - remaining)
     record_usage(
         qsession, provider="the-odds-api",
         headers={"x-requests-remaining": str(remaining), "x-requests-used": str(used)},
@@ -117,9 +132,41 @@ class TestGameEligibility:
 
 class TestUsageRecording:
     def test_headers_persisted(self, qsession: Session) -> None:
+        """`calls_used` is THIS call's requests, not the month-to-date total.
+
+        It used to store the provider's cumulative `x-requests-used`, which
+        `credits_used_since` then SUMMED across rows - so after n polls the
+        daily total read 1+2+...+n instead of n, and the ceiling slammed
+        shut blaming a budget that had never been spent. The cumulative
+        figure is not lost; it is `quota_limit - calls_remaining`.
+        """
         row = record_usage(qsession, provider="the-odds-api",
                            headers={"x-requests-remaining": "18500", "x-requests-used": "1500"}, now=NOW)
-        assert row.calls_remaining == 18_500 and row.calls_used == 1_500
+        assert row.calls_remaining == 18_500
+        assert row.calls_used == 1, "cumulative counter stored as this call's cost"
+        assert row.quota_limit == 20_000, "the plan, learned from both halves"
+
+    def test_the_month_to_date_total_is_still_recoverable(self, qsession: Session) -> None:
+        from fde_api.forward.quota import month_to_date_used
+
+        record_usage(qsession, provider="the-odds-api",
+                     headers={"x-requests-remaining": "18500", "x-requests-used": "1500"},
+                     now=NOW)
+        assert month_to_date_used(qsession) == 1_500
+
+    def test_repeated_polls_do_not_inflate_the_daily_total(self, qsession: Session) -> None:
+        """The bug, at the shape it actually bit: five polls must count as
+        five, not fifteen."""
+        from fde_api.forward.quota import credits_used_since
+
+        for i in range(5):
+            record_usage(
+                qsession, provider="the-odds-api",
+                headers={"x-requests-remaining": str(19_995 - i),
+                         "x-requests-used": str(5 + i)},
+                now=NOW + timedelta(minutes=i),
+            )
+        assert credits_used_since(qsession, "the-odds-api", NOW - timedelta(days=1)) == 5
 
     def test_missing_headers_do_not_crash(self, qsession: Session) -> None:
         row = record_usage(qsession, provider="the-odds-api", headers={}, now=NOW)
@@ -139,3 +186,137 @@ class TestBudget:
         assert b["minimum_viable_plan_credits"] == 20_000
         assert "missing close" in b["compromise"]
         assert b["tiers"], "forecast must be generated from cadence tiers"
+
+
+class TestThresholdsScaleToTheRealPlan:
+    """The absolutes describe a 20,000-credit plan.
+
+    Left absolute they fail silently on a smaller one: a 500-credit account
+    classifies CRITICAL at every remaining value from 1 to 1,500, so the
+    scheduler drops to closing-captures-only on its first call and stays
+    there. Nothing reports a misconfiguration - just a permanently unhappy
+    quota state that reads like a real warning.
+    """
+
+    def test_the_configured_plan_is_unchanged(self) -> None:
+        from fde_api.forward.quota import thresholds_for
+
+        assert thresholds_for(20_000, QuotaConfig()) == (1_500, 5_000)
+
+    def test_an_unknown_plan_keeps_the_absolutes(self) -> None:
+        """Guessing small would throttle a large plan for no reason."""
+        from fde_api.forward.quota import thresholds_for
+
+        assert thresholds_for(None, QuotaConfig()) == (1_500, 5_000)
+        assert thresholds_for(0, QuotaConfig()) == (1_500, 5_000)
+
+    def test_a_small_plan_is_not_permanently_critical(self) -> None:
+        cfg = QuotaConfig()
+        assert classify(496, cfg) == QuotaState.CRITICAL, "the bug being fixed"
+        assert classify(496, cfg, 500) == QuotaState.OK
+
+    def test_a_small_plan_still_reaches_critical_near_the_end(self) -> None:
+        """Rescaling must not remove the reserve, only right-size it."""
+        cfg = QuotaConfig()
+        assert classify(120, cfg, 500) == QuotaState.CONSTRAINED
+        assert classify(30, cfg, 500) == QuotaState.CRITICAL
+        assert classify(0, cfg, 500) == QuotaState.EXHAUSTED
+
+    def test_the_reserve_can_always_pay_for_a_closing_capture(self) -> None:
+        """A reserve too small to buy one poll is not a reserve."""
+        from fde_api.forward.quota import thresholds_for
+
+        cfg = QuotaConfig()
+        for plan in (10, 50, 100, 500, 5_000, 20_000):
+            reserve, _ = thresholds_for(plan, cfg)
+            assert reserve >= cfg.credits_per_request, plan
+
+    def test_the_daily_ceiling_never_exceeds_the_window(self) -> None:
+        """1,000 credits a day against a 500-credit month is not a ceiling."""
+        from fde_api.forward.quota import daily_ceiling_for
+
+        cfg = QuotaConfig()
+        assert daily_ceiling_for(500, cfg) == 16
+        assert daily_ceiling_for(20_000, cfg) == 666
+        assert daily_ceiling_for(None, cfg) == cfg.daily_ceiling_credits
+
+
+class TestThePlanIsLearnedNotAssumed:
+    def test_the_plan_is_inferred_from_both_headers(self, qsession: Session) -> None:
+        """The provider never states the plan but states both halves of it."""
+        from fde_api.forward.quota import observed_plan_credits, record_usage
+
+        record_usage(
+            qsession, provider="the-odds-api",
+            headers={"x-requests-remaining": "497", "x-requests-used": "3"},
+            now=NOW,
+        )
+        assert observed_plan_credits(qsession) == 500
+
+    def test_a_truncated_response_cannot_shrink_the_plan(self, qsession: Session) -> None:
+        """Taking the max, not the latest: one odd response mid-reset must
+        not convince us the account got smaller."""
+        from fde_api.forward.quota import observed_plan_credits, record_usage
+
+        record_usage(
+            qsession, provider="the-odds-api", headers={"x-requests-remaining": "497", "x-requests-used": "3"},
+            now=NOW - timedelta(hours=2))
+        record_usage(
+            qsession, provider="the-odds-api", headers={"x-requests-remaining": "10", "x-requests-used": "0"},
+            now=NOW)
+        assert observed_plan_credits(qsession) == 500
+
+    def test_an_absent_header_leaves_the_plan_unknown(self, qsession: Session) -> None:
+        from fde_api.forward.quota import observed_plan_credits, record_usage
+
+        record_usage(qsession, provider="the-odds-api", headers={}, now=NOW)
+        assert observed_plan_credits(qsession) is None
+
+    def test_capacity_is_reported_in_polls_not_credits(self) -> None:
+        """"500 credits" and "about five polls a day" are the same fact,
+        and only one of them is usable."""
+        from fde_api.forward.quota import plan_capacity
+
+        cap = plan_capacity(500)
+        assert cap["polls_per_window"] == 166
+        assert cap["polls_per_day"] == 5.5
+
+    def test_authorisation_uses_the_observed_plan(self, qsession: Session) -> None:
+        """The end-to-end shape of the bug: a real balance on a real small
+        plan must not be treated as an emergency."""
+        from fde_api.forward.quota import record_usage
+
+        record_usage(
+            qsession, provider="the-odds-api", headers={"x-requests-remaining": "496", "x-requests-used": "4"},
+            now=NOW - timedelta(hours=1))
+        d = authorize_poll(qsession, hours_to_kickoff=72.0, now=NOW)
+        assert d.state == QuotaState.OK, d.reason
+        assert d.allowed is True
+
+
+class TestTheUnknownPlanIsNotGuessed:
+    def test_a_legacy_row_without_a_limit_reports_unknown(self, qsession: Session) -> None:
+        """`calls_used + calls_remaining` would read a nearly-spent 20,000
+        account as a 497-credit plan. A fabricated plan that looks precise
+        is worse than an honest None, which the next response corrects."""
+        from fde_api.db.forward_models import ProviderQuotaUsage
+        from fde_api.forward.quota import observed_plan_credits
+
+        qsession.add(ProviderQuotaUsage(
+            provider="the-odds-api", window_start=NOW, calls_used=1,
+            calls_remaining=496, quota_limit=None, last_response_at=NOW))
+        qsession.flush()
+        assert observed_plan_credits(qsession) is None
+
+    def test_one_real_response_corrects_it(self, qsession: Session) -> None:
+        from fde_api.db.forward_models import ProviderQuotaUsage
+        from fde_api.forward.quota import observed_plan_credits
+
+        qsession.add(ProviderQuotaUsage(
+            provider="the-odds-api", window_start=NOW - timedelta(days=1),
+            calls_used=1, calls_remaining=496, quota_limit=None,
+            last_response_at=NOW - timedelta(days=1)))
+        record_usage(qsession, provider="the-odds-api",
+                     headers={"x-requests-remaining": "493", "x-requests-used": "7"},
+                     now=NOW)
+        assert observed_plan_credits(qsession) == 500

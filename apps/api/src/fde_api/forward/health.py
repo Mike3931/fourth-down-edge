@@ -378,10 +378,11 @@ def run_health_checks(
     checks.append(_ok("provider_mode", Severity.INFO, f"provider mode is {provider_mode.value}",
                       now, detail={"provider_mode": provider_mode.value}))
 
-    from fde_api.forward.quota import QuotaConfig, classify, latest_remaining
+    from fde_api.forward.quota import QuotaConfig, classify, latest_remaining, observed_plan_credits
 
     remaining = latest_remaining(session, "the-odds-api")
-    qstate = classify(remaining, QuotaConfig())
+    # Against the plan actually observed, not the one the defaults assume.
+    qstate = classify(remaining, QuotaConfig(), observed_plan_credits(session))
     checks.append(
         _ok("provider_quota", Severity.WARNING, f"quota state {qstate} (remaining={remaining})",
             now, detail={"remaining": remaining, "state": qstate})
