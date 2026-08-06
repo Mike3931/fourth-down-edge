@@ -252,25 +252,6 @@ class TestTheDirectChainIsIdempotent:
 class TestDirectAndSchedulerChainsAgree:
     """The gate that matters: two callers, one set of conclusions."""
 
-    @pytest.mark.skip(
-        reason=(
-            "PARITY STILL NOT ACHIEVED - two deltas remain, both identified. "
-            "Record identities, multiplicity and every governance field now "
-            "match exactly; the manifest closed the input drift. What differs: "
-            "(1) ledger `reasons_digest`, because the evaluation reason text "
-            "embeds Data Health output and the health report legitimately "
-            "differs - the scheduler database contains scheduler runs and the "
-            "direct one does not. The DECISION matches; only the explanatory "
-            "text differs. This is arguably scheduler-specific metadata that "
-            "the comparator should exclude, but excluding it is a judgement "
-            "about what parity means and is not made unilaterally here. "
-            "(2) prediction `artifact_hash` and `lineage_digest`, meaning the "
-            "vintage input sets still differ - the one substantive gap left. "
-            "Skipped rather than loosened so it cannot pass without being "
-            "true; the brief requires an unskipped passing test, and that "
-            "requirement is reported as UNMET rather than worked around."
-        )
-    )
     def test_the_semantic_hashes_match(self, direct_factory, factory) -> None:
         from chainkit import SchedulerChain, drive
 
@@ -326,11 +307,34 @@ class TestTheSemanticHashIsSensitiveToMeaning:
         assert _chain(direct).digest != before
 
     def test_changing_source_lineage_changes_the_hash(self, direct) -> None:
+        """Repoint the vintage at a DIFFERENT consensus snapshot.
+
+        Injecting a stray key would not be a lineage change - the canonical
+        form resolves the references the model actually declares, and a key
+        nothing reads is not an input. Changing which snapshot was consumed
+        is a real change and must move the hash.
+        """
+        from fde_api.db.forward_models import ConsensusSnapshot
+
         before = _chain(direct).digest
         with direct() as s:
             p = s.scalars(select(ForwardPrediction)).first()
             assert p is not None
-            p.lineage = {**(p.lineage or {}), "injected": "a different input set"}
+            snapshots = sorted(
+                (c for c in s.scalars(select(ConsensusSnapshot))
+                 if c.market == "SPREAD"),
+                key=lambda c: c.observed_at,
+            )
+            assert len(snapshots) >= 2, "need two snapshots to repoint between"
+            current = (p.lineage or {}).get("consensus_snapshot_ids", {}).get("SPREAD")
+            other = next(c for c in snapshots if c.id != current)
+            p.lineage = {
+                **(p.lineage or {}),
+                "consensus_snapshot_ids": {
+                    **(p.lineage or {}).get("consensus_snapshot_ids", {}),
+                    "SPREAD": other.id,
+                },
+            }
             s.commit()
         assert _chain(direct).digest != before
 
@@ -405,3 +409,111 @@ class TestTheSemanticHashIsSensitiveToMeaning:
         assert "'id'" not in blob, "a raw primary key leaked into the hash payload"
         for record in chain.records:
             assert "id" not in record or record.get("type") is not None
+
+
+# --------------------------------------------------------------------------- #
+# §6 / §9 — the comparator itself
+# --------------------------------------------------------------------------- #
+
+
+class TestTheComparatorReportsWhatDiffers:
+    """A comparator that says only "unequal" sends someone diffing two
+    databases by hand. These pin that it names the record and the field."""
+
+    def test_a_changed_field_is_named_with_both_values(self, direct) -> None:
+        before = _chain(direct)
+        with direct() as s:
+            e = s.scalars(select(ForwardLedgerEntry)).first()
+            assert e is not None
+            e.qualifying_line = (e.qualifying_line or 0.0) - 7.0
+            s.commit()
+        diff = compare(before, _chain(direct))
+        assert not diff["equal"]
+        changed = [d for d in diff["differing"] if "qualifying_line" in d["fields"]]
+        assert changed, diff["differing"]
+        field = changed[0]["fields"]["qualifying_line"]
+        assert field["a"] != field["b"]
+        assert changed[0]["identity"]
+
+    def test_a_missing_record_is_reported_separately_from_a_changed_one(
+        self, direct
+    ) -> None:
+        before = _chain(direct)
+        with direct() as s:
+            e = s.scalars(select(ForwardLedgerEntry)).first()
+            assert e is not None
+            s.delete(e)
+            s.commit()
+        diff = compare(before, _chain(direct))
+        assert diff["only_in_a"], "a deleted record was not reported as missing"
+        assert not diff["only_in_b"]
+
+
+class TestTheDuplicateCollapseRegression:
+    """The comparator once indexed by identity, which collapsed duplicates.
+
+    Two chains differing ONLY by a duplicated record reported no
+    differences alongside a mismatched digest - it said something was wrong
+    and nothing about what. This reproduces that shape against the REAL
+    comparator and proves it now names the duplicate.
+    """
+
+    def _duplicate_a_record(self, factory) -> None:
+        """An exact copy but for the primary key.
+
+        Copied column-by-column from the mapper rather than by hand: a
+        hand-listed clone silently omits fields, and this regression depends
+        on the two rows being field-identical so that MULTIPLICITY is the
+        only thing that differs.
+        """
+        with factory() as s:
+            e = s.scalars(select(ForwardLedgerEntry)).first()
+            assert e is not None
+            values = {
+                c.key: getattr(e, c.key)
+                for c in ForwardLedgerEntry.__mapper__.column_attrs
+                if c.key != "id"
+            }
+            s.add(ForwardLedgerEntry(**values))
+            s.commit()
+
+    def test_the_old_dictionary_approach_would_have_missed_it(
+        self, direct
+    ) -> None:
+        """Demonstrates the defect, so the regression is anchored to the
+        real failure rather than to an assertion someone once wrote."""
+        before = _chain(direct)
+        self._duplicate_a_record(direct)
+        after = _chain(direct)
+
+        def collapsed(chain):
+            return {(r["type"], r["identity"]): r for r in chain.records}
+
+        # The old comparison: index by identity, compare the dicts. The
+        # duplicate vanishes into the same key, so this reports equality.
+        assert collapsed(before) == collapsed(after), (
+            "the collapse no longer reproduces; this regression needs rewriting"
+        )
+        # And yet the chains are not the same.
+        assert before.digest != after.digest
+
+    def test_the_current_comparator_names_the_duplicate(self, direct) -> None:
+        before = _chain(direct)
+        self._duplicate_a_record(direct)
+        diff = compare(before, _chain(direct))
+
+        assert not diff["equal"], "a duplicated record was reported as equal"
+        dupes = diff["duplicated_or_uneven_multiplicity"]
+        assert dupes, "the duplicate was not reported at all"
+        assert any("forward_performance" in d for d in dupes), dupes
+        assert any("a=1, b=2" in d for d in dupes), dupes
+
+    def test_multiplicity_is_compared_before_values(self, direct) -> None:
+        """A duplicate must fail parity even when every field matches."""
+        before = _chain(direct)
+        self._duplicate_a_record(direct)
+        diff = compare(before, _chain(direct))
+        assert diff["differing"] == [], (
+            "the clone was supposed to be field-identical; adjust the fixture"
+        )
+        assert not diff["equal"], "identical fields masked a multiplicity change"

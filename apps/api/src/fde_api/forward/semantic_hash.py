@@ -53,10 +53,11 @@ from fde_api.db.forward_models import (
     ScheduleObservation,
     WeatherForecastVintage,
 )
+from fde_api.forward.decision_codes import decision_context_hash, reason_codes
 
 # Bump when the FIELD SET or the rendering changes. Every stored digest is
 # meaningless without it, so it travels with the hash everywhere.
-CANONICALIZATION_VERSION = "chain-semantic-v1"
+CANONICALIZATION_VERSION = "chain-semantic-v2"
 
 # Floats are rounded before hashing. Two paths can compute the same
 # probability through different arithmetic and differ in the last bits;
@@ -88,6 +89,85 @@ def _utc(value: datetime | None) -> str | None:
 def _digest(payload: Any) -> str:
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def canonical_lineage(
+    session: Session, lineage: dict[str, Any] | None, *, data_mode: str
+) -> dict[str, Any]:
+    """A prediction's lineage with database keys replaced by identities.
+
+    The stored lineage points at upstream records by autoincrement key.
+    Those keys are assigned by whichever database happened to insert first,
+    so two paths that consumed the SAME consensus snapshots record different
+    numbers - which is not a disagreement about the analysis, and was the
+    last thing standing between the two chains and parity.
+
+    Each key is resolved to what the record IS: a consensus by its market
+    and observed instant, a weather vintage by its instant and content hash,
+    an injury observation by player and instant, a schedule observation by
+    instant and status. Same upstream facts, same lineage, any database.
+
+    An unresolvable key becomes an explicit marker rather than being
+    dropped: a lineage pointing at a record that no longer exists is a real
+    problem, and silently omitting it would hide one.
+    """
+    if not lineage:
+        return {}
+    out: dict[str, Any] = {}
+
+    consensus = lineage.get("consensus_snapshot_ids") or {}
+    resolved_consensus: dict[str, Any] = {}
+    for market, snap_id in sorted(consensus.items()):
+        if snap_id is None:
+            resolved_consensus[market] = None
+            continue
+        snap = session.get(ConsensusSnapshot, snap_id)
+        resolved_consensus[market] = (
+            f"{snap.market}@{_utc(snap.observed_at)}|{snap.method_version}"
+            if snap is not None else f"MISSING:{snap_id}"
+        )
+    out["consensus"] = resolved_consensus
+
+    wx_id = lineage.get("weather_vintage_id")
+    if wx_id is None:
+        out["weather"] = None
+    else:
+        wx = session.get(WeatherForecastVintage, wx_id)
+        out["weather"] = (
+            f"{_utc(wx.observed_at)}|{wx.raw_hash}" if wx is not None
+            else f"MISSING:{wx_id}"
+        )
+
+    injuries = lineage.get("injury_observation_ids") or []
+    resolved_injuries: list[str] = []
+    for obs_id in injuries:
+        obs = session.get(InjuryObservation, obs_id)
+        resolved_injuries.append(
+            f"{obs.player_id}@{_utc(obs.observed_at)}" if obs is not None
+            else f"MISSING:{obs_id}"
+        )
+    out["injuries"] = sorted(resolved_injuries)
+
+    sched_id = lineage.get("schedule_observation_id")
+    if sched_id is None:
+        out["schedule"] = None
+    else:
+        sched = session.get(ScheduleObservation, sched_id)
+        out["schedule"] = (
+            f"{_utc(sched.observed_at)}|{sched.game_status}|{sched.content_hash}"
+            if sched is not None else f"MISSING:{sched_id}"
+        )
+
+    # Values, not references: these are already semantic.
+    out["roof_state"] = lineage.get("roof_state")
+    out["qb_resolution"] = lineage.get("qb_resolution")
+    return out
+
+
+def prediction_lineage_hash(
+    session: Session, lineage: dict[str, Any] | None, *, data_mode: str
+) -> str:
+    return _digest(canonical_lineage(session, lineage, data_mode=data_mode))
 
 
 @dataclass(frozen=True)
@@ -282,8 +362,17 @@ def build_semantic_chain(
             "model_version": p.model_version,
             "feature_set_version": p.feature_set_version,
             "calibration_version": p.calibration_version,
-            "artifact_hash": p.artifact_hash,
-            "lineage_digest": _digest(p.lineage) if p.lineage else None,
+            # `artifact_hash` and a raw digest of `lineage` are deliberately
+            # ABSENT. Both are computed over payloads containing autoincrement
+            # keys, so they differ between two databases that consumed
+            # identical inputs. The canonical lineage hash below covers the
+            # same upstream records by identity, which is strictly stronger:
+            # it still changes when a source record changes, and no longer
+            # changes when only a row number does.
+            "lineage_canonical": canonical_lineage(
+                session, p.lineage, data_mode=dm),
+            "lineage_hash": prediction_lineage_hash(
+                session, p.lineage, data_mode=dm),
             "warnings": sorted(p.warnings or []) if p.warnings else None,
         })
 
@@ -383,7 +472,37 @@ def build_semantic_chain(
             "settled": e.settled_at is not None,
             # The upstream vintage by its SEMANTIC identity, never its key.
             "prediction_identity": pred_identity.get(e.forward_prediction_id or ""),
-            "reasons_digest": _digest(e.reasons) if e.reasons else None,
+            # Reason CODES and a decision-context hash, not the prose. The
+            # rendered explanation embeds Data Health text, which differs
+            # between a database holding scheduler-run history and one that
+            # does not - a presentation difference, not a disagreement about
+            # the decision. The prose is reported separately so a genuine
+            # wording change is still visible.
+            "decision_reason_codes": reason_codes(
+                status=e.status,
+                reasons=(e.reasons or {}).get("reasons") if e.reasons else None,
+                filled=e.filled,
+            ),
+            "decision_context_hash": decision_context_hash(
+                prediction_identity=pred_identity.get(e.forward_prediction_id or ""),
+                price_identity=(
+                    f"{e.market}|{e.selection}|{_num(e.qualifying_line)}|"
+                    f"{e.qualifying_american}|{e.price_source}"
+                ),
+                policy_version=e.policy_version,
+                model_version=e.model_version,
+                cohort=cohort,
+                cutoff=_utc(e.as_of_at) or "",
+                health_suppressed=(
+                    "HEALTH_GATE_SUPPRESSED" in reason_codes(
+                        status=e.status,
+                        reasons=(e.reasons or {}).get("reasons") if e.reasons else None,
+                        filled=e.filled,
+                    )
+                ),
+            ),
+            "fair_american": (e.reasons or {}).get("fair_american") if e.reasons else None,
+            "target_american": (e.reasons or {}).get("target_american") if e.reasons else None,
         })
 
     return SemanticChain(

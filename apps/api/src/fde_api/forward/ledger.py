@@ -48,10 +48,22 @@ class HealthGate:
 
     @classmethod
     def from_report(cls, report: dict[str, Any]) -> HealthGate:
-        return cls(
-            suppressed=bool(report.get("candidates_suppressed")),
-            reasons=list(report.get("suppression_reasons", [])),
-        )
+        """Built from DECISION-INPUT health only.
+
+        This used to read `candidates_suppressed`, which includes platform
+        health: a slate miscount or a FIXTURE provider mode suppressed every
+        candidate in the database. Neither says anything about whether a
+        particular game's inputs were sound, and the two execution paths
+        reached different analytical conclusions because one consulted
+        platform state and the other did not.
+
+        Failures that genuinely damaged a game's data still suppress it -
+        they surface as decision-input checks on that game.
+        """
+        from fde_api.forward.health import evaluation_health_context
+
+        ctx = evaluation_health_context(report)
+        return cls(suppressed=ctx.suppressed, reasons=list(ctx.rendered_reasons))
 
 
 @dataclass

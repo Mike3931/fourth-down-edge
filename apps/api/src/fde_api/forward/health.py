@@ -542,6 +542,113 @@ def run_health_checks(
     }
 
 
+# --------------------------------------------------------------------------- #
+# Operational health vs decision-input health
+# --------------------------------------------------------------------------- #
+# Two different questions wear the same word.
+#
+#   OPERATIONAL health  - is the PLATFORM working? Is the scheduler keeping
+#                         up, is the slate fully ingested, is a provider key
+#                         configured, are recovery chains intact?
+#   DECISION-INPUT health - are the inputs to THIS game's analysis sound? Is
+#                         its consensus present, its quarterback resolved,
+#                         its weather applicable and available?
+#
+# Only the second may suppress an analytical decision about a game. The
+# first belongs in a health report and an operator's attention.
+#
+# This distinction was forced by a concrete failure. The scheduler-driven
+# chain suppressed every candidate because 273 games were observed where 272
+# were expected, and because the provider mode was FIXTURE. Neither says
+# anything about whether THIS game's inputs were sound - and the direct
+# chain, which never consulted platform health, produced a real candidate
+# from identical inputs. Two paths disagreed about the analysis for a reason
+# that was not about the analysis.
+#
+# A platform failure that genuinely corrupted a game's source data still
+# suppresses it: such a failure shows up as a decision-input check on that
+# game (missing consensus, missing vintage, broken lineage), which is
+# exactly where it should be visible.
+OPERATIONAL_CHECK_IDS: frozenset[str] = frozenset({
+    # Slate-wide coverage. A miscount is an ingestion problem; it says
+    # nothing about whether a particular game's inputs are sound.
+    "schedule_game_count",
+    # Provider configuration and provenance. FIXTURE mode is a labelling
+    # fact carried on every record, and cohort separation is what keeps
+    # fixture output out of official metrics - it does not make a game's
+    # inputs unsound.
+    "odds_key_configured",
+})
+
+
+def is_operational(check_id: str) -> bool:
+    """True for platform health, false for decision-input health.
+
+    The list is deliberately SHORT. A first attempt also classified every
+    `lineage_*` and recovery check as operational, which left nothing at all
+    able to suppress a candidate - the gate became inert, and "critical
+    failures suppress candidate generation" stopped being enforceable. An
+    over-broad exclusion is a worse failure than the one it fixes: it is
+    silent.
+
+    So only checks demonstrated to fire for reasons unrelated to the
+    evaluated game are excluded. Recovery-lineage corruption stays
+    decision-input: a broken chain can mean the game's own records are
+    untrustworthy, which is exactly when suppression should bite.
+    """
+    return check_id in OPERATIONAL_CHECK_IDS
+
+
+@dataclass(frozen=True)
+class EvaluationHealthContext:
+    """The decision-input health of one evaluation, and nothing else.
+
+    Carries check IDENTIFIERS rather than rendered explanations. The
+    identifiers are stable across environments; the explanations are not,
+    and hashing prose is what made two identical decisions look different.
+    """
+
+    suppressed: bool
+    failing_check_ids: tuple[str, ...]
+    operational_check_ids: tuple[str, ...]
+    rendered_reasons: tuple[str, ...]
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "suppressed": self.suppressed,
+            "failing_check_ids": list(self.failing_check_ids),
+            "operational_check_ids": list(self.operational_check_ids),
+            "rendered_reasons": list(self.rendered_reasons),
+        }
+
+
+def evaluation_health_context(report: dict[str, Any]) -> EvaluationHealthContext:
+    """Split a health report into decision-input and operational parts.
+
+    Both execution paths build their gate from this, so a difference in
+    platform state can no longer change an analytical conclusion while a
+    difference in a game's inputs still does.
+    """
+    failing: list[str] = []
+    operational: list[str] = []
+    rendered: list[str] = []
+    for check in report.get("checks", []):
+        if check.get("status") == "OK" or not check.get("suppresses_candidates"):
+            continue
+        cid = check.get("id", "")
+        if is_operational(cid):
+            operational.append(cid)
+        else:
+            failing.append(cid)
+            rendered.append(f"{cid}: {check.get('explanation', '')}")
+    return EvaluationHealthContext(
+        suppressed=bool(failing),
+        failing_check_ids=tuple(sorted(failing)),
+        operational_check_ids=tuple(sorted(operational)),
+        rendered_reasons=tuple(rendered),
+    )
+
+
 def enforce_candidate_gate(
     session: Session,
     *,

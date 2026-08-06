@@ -18,6 +18,7 @@ from __future__ import annotations
 import ast
 import os
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -348,3 +349,66 @@ def _constructs_snapshot(node: ast.Call) -> bool:
     func = node.func
     name = getattr(func, "id", None) or getattr(func, "attr", None)
     return name == "ConsensusSnapshot"
+
+
+class TestTheParityTestCannotBeSilenced:
+    """No skip, xfail or conditional deselect in the parity module.
+
+    A pytest run whose only selected test was skipped exits 0. The parity
+    test spent two increments skipped with a truthful reason while every CI
+    run reported success, so "the suite is green" was true and told you
+    nothing about parity.
+
+    Parsed rather than grepped: a decorator is what actually silences a
+    test, and a docstring that discusses skipping is documentation.
+    """
+
+    PARITY_MODULE = TESTS_DIR / "test_chain_direct.py"
+    SILENCERS: ClassVar[set[str]] = {"skip", "skipif", "xfail"}
+
+    def _markers(self) -> list[str]:
+        tree = ast.parse(self.PARITY_MODULE.read_text(encoding="utf-8"))
+        found: list[str] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                continue
+            for dec in node.decorator_list:
+                rendered = ast.unparse(dec)
+                if not rendered.startswith(("pytest.mark.", "mark.")):
+                    continue
+                marker = rendered.split("(")[0].split(".")[-1]
+                if marker in self.SILENCERS:
+                    found.append(f"{node.name}: @{rendered[:70]}")
+        return found
+
+    def test_no_skip_or_xfail_marker_exists(self) -> None:
+        offenders = self._markers()
+        assert not offenders, (
+            "the parity module contains a silencing marker:\n" + chr(10).join(offenders)
+        )
+
+    def test_no_runtime_skip_call(self) -> None:
+        """`pytest.skip(...)` inside a body silences just as effectively."""
+        tree = ast.parse(self.PARITY_MODULE.read_text(encoding="utf-8"))
+        offenders: list[str] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            rendered = ast.unparse(node.func)
+            if rendered in ("pytest.skip", "pytest.xfail", "skip", "xfail"):
+                offenders.append(f"line {node.lineno}: {rendered}(...)")
+        assert not offenders, (
+            "the parity module skips at runtime:\n" + chr(10).join(offenders)
+        )
+
+    def test_the_named_parity_test_still_exists(self) -> None:
+        """A rename would make the JUnit gate collect zero and pass
+        vacuously, so the name is pinned in both places."""
+        src = self.PARITY_MODULE.read_text(encoding="utf-8")
+        assert "def test_the_semantic_hashes_match(" in src
+        assert "class TestDirectAndSchedulerChainsAgree:" in src
+
+        gate = (TESTS_DIR.parent / "scripts" / "verify_parity_junit.py").read_text(
+            encoding="utf-8")
+        assert "test_the_semantic_hashes_match" in gate
+        assert "TestDirectAndSchedulerChainsAgree" in gate

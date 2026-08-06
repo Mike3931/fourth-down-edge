@@ -136,6 +136,15 @@ jobs:
       # entirely - and a skipped gate reports nothing while looking like it
       # simply did not need to run. The two gates answer different
       # questions; one failing must not erase the other's answer.
+      # The parity gate asserts on the JUnit RESULT, not the exit code. A
+      # pytest run whose only selected test was skipped exits 0, so "the
+      # suite passed" can equally mean parity was quietly not run - which is
+      # exactly what happened for two increments while every CI run was
+      # green. This fails on skipped, not just on failed.
+      - name: Direct/scheduler parity gate
+        if: always()
+        run: uv run python scripts/verify_parity_junit.py
+
       - name: PostgreSQL record-chain gate
         if: always()
         run: uv run pytest tests -m "pg_chain" -v -s
