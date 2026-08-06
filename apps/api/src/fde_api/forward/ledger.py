@@ -32,6 +32,7 @@ from fde_api.backtest.execution import ExecutionModel, break_even_prob
 from fde_api.db.forward_models import ForwardLedgerEntry, ForwardPrediction
 from fde_api.forward.cohort import Cohort
 from fde_api.forward.consensus import american_to_prob, no_vig_two_way
+from fde_api.forward.domain_identity import IdentityResult, handled
 from fde_api.forward.modes import DataMode
 from fde_api.forward.policy import ForwardTestPolicy
 from fde_api.util import utc_now
@@ -250,7 +251,7 @@ def evaluate_candidate(
     )
 
 
-def record_evaluation(
+def record_evaluation_result(
     session: Session,
     *,
     prediction: ForwardPrediction | None,
@@ -262,39 +263,20 @@ def record_evaluation(
     data_completeness: float | None,
     exclusion_reason: str | None = None,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
-) -> ForwardLedgerEntry:
-    """Append a ledger row, simulating execution for candidates only.
+) -> IdentityResult:
+    """Record one evaluation, returning its typed identity outcome.
 
-    Non-candidates are recorded too, with no simulated fill — the ledger
+    Non-candidates are recorded too, with no simulated fill - the ledger
     must show what was declined, not just what was taken.
+
+    Idempotency is the DATABASE's, not this function's. The private slot
+    check that used to live here was the last of the four services still
+    deciding for itself, and a private check cannot survive contention:
+    two callers both find nothing and both insert. It also could not
+    distinguish a retry from a contradiction, because it compared nothing -
+    finding a row at the slot, it returned that row whatever it said.
     """
     now = utc_now()
-
-    # Idempotent at the DOMAIN level. This used to append unconditionally,
-    # and the scheduler handler compensated with its own slot-identity
-    # check - so the guard lived in the caller and any other caller
-    # duplicated the row. The identity of an evaluation is (game, market,
-    # selection, horizon, cutoff, policy): the same inputs at the same
-    # cutoff under the same frozen rules are ONE evaluation, however many
-    # times it is computed.
-    #
-    # A re-evaluation that reaches a DIFFERENT conclusion at the same cutoff
-    # is not returned silently - that would hide a real disagreement - but
-    # neither is it overwritten. It is left to the caller, which is why the
-    # existing row is returned unchanged rather than updated.
-    existing = session.scalars(
-        select(ForwardLedgerEntry).where(
-            ForwardLedgerEntry.canonical_game_id == canonical_game_id,
-            ForwardLedgerEntry.data_mode == data_mode.value,
-            ForwardLedgerEntry.policy_version == policy.policy_version,
-            ForwardLedgerEntry.market == evaluation.market,
-            ForwardLedgerEntry.selection == evaluation.selection,
-            ForwardLedgerEntry.horizon == horizon,
-            ForwardLedgerEntry.as_of_at == as_of_at,
-        )
-    ).first()
-    if existing is not None:
-        return existing
 
     entry = ForwardLedgerEntry(
         data_mode=data_mode.value,
@@ -349,9 +331,86 @@ def record_evaluation(
             entry.simulated_line = fill.line
             entry.simulated_american = fill.price_american
 
-    session.add(entry)
-    session.flush()
-    return entry
+    # The decision-context hash is part of the logical identity, so a
+    # health remediation produces a genuinely NEW evaluation rather than
+    # colliding with the suppressed one - which stays exactly as it was.
+    from fde_api.forward.decision_codes import decision_context_hash
+    from fde_api.forward.domain_identity import EVALUATION, upsert_by_identity
+
+    codes = list(evaluation.codes or [])
+    context = decision_context_hash(
+        prediction_identity=prediction.id if prediction else None,
+        price_identity=(
+            f"{evaluation.market}|{evaluation.selection}|{evaluation.line}|"
+            f"{evaluation.american}|{evaluation.price_source}"
+        ),
+        policy_version=policy.policy_version,
+        model_version=policy.model_version,
+        cohort=data_mode.value,
+        cutoff=as_of_at.isoformat(),
+        health_suppressed="HEALTH_GATE_SUPPRESSED" in codes,
+    )
+    logical = {
+        "canonical_game_id": canonical_game_id,
+        "prediction_identity": prediction.id if prediction else None,
+        "price_identity": (
+            f"{evaluation.market}|{evaluation.selection}|{evaluation.line}|"
+            f"{evaluation.american}"
+        ),
+        "evaluation_type": horizon,
+        "cohort": data_mode.value,
+        "policy_version": policy.policy_version,
+        "model_version": policy.model_version,
+        "decision_context_hash": context,
+    }
+    content = {
+        "status": evaluation.status,
+        "model_probability": evaluation.model_probability,
+        "conservative_probability": evaluation.conservative_probability,
+        "break_even_probability": evaluation.break_even_probability,
+        "expected_value": evaluation.expected_value,
+        # Codes, never the rendered sentences: wording is presentation and
+        # must not determine whether two evaluations are the same.
+        "decision_reason_codes": sorted(codes),
+        "suppressed": "HEALTH_GATE_SUPPRESSED" in codes,
+        "data_completeness": data_completeness,
+        "execution_eligible": entry.filled,
+    }
+    return upsert_by_identity(
+        session, ForwardLedgerEntry, identity=EVALUATION,
+        logical_values=logical, content_values=content, build=lambda: entry,
+    )
+
+
+def record_evaluation(
+    session: Session,
+    *,
+    prediction: ForwardPrediction | None,
+    canonical_game_id: str,
+    evaluation: CandidateEvaluation,
+    policy: ForwardTestPolicy,
+    horizon: str,
+    as_of_at: datetime,
+    data_completeness: float | None,
+    exclusion_reason: str | None = None,
+    data_mode: DataMode = DataMode.LIVE_RESEARCH,
+) -> ForwardLedgerEntry:
+    """The authoritative evaluation, for callers that do not need the outcome.
+
+    A thin wrapper over `record_evaluation_result`. Callers that DO need to
+    know whether they created it - or whether they hit a contradiction -
+    must use the result form. Inferring it by counting rows is unreliable
+    under concurrency: another caller can insert between the two reads.
+    """
+    return handled(
+        record_evaluation_result(
+            session, prediction=prediction, canonical_game_id=canonical_game_id,
+            evaluation=evaluation, policy=policy, horizon=horizon,
+            as_of_at=as_of_at, data_completeness=data_completeness,
+            exclusion_reason=exclusion_reason, data_mode=data_mode,
+        ),
+        entity="research_evaluation",
+    ).record
 
 
 def _execution_config(policy: ForwardTestPolicy):

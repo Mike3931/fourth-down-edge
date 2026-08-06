@@ -163,9 +163,42 @@ jobs:
       # chain gate: this one proves the DATABASE enforces the identity when
       # two callers race, which a sequential test cannot show and which the
       # previous service-level pre-check silently failed.
+      #
+      # The twelve semantic race cells, validated on the JUnit RESULT.
+      # A run whose selected tests were all skipped exits 0, so an exit code
+      # cannot tell a passing matrix from an absent one. This also refuses
+      # to count infrastructure tests as semantic cells.
+      - name: PostgreSQL race matrix (12 semantic cells)
+        if: always()
+        run: uv run python scripts/verify_race_matrix.py
+
+      # The full identity module, including the infrastructure tests the
+      # matrix deliberately excludes from its count.
       - name: PostgreSQL domain-identity race gate
         if: always()
         run: uv run pytest tests -m "pg_identity" -v -s
+
+      - name: Closing-authority behavioural tests
+        if: always()
+        run: uv run pytest tests/test_closing_authority_behaviour.py -q
+
+      - name: Sequential identity and duplicate inventory
+        if: always()
+        run: >
+          uv run pytest tests/test_domain_identity.py
+          tests/test_migration_upgrade.py -q
+
+      # Upgrading a populated database. The gate that matters here is the
+      # middle one: MANUAL_REVIEW_UNRESOLVED must refuse exactly as hard as
+      # no manifest at all, or "a human looked at it" becomes a way through.
+      - name: Migration duplicate-resolution gate
+        if: always()
+        run: uv run pytest tests/test_identity_resolution.py -q
+
+      # No call site may hold an IdentityResult and ignore the outcome.
+      - name: Identity caller audit
+        if: always()
+        run: uv run python scripts/audit_identity_callers.py
 
       - name: PostgreSQL record-chain gate
         if: always()

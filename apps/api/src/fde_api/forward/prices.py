@@ -42,7 +42,7 @@ from sqlalchemy.orm import Session
 from fde_api.backtest.execution import break_even_prob
 from fde_api.db.forward_models import ManualBookPriceEntry
 from fde_api.forward.cohort import Cohort, ProviderMode
-from fde_api.forward.domain_identity import IdentityResult
+from fde_api.forward.domain_identity import IdentityResult, handled
 from fde_api.forward.modes import DataMode
 from fde_api.forward.ordering import newest
 from fde_api.util import current_code_commit, utc_now
@@ -253,9 +253,12 @@ def record_price_observation(
     outcome by counting rows before and after is unreliable under
     concurrency, because another caller can insert between the two reads.
     """
-    return record_price_observation_result(
-        session, obs, now=now, correction_of_id=correction_of_id,
-        correction_reason=correction_reason,
+    return handled(
+        record_price_observation_result(
+            session, obs, now=now, correction_of_id=correction_of_id,
+            correction_reason=correction_reason,
+        ),
+        entity="price_observation",
     ).record
 
 

@@ -1,0 +1,42 @@
+{
+  "artifact": "identity-resolution-manifest",
+  "artifact_schema_version": "identity-resolution-manifest-v1",
+  "database": "local development database, apps/api",
+  "authored_against_inventory_sha256": "1f004a0a335b20be13d354138da50653d5d25ae4f93339c0fd1d8d233dde99ce",
+  "note": "One entry per colliding logical identity. A group recorded as MANUAL_REVIEW_UNRESOLVED is NOT resolved: the migration refuses exactly as it would with no manifest at all. That is the intended behaviour and not an oversight.",
+  "resolutions": [
+    {
+      "table": "forward_ledger",
+      "entity": "research_evaluation",
+      "logical_identity_hash": "1e8aba7afc2614ca8cff041b8c594e3e88e8d5a3c482178f4132740a8dcceed8",
+      "row_ids": [1, 2, 3],
+      "disposition": "MANUAL_REVIEW_UNRESOLVED",
+      "content_hashes_at_authoring": [
+        "14904740e9374d20f09099b9db9820009bb55e0d0ce91187c38f6d0423efb696",
+        "38634bd43230f3c941289352af08eb74d93b964a497dc593e7e19f28f5ce3778",
+        "9c02ae14728bd2e5b2b8d89dd5c5edcd1e5e83d03ffcee226cd3c4db3244ebf4"
+      ],
+      "identity_fields": {
+        "canonical_game_id": "2026_01_NE_SEA",
+        "cohort": "LIVE_RESEARCH",
+        "decision_context_hash": "legacy:2026-09-04 00:20:00.000000",
+        "evaluation_type": "OPENING",
+        "model_version": "market-residual-v1",
+        "policy_version": "ftp-2026-v1",
+        "prediction_identity": "fp_2026_01_NE_SEA_OPENING_ftp-2026-v1",
+        "price_identity": "SPREAD|HOME|-3.0|-110"
+      },
+      "differing_content_fields": ["conservative_probability", "model_probability"],
+      "used_downstream": false,
+      "rationale": "Three evaluations of one prediction against one price, written within about two milliseconds of each other, disagreeing only about the model probability and the conservative probability derived from it. Nothing in the rows says which model run produced which number, and no artifact outside them records it either: these predate the decision-context hash, so all three backfill to the same legacy context. Choosing one would be choosing an analytical output on no evidence, and the three dispositions that resolve a group all require evidence this group does not have. KEEP_DISTINCT would be wrong too - a corrected identity has to describe a real distinction, and 'these were written at slightly different microseconds' is not one.",
+      "why_not_each_resolving_disposition": {
+        "CANONICALIZE_EXACT_DUPLICATES": "Illegal here: three different content hashes. Canonicalising would discard two probabilities.",
+        "SELECT_AUTHORITATIVE_AND_SUPERSEDE": "Requires evidence outside the rows for which is right. There is none.",
+        "KEEP_DISTINCT_AFTER_IDENTITY_CORRECTION": "Requires a real discriminator. Write order is not one, and inventing a run id after the fact would be fabricating provenance."
+      },
+      "consequence": "The migration refuses to add the unique constraint to forward_ledger on this database. Fresh databases and CI are unaffected: the constraint is declared on the model, so create_all builds it, and the racing tests exercise it under PostgreSQL.",
+      "review_required_from": "the data owner, or the discarding of this development row set on the explicit understanding that three analytical outputs are being destroyed",
+      "authorised_by": ""
+    }
+  ]
+}

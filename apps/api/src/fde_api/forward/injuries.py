@@ -24,7 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fde_api.db.forward_models import AvailabilityAssessment, InjuryObservation
-from fde_api.forward.domain_identity import IdentityResult
+from fde_api.forward.domain_identity import IdentityResult, handled
 from fde_api.forward.modes import DataMode
 from fde_api.pit.guards import LookaheadError
 from fde_api.util import utc_now
@@ -422,8 +422,11 @@ def assess_player(
     row was created by counting before and after is unreliable under
     concurrency, since another caller can insert between the two reads.
     """
-    return assess_player_result(
-        session, canonical_game_id=canonical_game_id, team_id=team_id,
-        player_id=player_id, as_of_at=as_of_at, position=position,
-        is_starting_qb=is_starting_qb, data_mode=data_mode,
+    return handled(
+        assess_player_result(
+            session, canonical_game_id=canonical_game_id, team_id=team_id,
+            player_id=player_id, as_of_at=as_of_at, position=position,
+            is_starting_qb=is_starting_qb, data_mode=data_mode,
+        ),
+        entity="availability_assessment",
     ).record

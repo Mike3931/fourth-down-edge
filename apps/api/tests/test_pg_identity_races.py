@@ -36,6 +36,7 @@ from sqlalchemy.orm import sessionmaker
 from fde_api.db.forward_models import (
     AvailabilityAssessment,
     ConsensusSnapshot,
+    ForwardLedgerEntry,
     ManualBookPriceEntry,
     OddsQuote,
 )
@@ -337,3 +338,190 @@ class TestNoRawIntegrityErrorEscapes:
         results = race(lambda i: _record_price(factory, american=-110))
         for r in results:
             assert not isinstance(r, BaseException), f"{type(r).__name__}: {r}"
+
+
+# --------------------------------------------------------------------------- #
+# Conflicting-payload races: the three cells that were missing
+# --------------------------------------------------------------------------- #
+#
+# A conflict race is harder to stage than an exact retry: the callers must
+# reach the SAME logical slot carrying DIFFERENT content, simultaneously.
+# Each helper below varies exactly one thing that is CONTENT and nothing
+# that participates in the identity.
+#
+# None of these assert WHICH caller wins. There is no priority rule between
+# two simultaneous callers, and asserting one would be asserting a
+# scheduling accident.
+
+
+def _build_consensus_window(factory, *, at: datetime, max_age: int) -> str:
+    """Consensus over a different eligibility window at the same slot.
+
+    `max_age_minutes` decides which quotes are eligible. It is not part of
+    the logical identity - (game, market, cutoff, cohort, method) is - so
+    two windows produce one slot and two different medians.
+    """
+    from fde_api.forward.consensus import build_consensus
+
+    with factory() as s:
+        _snap, rep = build_consensus(
+            s, canonical_game_id=GAME, market="TOTAL", as_of_at=at,
+            kickoff_utc=KICK, data_mode=MODE, max_age_minutes=max_age)
+        s.commit()
+    for reason in rep.reasons:
+        if "identity outcome:" in reason:
+            return reason.split("identity outcome:")[1].strip()
+    return "UNKNOWN"
+
+
+class TestConsensusConflictRace:
+    def test_conflicting_content_at_one_slot(self, factory) -> None:
+        # An older set at 47.5 and a recent set at 51.5. A wide window sees
+        # both and medians differently from a narrow one that sees only the
+        # recent quotes - same slot, different answer.
+        _seed_quotes(factory, at=CUTOFF - timedelta(minutes=50), total=47.5)
+        _seed_quotes(factory, at=CUTOFF - timedelta(minutes=5), total=51.5)
+
+        windows = [90, 10]
+        results = outcomes(race(
+            lambda i: _build_consensus_window(factory, at=CUTOFF,
+                                              max_age=windows[i % 2]), n=2))
+        assert results.count("CREATED") <= 1, results
+        assert all(r in {"CREATED", "EXISTING_IDENTICAL", "CONFLICT"}
+                   for r in results), results
+        with factory() as s:
+            rows = list(s.scalars(select(ConsensusSnapshot)))
+        assert len(rows) == 1, [(r.id, r.median_line) for r in rows]
+
+    def test_a_consensus_conflict_demands_review(self) -> None:
+        from fde_api.forward.domain_identity import CONSENSUS
+
+        assert CONSENSUS.conflict_requires_review is True
+
+
+def _assess_with_state(factory, *, at: datetime, designation: str | None) -> str:
+    """Assess after changing the underlying injury observation.
+
+    Same (game, player, cutoff, cohort, method) - one slot - but a
+    different source-derived assessment.
+    """
+    from fde_api.forward.injuries import (
+        SourceCategory,
+        assess_player_result,
+        record_injury_observation,
+    )
+
+    with factory() as s:
+        record_injury_observation(
+            s, canonical_game_id=GAME, team_id="BUF", player_id="BUF_WR_DIGGS",
+            report_date="2026-09-11", observed_at=at - timedelta(hours=1),
+            source_category=SourceCategory.OFFICIAL_VERIFIED,
+            practice_status="DNP" if designation == "OUT" else "LIMITED",
+            game_designation=designation, source_reference=f"race-{designation}",
+            data_mode=MODE, now=at - timedelta(minutes=1),
+        )
+        result = assess_player_result(
+            s, canonical_game_id=GAME, team_id="BUF", player_id="BUF_WR_DIGGS",
+            as_of_at=at, data_mode=MODE)
+        s.commit()
+        return result.outcome.value
+
+
+class TestAvailabilityConflictRace:
+    def test_conflicting_content_at_one_slot(self, factory) -> None:
+        designations = ["OUT", "QUESTIONABLE"]
+        results = outcomes(race(
+            lambda i: _assess_with_state(factory, at=CUTOFF,
+                                         designation=designations[i % 2]), n=2))
+        assert results.count("CREATED") <= 1, results
+        assert all(r in {"CREATED", "EXISTING_IDENTICAL", "CONFLICT"}
+                   for r in results), results
+        with factory() as s:
+            rows = list(s.scalars(select(AvailabilityAssessment)))
+        assert len(rows) == 1, [(r.id, r.state) for r in rows]
+
+    def test_an_availability_conflict_still_reports_conflict(self) -> None:
+        """Review is not required here - a later cutoff supersedes - but the
+        outcome is still CONFLICT. Not requiring review is not the same as
+        not noticing."""
+        from fde_api.forward.domain_identity import AVAILABILITY
+
+        assert AVAILABILITY.conflict_requires_review is False
+        assert "CONFLICT" in {o.value for o in IdentityOutcome}
+
+
+def _policy(session):
+    from fde_api.forward.policy import build_policy_draft, freeze_policy, load_policy
+
+    try:
+        return load_policy(session, "ftp-2026-v1")
+    except Exception:
+        freeze_policy(session, build_policy_draft(
+            policy_version="ftp-2026-v1",
+            start=(KICK - timedelta(days=60)).date(),
+            end=(KICK + timedelta(days=160)).date()))
+        session.commit()
+        return load_policy(session, "ftp-2026-v1")
+
+
+def _record_evaluation(
+    factory, *, probability: float = 0.62, horizon: str = "OPENING",
+) -> str:
+    """One evaluation of a fixed slot.
+
+    The probability is CONTENT; the horizon is part of the logical identity.
+    Varying the first stages a conflict, varying the second stages a
+    legitimate distinct version.
+    """
+    from fde_api.forward.ledger import evaluate_candidate, record_evaluation_result
+
+    with factory() as s:
+        policy = _policy(s)
+        ev = evaluate_candidate(
+            market="SPREAD", selection="HOME", line=-3.0, american=150,
+            model_probability=probability, price_source="fixture_price",
+            price_age_seconds=120, policy=policy, data_completeness=1.0)
+        result = record_evaluation_result(
+            s, prediction=None, canonical_game_id=GAME, evaluation=ev,
+            policy=policy, horizon=horizon, as_of_at=CUTOFF,
+            data_completeness=1.0, data_mode=MODE)
+        s.commit()
+        return result.outcome.value
+
+
+class TestEvaluationRaces:
+    def test_exact_retry_race_yields_one_row(self, factory) -> None:
+        results = outcomes(race(lambda i: _record_evaluation(factory)))
+        assert results.count("CREATED") <= 1, results
+        assert all(r in {"CREATED", "EXISTING_IDENTICAL"} for r in results), results
+        with factory() as s:
+            rows = list(s.scalars(select(ForwardLedgerEntry)))
+        assert len(rows) == 1, [r.id for r in rows]
+
+    def test_conflicting_content_at_one_slot(self, factory) -> None:
+        probabilities = [0.62, 0.71]
+        results = outcomes(race(
+            lambda i: _record_evaluation(factory,
+                                         probability=probabilities[i % 2]), n=2))
+        assert results.count("CREATED") <= 1, results
+        assert all(r in {"CREATED", "EXISTING_IDENTICAL", "CONFLICT"}
+                   for r in results), results
+        with factory() as s:
+            rows = list(s.scalars(select(ForwardLedgerEntry)))
+        assert len(rows) == 1, [(r.id, r.model_probability) for r in rows]
+
+    def test_distinct_identities_both_survive(self, factory) -> None:
+        """A different evaluation type is a different slot, not a conflict -
+        the same shape as a remediated decision context creating a new
+        immutable evaluation."""
+        horizons = ["OPENING", "EARLY_WEEK"]
+        results = outcomes(race(
+            lambda i: _record_evaluation(factory, horizon=horizons[i % 2]), n=2))
+        assert results.count("CREATED") == 2, results
+        with factory() as s:
+            assert len(list(s.scalars(select(ForwardLedgerEntry)))) == 2
+
+    def test_an_evaluation_conflict_demands_review(self) -> None:
+        from fde_api.forward.domain_identity import EVALUATION
+
+        assert EVALUATION.conflict_requires_review is True

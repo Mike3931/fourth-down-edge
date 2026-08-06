@@ -33,6 +33,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -506,4 +508,73 @@ def _compare(
         existing_content_hash=existing.content_hash,
         conflict_fields=fields,
         requires_manual_review=identity.conflict_requires_review,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Handling an outcome
+# --------------------------------------------------------------------------- #
+#
+# Three outcomes is two more than the old code had, and a caller that reads
+# `.record` and ignores `.outcome` gets the right row while missing the fact
+# that two writers disagreed. That is exactly the failure the typed outcome
+# exists to prevent, so handling is made TOTAL: every branch is a required
+# keyword argument, and omitting one is a TypeError at the call site rather
+# than a silence at run time.
+
+log = logging.getLogger("fde.identity")
+
+
+def dispatch(
+    result: IdentityResult,
+    *,
+    created: Callable[[IdentityResult], Any],
+    existing_identical: Callable[[IdentityResult], Any],
+    conflict: Callable[[IdentityResult], Any],
+) -> Any:
+    """Route one identity outcome. All three branches are mandatory."""
+    if result.outcome is IdentityOutcome.CREATED:
+        return created(result)
+    if result.outcome is IdentityOutcome.EXISTING_IDENTICAL:
+        return existing_identical(result)
+    if result.outcome is IdentityOutcome.CONFLICT:
+        return conflict(result)
+    raise AssertionError(f"unhandled identity outcome: {result.outcome!r}")
+
+
+def report_conflict(result: IdentityResult, *, entity: str) -> IdentityResult:
+    """The default conflict branch: make the disagreement visible.
+
+    It does NOT resolve anything. The stored row stays exactly as it was and
+    the rejected payload is discarded by the database, which is the correct
+    behaviour for an immutable record; what must not happen is that this
+    passes unremarked. Only hashes and field NAMES are logged - never the
+    values, which for a price observation are user-entered data.
+    """
+    log.warning(
+        "identity conflict entity=%s logical=%s stored_content=%s attempted_content=%s "
+        "differing_fields=%s manual_review_required=%s",
+        entity,
+        result.logical_identity_hash[:16],
+        (result.existing_content_hash or "")[:16],
+        result.content_hash[:16],
+        ",".join(result.conflict_fields) or "(none)",
+        result.requires_manual_review,
+    )
+    return result
+
+
+def handled(result: IdentityResult, *, entity: str) -> IdentityResult:
+    """Acknowledge all three outcomes at a call site that wants the record.
+
+    A thin wrapper still has to say what it does with each outcome. This is
+    that statement in one line: creations and retries are unremarkable,
+    conflicts are reported, and in every case the authoritative row is what
+    comes back.
+    """
+    return dispatch(
+        result,
+        created=lambda r: r,
+        existing_identical=lambda r: r,
+        conflict=lambda r: report_conflict(r, entity=entity),
     )

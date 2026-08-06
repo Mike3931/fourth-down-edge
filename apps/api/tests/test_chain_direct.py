@@ -458,24 +458,25 @@ class TestTheDuplicateCollapseRegression:
     comparator and proves it now names the duplicate.
     """
 
-    def _duplicate_a_record(self, factory) -> None:
-        """An exact copy but for the primary key.
+    def _duplicated_chain(self, factory):
+        """A chain whose record list contains one record twice.
 
-        Copied column-by-column from the mapper rather than by hand: a
-        hand-listed clone silently omits fields, and this regression depends
-        on the two rows being field-identical so that MULTIPLICITY is the
-        only thing that differs.
+        Built in MEMORY rather than in the database, because the database
+        now refuses a duplicate logical identity - which is the whole point
+        of the identity work, and which makes the old row-level fixture
+        impossible. The comparator operates on semantic chains, not rows, so
+        duplicating a record in the chain is a truer test of it anyway.
         """
-        with factory() as s:
-            e = s.scalars(select(ForwardLedgerEntry)).first()
-            assert e is not None
-            values = {
-                c.key: getattr(e, c.key)
-                for c in ForwardLedgerEntry.__mapper__.column_attrs
-                if c.key != "id"
-            }
-            s.add(ForwardLedgerEntry(**values))
-            s.commit()
+        from fde_api.forward.semantic_hash import SemanticChain, _sorted
+
+        base = _chain(factory)
+        target = next(r for r in base.records if r["type"] == "forward_performance")
+        return SemanticChain(
+            canonical_game_id=base.canonical_game_id,
+            cohort=base.cohort,
+            version=base.version,
+            records=_sorted([*base.records, dict(target)]),
+        )
 
     def test_the_old_dictionary_approach_would_have_missed_it(
         self, direct
@@ -483,8 +484,7 @@ class TestTheDuplicateCollapseRegression:
         """Demonstrates the defect, so the regression is anchored to the
         real failure rather than to an assertion someone once wrote."""
         before = _chain(direct)
-        self._duplicate_a_record(direct)
-        after = _chain(direct)
+        after = self._duplicated_chain(direct)
 
         def collapsed(chain):
             return {(r["type"], r["identity"]): r for r in chain.records}
@@ -499,8 +499,7 @@ class TestTheDuplicateCollapseRegression:
 
     def test_the_current_comparator_names_the_duplicate(self, direct) -> None:
         before = _chain(direct)
-        self._duplicate_a_record(direct)
-        diff = compare(before, _chain(direct))
+        diff = compare(before, self._duplicated_chain(direct))
 
         assert not diff["equal"], "a duplicated record was reported as equal"
         dupes = diff["duplicated_or_uneven_multiplicity"]
@@ -511,8 +510,7 @@ class TestTheDuplicateCollapseRegression:
     def test_multiplicity_is_compared_before_values(self, direct) -> None:
         """A duplicate must fail parity even when every field matches."""
         before = _chain(direct)
-        self._duplicate_a_record(direct)
-        diff = compare(before, _chain(direct))
+        diff = compare(before, self._duplicated_chain(direct))
         assert diff["differing"] == [], (
             "the clone was supposed to be field-identical; adjust the fixture"
         )

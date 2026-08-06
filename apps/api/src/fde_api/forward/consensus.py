@@ -249,7 +249,13 @@ def build_consensus(
     # Same slot + same content is a retry. Same slot + DIFFERENT content is
     # a contradiction about a value downstream reads as truth, so it is
     # returned as a conflict rather than quietly appended.
-    from fde_api.forward.domain_identity import CONSENSUS, upsert_by_identity
+    from fde_api.forward.domain_identity import (
+        CONSENSUS,
+        IdentityResult,
+        dispatch,
+        report_conflict,
+        upsert_by_identity,
+    )
 
     logical = {
         "canonical_game_id": canonical_game_id,
@@ -276,12 +282,26 @@ def build_consensus(
         session, ConsensusSnapshot, identity=CONSENSUS,
         logical_values=logical, content_values=content, build=lambda: snap,
     )
-    rep.reasons.append(f"identity outcome: {result.outcome.value}")
-    if result.conflicted:
-        rep.reasons.append(
+    # Total dispatch: all three branches are required keyword arguments, so
+    # a fourth outcome - or a refactor that drops one - fails at the call
+    # site instead of quietly taking whichever branch is left.
+    def _note(text: str) -> None:
+        rep.reasons.append(text)
+
+    def _on_conflict(r: IdentityResult) -> None:
+        _note(f"identity outcome: {r.outcome.value}")
+        _note(
             "a DIFFERENT consensus already exists for this slot; the original "
             "stands and this requires review"
         )
+        report_conflict(r, entity="consensus_snapshot")
+
+    dispatch(
+        result,
+        created=lambda r: _note(f"identity outcome: {r.outcome.value}"),
+        existing_identical=lambda r: _note(f"identity outcome: {r.outcome.value}"),
+        conflict=lambda r: _on_conflict(r),
+    )
     return result.record, rep
 
 

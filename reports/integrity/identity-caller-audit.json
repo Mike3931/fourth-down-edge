@@ -1,0 +1,57 @@
+{
+  "artifact": "identity-caller-audit",
+  "artifact_schema_version": "identity-caller-audit-v1",
+  "callers": {
+    "src/fde_api/forward/consensus.py": {
+      "discarded": [],
+      "handling": "total dispatch via dispatch()"
+    },
+    "src/fde_api/forward/domain_identity.py": {
+      "discarded": []
+    },
+    "src/fde_api/forward/injuries.py": {
+      "discarded": [],
+      "handling": "total dispatch via handled()"
+    },
+    "src/fde_api/forward/ledger.py": {
+      "discarded": [],
+      "handling": "total dispatch via handled()"
+    },
+    "src/fde_api/forward/prices.py": {
+      "discarded": [],
+      "handling": "total dispatch via handled()"
+    },
+    "tests/directchain.py": {
+      "discarded": []
+    },
+    "tests/test_chain_direct.py": {
+      "discarded": []
+    },
+    "tests/test_domain_identity.py": {
+      "discarded": []
+    },
+    "tests/test_forward_capture.py": {
+      "discarded": []
+    },
+    "tests/test_pg_identity_races.py": {
+      "discarded": []
+    },
+    "tests/test_pit_chain_guards.py": {
+      "discarded": []
+    }
+  },
+  "files_examined": 11,
+  "findings": [],
+  "note": "handled()/dispatch() take all three branches as required keyword arguments, so omitting one is a TypeError at the call site rather than a silence at run time.",
+  "services": [
+    "assess_player_result",
+    "build_consensus",
+    "record_evaluation_result",
+    "record_price_observation_result",
+    "upsert_by_identity"
+  ],
+  "total_dispatch_helpers": [
+    "handled",
+    "dispatch"
+  ]
+}

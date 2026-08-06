@@ -1,0 +1,208 @@
+{
+  "artifact": "identity-duplicate-inventory",
+  "artifact_schema_version": "identity-duplicate-inventory-v1",
+  "automatic_resolution_prohibited": true,
+  "conflicting_total": 1,
+  "database": "sqlite",
+  "exact_duplicate_total": 0,
+  "generated_at_utc": "2026-08-06T10:59:50.234574+00:00",
+  "note": "Read-only. No row is deleted, consolidated, or chosen. Resolution requires a governed manifest.",
+  "sha256": "1f004a0a335b20be13d354138da50653d5d25ae4f93339c0fd1d8d233dde99ce",
+  "tables": {
+    "availability_assessments": {
+      "CONFLICTING_DUPLICATE": 0,
+      "EXACT_DUPLICATE": 0,
+      "UNIQUE": 0,
+      "conflicting": [],
+      "distinct_logical_identities": 0,
+      "entity": "availability_assessment",
+      "exact": [],
+      "rows": 0
+    },
+    "consensus_snapshots": {
+      "CONFLICTING_DUPLICATE": 0,
+      "EXACT_DUPLICATE": 0,
+      "UNIQUE": 6,
+      "conflicting": [],
+      "distinct_logical_identities": 6,
+      "entity": "consensus_snapshot",
+      "exact": [],
+      "rows": 6
+    },
+    "forward_ledger": {
+      "CONFLICTING_DUPLICATE": 1,
+      "EXACT_DUPLICATE": 0,
+      "UNIQUE": 1,
+      "conflicting": [
+        {
+          "automatic_resolution_prohibited": true,
+          "canonical_identity_fields": {
+            "canonical_game_id": "2026_01_NE_SEA",
+            "cohort": "LIVE_RESEARCH",
+            "decision_context_hash": "legacy:2026-09-04 00:20:00.000000",
+            "evaluation_type": "OPENING",
+            "model_version": "market-residual-v1",
+            "policy_version": "ftp-2026-v1",
+            "prediction_identity": "fp_2026_01_NE_SEA_OPENING_ftp-2026-v1",
+            "price_identity": "SPREAD|HOME|-3.0|-110"
+          },
+          "classification": "CONFLICTING_DUPLICATE",
+          "content_hash_version": "domain-content-v1",
+          "content_hashes": [
+            "14904740e9374d20f09099b9db9820009bb55e0d0ce91187c38f6d0423efb696",
+            "38634bd43230f3c941289352af08eb74d93b964a497dc593e7e19f28f5ce3778",
+            "9c02ae14728bd2e5b2b8d89dd5c5edcd1e5e83d03ffcee226cd3c4db3244ebf4"
+          ],
+          "differing_content_fields": [
+            "conservative_probability",
+            "model_probability"
+          ],
+          "downstream": {
+            "references": {
+              "settlement_or_clv": [
+                {
+                  "clv_line": null,
+                  "clv_probability": null,
+                  "id": 1,
+                  "result": null,
+                  "settled_at": null
+                },
+                {
+                  "clv_line": null,
+                  "clv_probability": null,
+                  "id": 2,
+                  "result": null,
+                  "settled_at": null
+                },
+                {
+                  "clv_line": null,
+                  "clv_probability": null,
+                  "id": 3,
+                  "result": null,
+                  "settled_at": null
+                }
+              ]
+            },
+            "used_downstream": false
+          },
+          "entity": "research_evaluation",
+          "logical_identity_hash": "1e8aba7afc2614ca8cff041b8c594e3e88e8d5a3c482178f4132740a8dcceed8",
+          "logical_identity_version": "domain-logical-identity-v1",
+          "members": [
+            {
+              "code_commit": null,
+              "cohort": "LIVE_RESEARCH",
+              "content": {
+                "break_even_probability": "0.5238095238095238",
+                "conservative_probability": "0.6",
+                "data_completeness": "0.0",
+                "decision_reason_codes": null,
+                "execution_eligible": null,
+                "expected_value": null,
+                "model_probability": "0.62",
+                "status": "DATA_INCOMPLETE",
+                "suppressed": null
+              },
+              "content_hash": "9c02ae14728bd2e5b2b8d89dd5c5edcd1e5e83d03ffcee226cd3c4db3244ebf4",
+              "created_at": "2026-08-01 15:12:29.518836",
+              "logical_fields": {
+                "canonical_game_id": "2026_01_NE_SEA",
+                "cohort": "LIVE_RESEARCH",
+                "decision_context_hash": "legacy:2026-09-04 00:20:00.000000",
+                "evaluation_type": "OPENING",
+                "model_version": "market-residual-v1",
+                "policy_version": "ftp-2026-v1",
+                "prediction_identity": "fp_2026_01_NE_SEA_OPENING_ftp-2026-v1",
+                "price_identity": "SPREAD|HOME|-3.0|-110"
+              },
+              "model_version": "market-residual-v1",
+              "policy_version": "ftp-2026-v1",
+              "row_id": 1
+            },
+            {
+              "code_commit": null,
+              "cohort": "LIVE_RESEARCH",
+              "content": {
+                "break_even_probability": "0.5238095238095238",
+                "conservative_probability": "0.525",
+                "data_completeness": "0.0",
+                "decision_reason_codes": null,
+                "execution_eligible": null,
+                "expected_value": null,
+                "model_probability": "0.545",
+                "status": "DATA_INCOMPLETE",
+                "suppressed": null
+              },
+              "content_hash": "14904740e9374d20f09099b9db9820009bb55e0d0ce91187c38f6d0423efb696",
+              "created_at": "2026-08-01 15:12:29.520858",
+              "logical_fields": {
+                "canonical_game_id": "2026_01_NE_SEA",
+                "cohort": "LIVE_RESEARCH",
+                "decision_context_hash": "legacy:2026-09-04 00:20:00.000000",
+                "evaluation_type": "OPENING",
+                "model_version": "market-residual-v1",
+                "policy_version": "ftp-2026-v1",
+                "prediction_identity": "fp_2026_01_NE_SEA_OPENING_ftp-2026-v1",
+                "price_identity": "SPREAD|HOME|-3.0|-110"
+              },
+              "model_version": "market-residual-v1",
+              "policy_version": "ftp-2026-v1",
+              "row_id": 2
+            },
+            {
+              "code_commit": null,
+              "cohort": "LIVE_RESEARCH",
+              "content": {
+                "break_even_probability": "0.5238095238095238",
+                "conservative_probability": "0.48",
+                "data_completeness": "0.0",
+                "decision_reason_codes": null,
+                "execution_eligible": null,
+                "expected_value": null,
+                "model_probability": "0.5",
+                "status": "DATA_INCOMPLETE",
+                "suppressed": null
+              },
+              "content_hash": "38634bd43230f3c941289352af08eb74d93b964a497dc593e7e19f28f5ce3778",
+              "created_at": "2026-08-01 15:12:29.520858",
+              "logical_fields": {
+                "canonical_game_id": "2026_01_NE_SEA",
+                "cohort": "LIVE_RESEARCH",
+                "decision_context_hash": "legacy:2026-09-04 00:20:00.000000",
+                "evaluation_type": "OPENING",
+                "model_version": "market-residual-v1",
+                "policy_version": "ftp-2026-v1",
+                "prediction_identity": "fp_2026_01_NE_SEA_OPENING_ftp-2026-v1",
+                "price_identity": "SPREAD|HOME|-3.0|-110"
+              },
+              "model_version": "market-residual-v1",
+              "policy_version": "ftp-2026-v1",
+              "row_id": 3
+            }
+          ],
+          "recommended_disposition": "MANUAL_REVIEW_UNRESOLVED - the rows disagree about content. Choosing between them discards evidence; use KEEP_DISTINCT_AFTER_IDENTITY_CORRECTION only if the identity definition genuinely failed to distinguish legitimate versions.",
+          "row_ids": [
+            1,
+            2,
+            3
+          ],
+          "table": "forward_ledger"
+        }
+      ],
+      "distinct_logical_identities": 2,
+      "entity": "research_evaluation",
+      "exact": [],
+      "rows": 4
+    },
+    "manual_book_price_entries": {
+      "CONFLICTING_DUPLICATE": 0,
+      "EXACT_DUPLICATE": 0,
+      "UNIQUE": 0,
+      "conflicting": [],
+      "distinct_logical_identities": 0,
+      "entity": "price_observation",
+      "exact": [],
+      "rows": 0
+    }
+  }
+}

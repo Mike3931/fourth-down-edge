@@ -36,6 +36,7 @@ Revises: a4d81c6b0e57
 from __future__ import annotations
 
 import json
+import os
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -60,6 +61,23 @@ _AUDIT = (
     Path(__file__).resolve().parents[4]
     / "reports" / "integrity" / "identity-migration-audit.json"
 )
+
+
+class _LazyResolution:
+    """The governed resolution mechanism, imported at call time.
+
+    Alembic loads every revision module in the chain on any command; a
+    top-level application import would make unrelated migrations depend on
+    the application package being importable.
+    """
+
+    def __getattr__(self, name: str):
+        from fde_api.forward import identity_resolution
+
+        return getattr(identity_resolution, name)
+
+
+_resolution = _LazyResolution()
 
 
 class ConflictingDuplicatesFound(RuntimeError):
@@ -193,6 +211,15 @@ def _ensure_aware(values: dict) -> dict:
 def upgrade() -> None:
     bind = op.get_bind()
 
+    # An explicitly authored manifest, or nothing. The default is nothing: a
+    # populated database with duplicate identities does not upgrade until a
+    # human has written down what those rows mean.
+    manifest = _resolution.ResolutionManifest.load(
+        os.environ.get("FDE_IDENTITY_RESOLUTION_MANIFEST")
+    )
+    applied: list[dict] = []
+    refusals: list[str] = []
+
     for table, _entity in _TABLES:
         with op.batch_alter_table(table) as batch:
             batch.add_column(sa.Column("logical_identity_version", sa.String(length=48)))
@@ -208,7 +235,7 @@ def upgrade() -> None:
 
     for table, entity in _TABLES:
         identity = _identity_for(entity)
-        rows = list(bind.execute(sa.text(f"SELECT * FROM {table}")))  # noqa: S608
+        rows = list(bind.execute(sa.text(f"SELECT * FROM {table}")))
         groups: dict[str, list[tuple]] = {}
 
         for row in rows:
@@ -217,7 +244,7 @@ def upgrade() -> None:
             cid = identity.content_hash(_ensure_aware(content))
             bind.execute(
                 sa.text(
-                    f"UPDATE {table} SET logical_identity_version=:lv, "  # noqa: S608
+                    f"UPDATE {table} SET logical_identity_version=:lv, "
                     "logical_identity_hash=:lh, content_hash_version=:cv, "
                     "content_hash=:ch WHERE id=:rid"
                 ),
@@ -249,31 +276,45 @@ def upgrade() -> None:
             ],
         }
 
-        if conflicting:
-            # Refuse rather than choose. These rows disagree about a fact
-            # the system treats as true, and a migration that picks one is
-            # discarding evidence somebody wrote.
-            raise ConflictingDuplicatesFound(
-                f"{table}: {len(conflicting)} logical identity(ies) have rows with "
-                f"DIFFERENT content. Row ids: "
-                f"{[[rid for rid, _ in groups[k]] for k in conflicting[:5]]}. "
-                "A migration may not choose between them; resolve them explicitly."
+        # Every duplicate group must be authorised INDIVIDUALLY. There is no
+        # blanket approval and no "it is only development data" exemption:
+        # the manifest names the rows, restates the content hashes it was
+        # written against, and says who authorised it. A group the manifest
+        # does not cover — or covers as MANUAL_REVIEW_UNRESOLVED — keeps the
+        # migration refused, and nothing about that group is touched.
+        for lid in exact + conflicting:
+            plan = _resolution.plan_group(
+                table=table,
+                logical_identity_hash=lid,
+                rows=list(groups[lid]),
+                manifest=manifest,
             )
-        if exact:
-            # Exact duplicates could in principle be consolidated, but doing
-            # so silently would remap lineage nobody asked to have remapped.
-            # Reported and refused; consolidation is a governed operation.
-            raise ConflictingDuplicatesFound(
-                f"{table}: {len(exact)} logical identity(ies) have byte-identical "
-                "duplicate rows. Consolidation remaps downstream lineage and is a "
-                "governed operation, not a side effect of adding a constraint."
-            )
+            if plan.resolved:
+                applied.append(_resolution.apply_plan(bind, plan))
+            else:
+                refusals.extend(plan.problems)
 
+    audit["resolution_manifest"] = manifest.source
+    audit["resolutions_applied"] = applied
+    audit["refusals"] = refusals
     _AUDIT.parent.mkdir(parents=True, exist_ok=True)
     _AUDIT.write_text(json.dumps(audit, indent=2, sort_keys=True) + "\n",
                       encoding="utf-8", newline="\n")
 
-    # Only now, with the inventory clean, is the constraint safe to add.
+    if refusals:
+        # The audit is written FIRST, deliberately: a refusal an operator
+        # cannot inspect is only half a refusal. They need to see which
+        # identities collided and what the rows disagree about before they
+        # can write a manifest that resolves them.
+        raise ConflictingDuplicatesFound(
+            f"{len(refusals)} duplicate identity group(s) are not resolved by the "
+            f"manifest ({manifest.source}). The unique constraint was NOT added "
+            f"and nothing was changed for these groups. See {_AUDIT}.\n  - "
+            + "\n  - ".join(refusals[:20])
+        )
+
+    # Only now, with every group either unique or explicitly resolved, is
+    # the constraint safe to add.
     for table, _entity in _TABLES:
         op.create_index(
             f"uq_{table}_logical_identity",
