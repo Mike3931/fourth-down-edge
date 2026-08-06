@@ -450,7 +450,12 @@ def upsert_by_identity(
             # laundered into an idempotency result.
             if not _is_identity_violation(exc, model):
                 raise
-            session.expunge(row)
+            # The savepoint rollback usually detaches the pending instance
+            # already, so an unconditional expunge raises InvalidRequestError
+            # and turns a perfectly ordinary lost race into a crash. Losing
+            # a race is not an error; it must not look like one.
+            if row in session:
+                session.expunge(row)
             existing = _fetch()
             if existing is None:  # pragma: no cover - would mean the
                 # constraint fired for a row we cannot then find, which is
