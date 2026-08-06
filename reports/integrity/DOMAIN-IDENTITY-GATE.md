@@ -1,6 +1,9 @@
 # Closing the domain-identity database gate
 
-Branch `feature/forward-data-capture`, commit `59d85ef`.
+Branch `feature/forward-data-capture`, commit `b3cf8d7`.
+CI run [31096650022](https://github.com/Mike3931/fourth-down-edge/actions/runs/31096650022),
+head SHA `b3cf8d7ed1f573869ba773493fc5073e08b7588e` — matched by exact SHA,
+not by "the latest run on the branch".
 
 Four deficiencies were outstanding. Three of them shared a shape: the
 mechanism existed and nothing forced anyone to use it.
@@ -149,7 +152,15 @@ skipped = failed = errors = 0, and refuses to count infrastructure tests
 (backend PIDs, dialect assertions, no-raw-IntegrityError sweeps) as
 semantic cells — those are reported separately.
 
-**Not yet run**: this requires PostgreSQL and runs in CI.
+Result in CI: **collected 12, passed 12, skipped 0, failed 0, errors 0.**
+
+The first dispatch (`59d85ef`) failed three of them, and the failure was
+the fixture's, not the product's: the helper froze the forward-test policy
+lazily on first use, so both workers raced to insert the policy as well as
+the evaluation, and tripped the policy's primary key. A fixture that fails
+for its own reasons is worse than one that does not run — it fails in the
+colours of the thing under test. The policy is now frozen once before the
+barrier releases.
 
 ---
 
@@ -204,7 +215,8 @@ observation those are user-entered.
 
 | gate | result |
 |---|---|
-| Python suite (non-PostgreSQL) | **973 passed**, 0 failed, 0 skipped |
+| Python suite, local (non-PostgreSQL) | **973 passed**, 0 failed, 0 skipped |
+| Python suite, CI | 965 passed, 8 skipped (network-marked), 0 failed |
 | Ruff (`src`, `tests`, `scripts`, `migrations`) | clean |
 | mypy (76 source files) | clean |
 | Identity caller audit | passed, 0 discarded outcomes |
@@ -217,11 +229,18 @@ observation those are user-entered.
 | Playwright e2e | 1 passed |
 | `npm audit --production` | 2 moderate, exit 0 |
 | Secret audit | `FDE_ODDS_API_KEY` read only from the environment; no literal anywhere |
-| PostgreSQL race matrix (12 cells) | **CI only** |
-| PostgreSQL identity / chain / concurrency gates | **CI only** |
+| PostgreSQL race matrix (12 cells) | **12 passed**, 0 skipped, 0 failed |
+| PostgreSQL domain-identity gate | 23 passed |
+| PostgreSQL record-chain gate | 15 passed |
+| PostgreSQL recovery-lineage concurrency gate | 11 passed |
+| Migration upgrade on PostgreSQL | 14 passed |
+| Migration duplicate-resolution gate | 24 passed |
+| Closing-authority behavioural gate | 10 passed |
+| Whole workflow | **success** |
 
 Parity was regenerated after evaluation enforcement was active and remains
-zero-difference.
+zero-difference: both paths produce `747707117a200ffc…`, artifact sha256
+`9e9619cbf30909f4…`, recorded against commit `b3cf8d7`.
 
 ### New CI gates, each independent
 

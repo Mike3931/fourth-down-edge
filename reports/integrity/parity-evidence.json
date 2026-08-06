@@ -1,7 +1,7 @@
 {
   "artifact": "direct-scheduler-parity-evidence",
   "artifact_schema_version": "parity-evidence-v1",
-  "artifact_sha256": "28a752f61a33426a053969b9dc5bf4474896f978adbec8383e5c9f1e9a9f4990",
+  "artifact_sha256": "9e9619cbf30909f44bc0b26ac7bdfda7e378e2bc1f13cc5d457cc50776e1ea97",
   "ci_run": "local",
   "decision_context_hashes": {
     "direct": {
@@ -41,7 +41,7 @@
   },
   "direct_chain_hash": "747707117a200ffc7264c35f73eb0ae57325c94a0bb95feac26f2736ebca50d1",
   "domain_field_differences": 0,
-  "generated_at_utc": "2026-08-06T11:08:59.315795+00:00",
+  "generated_at_utc": "2026-08-06T11:29:06.152223+00:00",
   "governance_differences": 0,
   "hashes_equal": true,
   "lineage_differences": 0,
@@ -102,5 +102,5 @@
     "Not a statement about model quality, profitability, predictive superiority, production approval, or readiness for real-money use."
   ],
   "semantic_chain_version": "chain-semantic-v2",
-  "source_commit": "5e7b723c3027a0bad2c3400181b74e684165ace6"
+  "source_commit": "b3cf8d7ed1f573869ba773493fc5073e08b7588e"
 }
