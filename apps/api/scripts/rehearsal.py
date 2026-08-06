@@ -23,9 +23,11 @@ WHY IT IMPORTS THE TEST MANIFEST
     rehearsal that invented its own would be rehearsing something nobody
     else runs.
 
-BY DEFAULT IT WRITES TO A THROWAWAY DATABASE and never touches the
-configured one, because a rehearsal that pollutes the real cohort is not a
-rehearsal.
+BY DEFAULT IT WRITES TO A THROWAWAY DATABASE AND A THROWAWAY DATA
+DIRECTORY, because a rehearsal that pollutes the real cohort is not a
+rehearsal. Both matter: freezing a policy writes an immutable artifact to
+disk as well as a row, and isolating only the database let three policy
+files reach commits before the governance test noticed.
 
 Run:
   python scripts/rehearsal.py
@@ -84,13 +86,23 @@ def _stage_rows(session) -> dict[str, int]:
     }
 
 
-def rehearse(database_url: str) -> dict[str, Any]:
+def rehearse(database_url: str, *, data_dir: Path | None = None) -> dict[str, Any]:
     from sqlalchemy import create_engine, select
     from sqlalchemy.orm import sessionmaker
 
     import chainkit
+    from fde_api.config import settings
     from fde_api.db.forward_models import ForwardLedgerEntry
     from fde_api.db.models import Base
+
+    # A throwaway DATABASE is only half of isolation. Freezing a policy also
+    # writes an immutable artifact under `settings.data_dir`, so without
+    # this every rehearsal deposited a policy file into the repository -
+    # three of them reached commits before the governance test that watches
+    # that directory caught it. Isolating one store and not the other is
+    # how a script that claims to touch nothing quietly touches something.
+    if data_dir is not None:
+        settings.data_dir = data_dir
 
     engine = create_engine(database_url, future=True)
     Base.metadata.create_all(engine)
@@ -181,7 +193,7 @@ def main() -> int:
     tmpdir = Path(tempfile.mkdtemp(prefix="fde-rehearsal-"))
     url = args.database_url or f"sqlite:///{(tmpdir / 'rehearsal.db').as_posix()}"
 
-    report = rehearse(url)
+    report = rehearse(url, data_dir=tmpdir)
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)

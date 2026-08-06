@@ -27,8 +27,8 @@ def rehearsal():
 
 @pytest.fixture(scope="module")
 def report(rehearsal, tmp_path_factory):
-    db = tmp_path_factory.mktemp("rehearsal") / "r.db"
-    return rehearsal.rehearse(f"sqlite:///{db.as_posix()}")
+    tmp = tmp_path_factory.mktemp("rehearsal")
+    return rehearsal.rehearse(f"sqlite:///{(tmp / 'r.db').as_posix()}", data_dir=tmp)
 
 
 class TestTheWholeLifecycleRuns:
@@ -121,8 +121,9 @@ class TestTheRehearsalIsRepeatable:
 
     @pytest.fixture(scope="class")
     def second(self, rehearsal, tmp_path_factory):
-        db = tmp_path_factory.mktemp("rehearsal2") / "r.db"
-        return rehearsal.rehearse(f"sqlite:///{db.as_posix()}")
+        tmp = tmp_path_factory.mktemp("rehearsal2")
+        return rehearsal.rehearse(
+            f"sqlite:///{(tmp / 'r.db').as_posix()}", data_dir=tmp)
 
     def test_the_semantic_hash_is_stable(self, report, second) -> None:
         assert report["semantic_chain_hash"] == second["semantic_chain_hash"]
@@ -135,3 +136,34 @@ class TestTheRehearsalIsRepeatable:
 
     def test_the_stage_statuses_are_stable(self, report, second) -> None:
         assert report["job_statuses"] == second["job_statuses"]
+
+
+class TestTheRehearsalTouchesNothingReal:
+    """It leaked before, so this is a regression guard, not a precaution.
+
+    A throwaway database is only half of isolation: freezing a policy also
+    writes an immutable artifact under `settings.data_dir`. Three of those
+    reached commits before the policy-governance test caught them.
+    """
+
+    def test_the_real_policy_directory_is_untouched(
+        self, rehearsal, tmp_path_factory
+    ) -> None:
+        from fde_api.config import settings
+
+        real = pathlib.Path(settings.data_dir) / "policies"
+        before = sorted(p.name for p in real.glob("*.json")) if real.exists() else []
+
+        tmp = tmp_path_factory.mktemp("isolation")
+        rehearsal.rehearse(f"sqlite:///{(tmp / 'r.db').as_posix()}", data_dir=tmp)
+
+        after = sorted(p.name for p in real.glob("*.json")) if real.exists() else []
+        assert after == before, "the rehearsal wrote into the real data directory"
+
+    def test_it_writes_its_artifact_into_the_scratch_directory(
+        self, rehearsal, tmp_path_factory
+    ) -> None:
+        tmp = tmp_path_factory.mktemp("isolation2")
+        rehearsal.rehearse(f"sqlite:///{(tmp / 'r.db').as_posix()}", data_dir=tmp)
+        written = list((tmp / "policies").glob("*.json"))
+        assert written, "the policy artifact went somewhere else entirely"
