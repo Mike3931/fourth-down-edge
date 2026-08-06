@@ -10,6 +10,7 @@ import { fmtAgo, fmtMoney, fmtPct } from '../lib/format';
 
 const NAV = (firstGameId: string | undefined) => [
   { to: '/', label: "Today's Picks", icon: '★' },
+  { to: '/live', label: 'Live Slate', icon: '◉' },
   { to: '/slate', label: 'Weekly Slate', icon: '▤' },
   { to: firstGameId ? `/game/${firstGameId}` : '/slate', label: 'Game Lab', icon: '⚗' },
   { to: '/injuries', label: 'Injury Center', icon: '✚' },

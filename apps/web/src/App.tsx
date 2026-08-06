@@ -4,6 +4,7 @@ import { useAuth } from './lib/auth';
 import Shell from './components/Shell';
 import SignIn from './pages/SignIn';
 import TodaysPicks from './pages/TodaysPicks';
+import LiveSlate from './pages/LiveSlate';
 import WeeklySlate from './pages/WeeklySlate';
 import GameLab from './pages/GameLab';
 import InjuryCenter from './pages/InjuryCenter';
@@ -37,6 +38,7 @@ export default function App() {
     <Routes>
       <Route element={<Shell />}>
         <Route path="/" element={<TodaysPicks />} />
+        <Route path="/live" element={<LiveSlate />} />
         <Route path="/slate" element={<WeeklySlate />} />
         <Route path="/game/:gameId" element={<GameLab />} />
         <Route path="/injuries" element={<InjuryCenter />} />

@@ -375,3 +375,118 @@ def get_model_comparison() -> schemas.ModelComparisonResponse:
     return schemas.ModelComparisonResponse(
         rows=rows, market_benchmark_id="market-benchmark-v1", research_banner=RESEARCH_BANNER
     )
+
+
+# --------------------------------------------------------------------------- #
+# Live forward slate
+# --------------------------------------------------------------------------- #
+#
+# Reads what has actually been captured: real fixtures, real book prices,
+# and the consensus builder's own verdict. It computes nothing itself and
+# fills nothing in. A market with too few books returns a null consensus
+# and the reason, because "we could not price this" is the answer, and
+# rendering an empty slot as a number is how a screen starts lying.
+
+
+@app.get("/v1/forward/live", dependencies=[Auth])
+def get_forward_live(data_mode: str = "LIVE_RESEARCH", hours: int = 72) -> dict[str, Any]:
+    from datetime import timedelta
+
+    from fde_api.db.forward_models import OddsQuote, ScheduleObservation
+    from fde_api.forward.consensus import build_consensus
+    from fde_api.forward.modes import DataMode
+
+    now = utc_now()
+    mode = DataMode(data_mode)
+    horizon = now + timedelta(hours=hours)
+
+    with session_scope() as s:
+        observations = list(
+            s.scalars(
+                select(ScheduleObservation).where(
+                    ScheduleObservation.data_mode == mode.value,
+                    ScheduleObservation.kickoff_utc >= now - timedelta(hours=6),
+                    ScheduleObservation.kickoff_utc <= horizon,
+                ).order_by(ScheduleObservation.kickoff_utc)
+            )
+        )
+        # One entry per game: the schedule is append-only, so the newest
+        # observation of a fixture is the current one.
+        latest: dict[str, Any] = {}
+        for o in observations:
+            latest[o.canonical_game_id] = o
+
+        games: list[dict[str, Any]] = []
+        for gid, o in sorted(latest.items(), key=lambda kv: kv[1].kickoff_utc):
+            quotes = list(
+                s.scalars(
+                    select(OddsQuote).where(
+                        OddsQuote.canonical_game_id == gid,
+                        OddsQuote.data_mode == mode.value,
+                    ).order_by(OddsQuote.observed_at)
+                )
+            )
+            markets: dict[str, Any] = {}
+            for market in ("SPREAD", "TOTAL", "MONEYLINE"):
+                snap, report = build_consensus(
+                    s, canonical_game_id=gid, market=market, as_of_at=now,
+                    kickoff_utc=o.kickoff_utc, data_mode=mode,
+                )
+                markets[market] = {
+                    "consensus": None if snap is None else {
+                        "median_line": snap.median_line,
+                        "home_price_american": snap.home_price_american,
+                        "away_price_american": snap.away_price_american,
+                        "over_price_american": snap.over_price_american,
+                        "under_price_american": snap.under_price_american,
+                        "eligible_books": snap.eligible_books,
+                        "observed_at": snap.observed_at.isoformat(),
+                        "method_version": snap.method_version,
+                    },
+                    # The verdict is the payload, not an error path.
+                    "reasons": list(report.reasons),
+                    "eligible": report.eligible,
+                    "considered": report.considered,
+                }
+            games.append({
+                "canonical_game_id": gid,
+                "away_team_id": o.away_team_id,
+                "home_team_id": o.home_team_id,
+                "kickoff_utc": o.kickoff_utc.isoformat(),
+                "season": o.season,
+                "season_type": o.season_type,
+                "venue": o.stadium_name,
+                "neutral_site": bool(o.neutral_site),
+                "game_status": o.game_status,
+                # Provenance travels with the row. A fixture attested only
+                # by an odds provider is a weaker record than one from the
+                # schedule feed, and the reader is entitled to know which.
+                "schedule_provider": o.provider,
+                "observed_at": o.observed_at.isoformat(),
+                "books": sorted({q.sportsbook for q in quotes}),
+                "quotes": [
+                    {
+                        "sportsbook": q.sportsbook, "market": q.market,
+                        "selection": q.selection, "line": q.line,
+                        "american": q.american, "decimal_odds": q.decimal_odds,
+                        "provider": q.provider, "provider_mode": q.provider_mode,
+                        "observed_at": q.observed_at.isoformat(),
+                    }
+                    for q in quotes
+                ],
+                "markets": markets,
+            })
+
+    return {
+        "generated_at_utc": now.isoformat(),
+        "data_mode": mode.value,
+        "horizon_hours": hours,
+        "games": games,
+        "research_banner": RESEARCH_BANNER,
+        "not_a_claim": (
+            "Captured market data and the consensus builder's own verdict. "
+            "No model probability, edge, or recommendation is included or "
+            "implied. Nothing here is a claim about profitability or "
+            "readiness for real money."
+        ),
+    }
