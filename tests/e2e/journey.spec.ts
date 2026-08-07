@@ -20,7 +20,9 @@ test.describe('Fourth Down Edge core journey', () => {
     await expect(page.getByText('Full analysis →').first()).toBeVisible();
 
     // 3) Weekly slate renders and links into Game Lab.
-    await page.getByRole('link', { name: 'Weekly Slate' }).click();
+    // The demonstration slate moved to /slate-demo when /slate was given to
+    // the engine-backed screen; this journey exercises the demo flow.
+    await page.goto('/slate-demo');
     await expect(page.getByText(/Weekly slate — /)).toBeVisible();
     await page.locator('tbody tr td:nth-child(2) a').first().click();
     await expect(page.getByText('Expected margin (home)')).toBeVisible();
@@ -54,12 +56,14 @@ test.describe('Fourth Down Edge core journey', () => {
     await expect(page.getByLabel('Primary metrics').getByText('Log loss')).toBeVisible();
     await expect(page.getByText('Reliability diagram — predicted vs observed')).toBeVisible();
 
-    await page.getByRole('link', { name: 'Model Audit' }).click();
+    // Model Audit and Data Health now serve engine data at their old
+    // paths; the demonstration versions moved alongside the demo slate.
+    await page.goto('/models-demo');
     await expect(page.getByText('fde-ensemble').first()).toBeVisible();
     await expect(page.getByText('PLACEHOLDER').first()).toBeVisible();
 
     // 7) Data Health lists feeds and degraded states.
-    await page.getByRole('link', { name: 'Data Health' }).click();
+    await page.goto('/health-demo');
     await expect(page.getByText('Feed monitors')).toBeVisible();
     await expect(page.getByText('DATA INCOMPLETE').first()).toBeVisible();
   });
