@@ -131,7 +131,14 @@ class TheOddsApiProvider:
     name = "the-odds-api"
 
     def __init__(self, api_key: str | None = None, client: httpx.Client | None = None) -> None:
-        self.api_key = api_key or os.environ.get("FDE_ODDS_API_KEY") or ""
+        # Explicit argument, then settings (which reads FDE_ODDS_API_KEY
+        # from the environment OR apps/api/.env), then the raw environment.
+        # Reading os.environ alone meant a key in .env was silently ignored.
+        from fde_api.config import settings
+
+        self.api_key = (
+            api_key or settings.odds_api_key or os.environ.get("FDE_ODDS_API_KEY") or ""
+        ).strip()
         self._client = client or httpx.Client(timeout=45.0, follow_redirects=True)
 
     @property

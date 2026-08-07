@@ -125,12 +125,23 @@ a recorded, explainable gap rather than a silent one.
 
 ### Going live at Week 1
 
-Set the key in your environment — never in a file that gets committed, and
-never pass it to this tooling as an argument:
+Set the key either way. Never pass it to this tooling as an argument, and
+never put it in a file that gets committed.
 
 ```bash
 export FDE_ODDS_API_KEY=...
 ```
+
+or create `apps/api/.env` (already gitignored) containing:
+
+```
+FDE_ODDS_API_KEY=...
+```
+
+Both reach the provider adapter. The `.env` route did not work until the
+settings model declared the field — it ignores extra keys, so the file was
+read and the key silently dropped, and the health check then told the
+operator to set a key they had already set.
 
 Then:
 

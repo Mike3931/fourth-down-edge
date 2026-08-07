@@ -367,7 +367,8 @@ def run_health_checks(
     if provider_mode is ProviderMode.KEY_MISSING:
         checks.append(_fail("odds_key_configured", Severity.CRITICAL,
                             "FDE_ODDS_API_KEY is not configured; no market data can be captured",
-                            "set FDE_ODDS_API_KEY in the backend environment", now))
+                            "set FDE_ODDS_API_KEY in the environment or in "
+                            "apps/api/.env (gitignored)", now))
     elif provider_mode in (ProviderMode.FIXTURE, ProviderMode.SANDBOX):
         checks.append(_fail("odds_key_configured", Severity.CRITICAL,
                             f"provider mode is {provider_mode.value}; not live market data",
