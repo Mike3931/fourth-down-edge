@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { describeConsensus, describeQuote } from '@fde/calculations';
 import { fmtAgoLive, fmtInstant } from '../lib/format';
 
@@ -156,11 +157,33 @@ export default function LiveSlate() {
             {fmtAgoLive(new Date(dataUpdatedAt).toISOString())}
           </span>
         </p>
+        {/* What this screen is a window ONTO. Without it, a page holding
+            one preseason game in August reads as "the NFL has one game",
+            when it means "one game has captured prices". The distinction
+            is the whole difference between a broken app and an empty
+            pipeline, and the reader cannot make it unaided. */}
+        <p className="text-xs text-muted">
+          Games with prices captured in the last 72 hours — not the full schedule.{' '}
+          <Link to="/slate" className="text-accent underline">
+            All upcoming fixtures
+          </Link>
+        </p>
       </header>
 
       {games.length === 0 && (
         <div className="rounded border border-border p-4 text-sm text-muted">
-          No fixtures captured in the current horizon. This is the real answer, not a loading state.
+          <p>
+            No fixtures captured in the current horizon. This is the real answer, not a
+            loading state.
+          </p>
+          <p className="mt-2">
+            The schedule is separate from the prices: fixtures may well be loaded with
+            nothing captured against them yet.{' '}
+            <Link to="/health" className="text-accent underline">
+              Data Health
+            </Link>{' '}
+            says whether capture is running.
+          </p>
         </div>
       )}
 
@@ -232,6 +255,17 @@ export default function LiveSlate() {
                 </div>
               ))}
             </div>
+            {/* Once per game, not once per market. The reason shown in
+                each card above is true and local — not enough books in
+                the window. The reason BEHIND it (no key, no scheduler, no
+                policy) lives on Data Health, and without a way through
+                the reader cannot tell a quiet market from a stopped
+                pipeline. Three copies of the same link is just noise. */}
+            {Object.values(g.markets).some((b) => !b.consensus) && (
+              <Link to="/health" className="mt-2 inline-block text-xs text-accent underline">
+                Why is nothing being captured?
+              </Link>
+            )}
           </div>
 
           <div className="p-4">
