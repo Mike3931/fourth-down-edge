@@ -12,18 +12,32 @@ import { fmtAgo, fmtMoney, fmtPct } from '../lib/format';
 // demonstration generator, and the nav says which is which — mixing real
 // and generated data behind identical labels is the one thing that makes
 // the whole terminal untrustworthy.
+//
+// `group` is the heading a screen sits under, and it is NOT the same
+// question as `live`. Settings reads no dataset at all: it holds paper
+// mode, the hard monthly loss budget, and the bankroll caps, every one of
+// which governs real behaviour. Filing it under "Demonstration data"
+// because it is not engine-backed told the reader those controls were
+// part of the demo. They are the most consequential controls in the app.
+const LIVE_GROUP = 'Live engine data';
+const DEMO_GROUP = 'Demonstration data';
+const SETUP_GROUP = 'Your setup';
+
 const NAV = (firstGameId: string | undefined) => [
-  { to: '/live', label: 'Live Slate', icon: '◉', live: true },
-  { to: '/slate', label: 'Slate', icon: '▤', live: true },
-  { to: '/models', label: 'Model Audit', icon: '⌘', live: true },
-  { to: '/health', label: 'Data Health', icon: '♥', live: true },
-  { to: '/picks-demo', label: "Today's Picks", icon: '★', live: false },
-  { to: firstGameId ? `/game/${firstGameId}` : '/slate', label: 'Game Lab', icon: '⚗', live: false },
-  { to: '/injuries', label: 'Injury Center', icon: '✚', live: false },
-  { to: '/market', label: 'Market Monitor', icon: '≋', live: false },
-  { to: '/portfolio', label: 'Bet Portfolio', icon: '▦', live: false },
-  { to: '/performance', label: 'Performance Lab', icon: '∿', live: false },
-  { to: '/settings', label: 'Settings', icon: '⚙', live: false },
+  { to: '/live', label: 'Live Slate', icon: '◉', live: true, group: LIVE_GROUP },
+  { to: '/slate', label: 'Slate', icon: '▤', live: true, group: LIVE_GROUP },
+  { to: '/models', label: 'Model Audit', icon: '⌘', live: true, group: LIVE_GROUP },
+  { to: '/health', label: 'Data Health', icon: '♥', live: true, group: LIVE_GROUP },
+  { to: '/picks-demo', label: "Today's Picks", icon: '★', live: false, group: DEMO_GROUP },
+  // Falls back to the DEMO slate, not the live one. A nav item sitting
+  // under "Demonstration data" that lands the reader on engine-backed
+  // data is the exact confusion this split exists to prevent.
+  { to: firstGameId ? `/game/${firstGameId}` : '/slate-demo', label: 'Game Lab', icon: '⚗', live: false, group: DEMO_GROUP },
+  { to: '/injuries', label: 'Injury Center', icon: '✚', live: false, group: DEMO_GROUP },
+  { to: '/market', label: 'Market Monitor', icon: '≋', live: false, group: DEMO_GROUP },
+  { to: '/portfolio', label: 'Bet Portfolio', icon: '▦', live: false, group: DEMO_GROUP },
+  { to: '/performance', label: 'Performance Lab', icon: '∿', live: false, group: DEMO_GROUP },
+  { to: '/settings', label: 'Settings', icon: '⚙', live: false, group: SETUP_GROUP },
 ];
 
 // The four engine-backed routes. Kept as an explicit list rather than
@@ -69,9 +83,9 @@ export default function Shell() {
             <li key={item.label}>
               {/* One heading at each boundary, so the split is impossible
                   to miss without repeating a badge on every row. */}
-              {(i === 0 || all[i - 1]?.live !== item.live) && (
+              {(i === 0 || all[i - 1]?.group !== item.group) && (
                 <div className="mt-2 mb-1 hidden px-4 text-[10px] uppercase tracking-widest text-ink-faint lg:block">
-                  {item.live ? 'Live engine data' : 'Demonstration data'}
+                  {item.group}
                 </div>
               )}
               <NavLink
