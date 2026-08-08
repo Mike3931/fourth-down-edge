@@ -199,6 +199,7 @@ export interface ManualBookPrice {
   sportsbook: string;
   market: MarketType;
   selection: SelectionSide;
+  /** SELECTION-RELATIVE: the number the user read off the book for this side. */
   line?: number;
   american: number;
   /** When the user says the price was visible on the book. */
@@ -302,6 +303,18 @@ export interface Recommendation {
   manualPriceId?: string;
   market: MarketType;
   selection: SelectionSide;
+  /**
+   * SELECTION-RELATIVE, unlike `OddsSnapshot.line`. The candidate builder
+   * negates the home line when it pushes the AWAY side, so this is
+   * already the number the selected side is getting and pairs directly
+   * with the selected team's name.
+   *
+   * Stated because the opposite convention holds one layer away, and
+   * because an unstated convention on a signed line is expensive: the
+   * engine stores quotes home-relative, and displaying one under the
+   * other's rules produces a plausible, wrong number that nothing
+   * catches.
+   */
   line?: number;
   american: number;
   status: RecommendationStatus;
@@ -352,6 +365,7 @@ export interface Bet {
   gameId: string;
   market: MarketType;
   selection: SelectionSide;
+  /** SELECTION-RELATIVE, carried over from the recommendation. */
   line?: number;
   american: number;
   stake: number;
