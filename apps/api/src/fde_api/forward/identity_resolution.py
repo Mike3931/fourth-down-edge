@@ -81,6 +81,39 @@ class ResolutionRefused(RuntimeError):
     """The manifest does not authorise what it is being asked to do."""
 
 
+# The only tables a manifest may resolve.
+#
+# `table` is read from an operator-authored file and interpolated into the
+# UPDATE statements below, because a table name cannot be a bound
+# parameter. Nothing untrusted reaches it today - the path comes from an
+# environment variable and anyone who can write that file already controls
+# the deployment - so this is not closing an exploit. It is refusing to
+# rely on that argument: the set of tables carrying a logical identity is
+# fixed and known, so accepting anything else is a typo away from an
+# UPDATE against a table nobody meant to touch.
+#
+# Mirrors `_TABLES` in the identity migration.
+RESOLVABLE_TABLES: frozenset[str] = frozenset({
+    "consensus_snapshots",
+    "forward_ledger",
+    "availability_assessments",
+    "manual_book_price_entries",
+})
+
+
+class UnknownTable(ResolutionRefused):
+    """A manifest named a table that carries no logical identity."""
+
+
+def _assert_resolvable(table: str) -> None:
+    """Last line before a table name becomes SQL text."""
+    if table not in RESOLVABLE_TABLES:
+        raise UnknownTable(
+            f"{table!r} is not a resolvable table; expected one of "
+            f"{sorted(RESOLVABLE_TABLES)}"
+        )
+
+
 @dataclass(frozen=True)
 class ResolutionEntry:
     table: str
@@ -128,6 +161,11 @@ class ResolutionEntry:
     def validate_shape(self) -> list[str]:
         """What is wrong with the entry, ignoring the database."""
         problems: list[str] = []
+        if self.table not in RESOLVABLE_TABLES:
+            problems.append(
+                f"table {self.table!r} carries no logical identity; expected "
+                f"one of {sorted(RESOLVABLE_TABLES)}"
+            )
         if not self.rationale.strip():
             problems.append("no rationale")
         if not self.authorised_by.strip():
@@ -312,6 +350,11 @@ def apply_plan(bind: Any, plan: GroupPlan) -> dict[str, Any]:
     entry = plan.entry
     if entry is None or not plan.resolved:
         raise ResolutionRefused(f"unresolved group: {plan.problems}")
+    # Checked again here, not only at plan time. `apply_plan` is the
+    # function that turns a name into SQL text, so it is the function that
+    # has to be safe on its own - a caller that builds a GroupPlan by some
+    # other route must not be able to route around the allowlist.
+    _assert_resolvable(plan.table)
 
     action: dict[str, Any] = {
         "table": plan.table,

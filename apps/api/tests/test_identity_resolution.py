@@ -330,3 +330,78 @@ def test_the_migration_consults_the_manifest() -> None:
 
 def test_sqlalchemy_is_importable_for_the_applier() -> None:
     assert sa.__version__
+
+
+class TestOnlyIdentityBearingTablesMayBeResolved:
+    """`table` is interpolated into SQL, because a table name cannot be a
+    bound parameter.
+
+    Nothing untrusted reaches it: the manifest path comes from an
+    environment variable, and anyone able to write that file already
+    controls the deployment. The allowlist exists so correctness does not
+    depend on that argument staying true - the set of tables carrying a
+    logical identity is fixed and known, and accepting anything else is one
+    typo away from an UPDATE against a table nobody meant to touch.
+    """
+
+    def test_the_four_identity_tables_are_accepted(self) -> None:
+        from fde_api.forward.identity_resolution import RESOLVABLE_TABLES
+
+        assert set(RESOLVABLE_TABLES) == {
+            "availability_assessments",
+            "consensus_snapshots",
+            "forward_ledger",
+            "manual_book_price_entries",
+        }
+
+    @pytest.mark.parametrize(
+        "table", ["users", "consensus_snapshots; DROP TABLE users", ""],
+    )
+    def test_a_manifest_naming_another_table_is_refused(self, table) -> None:
+        # Planned against the SAME table the manifest names, so the entry is
+        # found and the allowlist is what rejects it - not a missing entry.
+        plan = plan_group(table=table, logical_identity_hash=LID,
+                          rows=[(1, "c" * 64), (2, "c" * 64)],
+                          manifest=_manifest(table=table))
+        assert not plan.resolved
+        assert any("carries no logical identity" in p for p in plan.problems), (
+            plan.problems
+        )
+
+    def test_the_applier_checks_independently_of_the_plan(self) -> None:
+        """`apply_plan` is what turns a name into SQL text, so it has to be
+        safe on its own. A caller constructing a GroupPlan by some other
+        route must not be able to route around the allowlist."""
+        from fde_api.forward.identity_resolution import (
+            GroupPlan,
+            UnknownTable,
+            apply_plan,
+        )
+
+        entry = _manifest().for_group("consensus_snapshots", LID)
+        assert entry is not None
+        forged = GroupPlan(
+            table="some_other_table", logical_identity_hash=LID,
+            row_ids=[1, 2], content_hashes=["c" * 64, "c" * 64],
+            classification="EXACT_DUPLICATE", entry=entry, problems=[],
+        )
+        with pytest.raises(UnknownTable):
+            apply_plan(None, forged)
+
+    def test_the_allowlist_matches_the_migration(self) -> None:
+        """Two lists of the same four tables drift. This fails when they do."""
+        import pathlib
+        import re
+
+        from fde_api.forward.identity_resolution import RESOLVABLE_TABLES
+
+        migration = (pathlib.Path(__file__).resolve().parents[1] / "migrations"
+                     / "versions" / "b7e2f9c41a68_domain_identity_hashes.py")
+        source = migration.read_text(encoding="utf-8")
+        block = source.split("_TABLES: tuple[tuple[str, str], ...] = (", 1)[1]
+        # Split on the line-initial ")" that closes the outer tuple; the
+        # first bare ")" closes the first INNER tuple and truncated the
+        # block to a single table.
+        block = block.split("\n)", 1)[0]
+        in_migration = set(re.findall(r'\("([a-z_]+)",', block))
+        assert in_migration == RESOLVABLE_TABLES
