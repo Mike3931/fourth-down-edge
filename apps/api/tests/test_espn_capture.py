@@ -26,6 +26,7 @@ from __future__ import annotations
 import importlib.util
 import pathlib
 from datetime import UTC, datetime
+from typing import ClassVar
 
 import pytest
 from sqlalchemy import create_engine, func, select
@@ -180,3 +181,86 @@ class TestTheFinalScoreIsRecorded:
         with db() as s:
             assert not [o for o in s.scalars(select(ScheduleObservation))
                         if o.game_status == "FINAL"]
+
+
+class TestTheSpreadSignIsNeverInferredFromPosition:
+    """The per-side block is the source of truth for a handicap.
+
+    When it was missing the code fell back to the scalar `spread`, which is
+    unsigned with respect to a side, and inferred the sign from position -
+    getting it exactly backwards. It recorded the favourite as the
+    underdog, and nothing about that is visible afterwards: an inverted
+    line is a perfectly plausible number.
+
+    The same shape as the consensus median bug, one layer earlier. That one
+    was caught because a spread of zero looked odd; this one would not have
+    looked odd at all.
+    """
+
+    HOME_DOG: ClassVar[dict] = {
+        "provider": {"name": "DraftKings"}, "spread": 1.5,
+        "moneyline": {}, "total": {},
+        "homeTeamOdds": {"favorite": False, "underdog": True},
+        "awayTeamOdds": {"favorite": True, "underdog": False},
+    }
+
+    def _spreads(self, odds: dict) -> dict[str, float]:
+        module = _module()
+        return {
+            q["selection"]: q["line"]
+            for q in module._quotes_from_odds(odds, home="ARI", away="CAR")
+            if q["market"] == "SPREAD"
+        }
+
+    def test_the_per_side_line_is_used_when_present(self) -> None:
+        odds = {**self.HOME_DOG, "pointSpread": {
+            "home": {"close": {"line": "+1.5", "odds": "-115"}},
+            "away": {"close": {"line": "-1.5", "odds": "-105"}}}}
+        assert self._spreads(odds) == {"HOME": 1.5, "AWAY": -1.5}
+
+    def test_a_missing_line_takes_its_sign_from_the_favourite_flag(self) -> None:
+        """The bug returned HOME -1.5 / AWAY +1.5 here - inverted."""
+        odds = {**self.HOME_DOG, "pointSpread": {
+            "home": {"close": {"odds": "-115"}},
+            "away": {"close": {"odds": "-105"}}}}
+        assert self._spreads(odds) == {"HOME": 1.5, "AWAY": -1.5}
+
+    def test_a_home_favourite_gets_the_negative_number(self) -> None:
+        odds = {
+            "provider": {"name": "DraftKings"}, "spread": 3.0,
+            "moneyline": {}, "total": {},
+            "homeTeamOdds": {"favorite": True, "underdog": False},
+            "awayTeamOdds": {"favorite": False, "underdog": True},
+            "pointSpread": {"home": {"close": {"odds": "-110"}},
+                            "away": {"close": {"odds": "-110"}}},
+        }
+        assert self._spreads(odds) == {"HOME": -3.0, "AWAY": 3.0}
+
+    def test_one_side_stating_it_is_enough(self) -> None:
+        """Only the away block is populated; the home sign follows."""
+        odds = {
+            "provider": {"name": "DraftKings"}, "spread": 2.5,
+            "moneyline": {}, "total": {},
+            "awayTeamOdds": {"favorite": True},
+            "pointSpread": {"home": {"close": {"odds": "-110"}},
+                            "away": {"close": {"odds": "-110"}}},
+        }
+        assert self._spreads(odds) == {"HOME": 2.5, "AWAY": -2.5}
+
+    def test_nothing_is_emitted_when_the_sign_is_unknowable(self) -> None:
+        """No line and no flags. A guess here is a coin flip recorded as a
+        fact, so the quote is dropped instead - the same rule already
+        applied to a missing price."""
+        odds = {
+            "provider": {"name": "DraftKings"}, "spread": 1.5,
+            "moneyline": {}, "total": {},
+            "pointSpread": {"home": {"close": {"odds": "-115"}},
+                            "away": {"close": {"odds": "-105"}}},
+        }
+        assert self._spreads(odds) == {}
+
+    def test_a_missing_spread_scalar_emits_nothing(self) -> None:
+        odds = {**self.HOME_DOG, "spread": None, "pointSpread": {
+            "home": {"close": {"odds": "-115"}},
+            "away": {"close": {"odds": "-105"}}}}
+        assert self._spreads(odds) == {}

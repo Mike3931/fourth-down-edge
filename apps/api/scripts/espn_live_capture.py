@@ -97,6 +97,44 @@ def fetch(dates: str | None = None) -> dict[str, Any]:
     return r.json()
 
 
+def _spread_from_flags(odds: dict[str, Any], side: str) -> float | None:
+    """A signed spread for `side`, or None if the sign cannot be established.
+
+    The per-side `pointSpread` block is the source of truth. When it is
+    missing, the only other statement of the handicap is the scalar
+    `spread`, which is unsigned with respect to a side - and inferring the
+    sign from position got it exactly backwards, recording the favourite as
+    the underdog. Nothing about that is visible afterwards: an inverted
+    line is a perfectly plausible number.
+
+    So the sign comes from the provider's explicit favourite/underdog
+    flags, and when those are absent nothing is emitted. That matches how
+    prices are already handled here: a missing one is left out rather than
+    defaulted, because an invented value is indistinguishable from a real
+    one once it is in the table.
+    """
+    raw = odds.get("spread")
+    if raw is None:
+        return None
+    try:
+        magnitude = abs(float(raw))
+    except (TypeError, ValueError):
+        return None
+
+    block = odds.get(f"{side}TeamOdds") or {}
+    if block.get("favorite") is True:
+        return -magnitude
+    if block.get("underdog") is True:
+        return magnitude
+    # The other side may say it unambiguously instead.
+    other = odds.get("awayTeamOdds" if side == "home" else "homeTeamOdds") or {}
+    if other.get("favorite") is True:
+        return magnitude
+    if other.get("underdog") is True:
+        return -magnitude
+    return None
+
+
 def _quotes_from_odds(odds: dict[str, Any], *, home: str, away: str) -> list[dict[str, Any]]:
     """Turn one book's block into canonical quote rows.
 
@@ -108,16 +146,13 @@ def _quotes_from_odds(odds: dict[str, Any], *, home: str, away: str) -> list[dic
     book_key = book.lower().replace(" ", "")
     out: list[dict[str, Any]] = []
 
-    spread = odds.get("spread")
     ps = odds.get("pointSpread") or {}
     for side in ("home", "away"):
         blk = (ps.get(side) or {}).get("close") or {}
         american = _parse_american(blk.get("odds"))
         line_txt = str(blk.get("line") or "").replace("+", "")
         try:
-            line = float(line_txt) if line_txt else (
-                float(spread) if side == "away" and spread is not None else
-                -float(spread) if spread is not None else None)
+            line = float(line_txt) if line_txt else _spread_from_flags(odds, side)
         except ValueError:
             line = None
         if american is not None and line is not None:

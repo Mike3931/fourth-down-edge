@@ -195,17 +195,36 @@ def build_consensus(
 
     elif market == "TOTAL":
         over_q, under_q = side("OVER"), side("UNDER")
-        lines = [q.line for q in eligible if q.line is not None]
-        if not lines or not over_q or not under_q:
+        if not over_q or not under_q:
             rep.reasons.append("total requires both sides and a line")
             return None, rep
-        median_line = float(statistics.median(lines))
+        # One line per BOOK, as for the spread. Both sides of a total carry
+        # the same number, so counting every row weights a book that
+        # published both sides twice as heavily as one that published a
+        # single side. Where publication is even that is harmless - equal
+        # duplication moves neither the median nor the population sd - but
+        # where it is uneven the median migrates towards the two-sided
+        # books. Four books at 34.5, 34.5, 40.5, 40.5 have a median of
+        # 37.5; counting rows returned 34.5, because the first two
+        # contributed four values and the others two.
+        by_book: dict[str, float] = {}
+        for q in eligible:
+            if q.line is None:
+                continue
+            by_book.setdefault(q.sportsbook, q.line)
+        book_lines = list(by_book.values())
+        if not book_lines:
+            rep.reasons.append("total requires both sides and a line")
+            return None, rep
+        median_line = float(statistics.median(book_lines))
         at_line_over = [q for q in over_q if q.line == median_line] or over_q
         at_line_under = [q for q in under_q if q.line == median_line] or under_q
         over_price = int(statistics.median([q.american for q in at_line_over]))
         under_price = int(statistics.median([q.american for q in at_line_under]))
         no_vig_over, _ = no_vig_two_way(over_price, under_price)
-        line_disp = float(statistics.pstdev(lines)) if len(lines) > 1 else 0.0
+        line_disp = (
+            float(statistics.pstdev(book_lines)) if len(book_lines) > 1 else 0.0
+        )
         prices = [q.american for q in at_line_over]
         price_disp = float(statistics.pstdev(prices)) if len(prices) > 1 else 0.0
 

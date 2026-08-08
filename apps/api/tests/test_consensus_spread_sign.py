@@ -129,3 +129,79 @@ class TestPricingHappensAtTheConsensusLine:
         assert snap.home_price_american == -110
         assert snap.away_price_american == -110
         assert snap.no_vig_home_prob == pytest.approx(0.5)
+
+
+class TestTheTotalIsAlsoOneLinePerBook:
+    """Both sides of a total carry the same number.
+
+    Counting every row weights a book that published both sides twice as
+    heavily as one that published a single side. Where publication is even
+    that is harmless - equal duplication moves neither the median nor the
+    population sd - which is why it survived: the common case hides it.
+
+    Where publication is uneven the median migrates towards the two-sided
+    books, and the result is a consensus total no book offered.
+    """
+
+    def _seed_totals(self, session, books: list[tuple[str, float, tuple[str, ...]]]) -> None:
+        session.add(ScheduleObservation(
+            data_mode="LIVE_RESEARCH", canonical_game_id=GAME, provider="t",
+            provider_game_id="x", season=2026, season_type="REG", week=1,
+            home_team_id="ARI", away_team_id="CAR", kickoff_utc=KICK,
+            neutral_site=False, international=False, game_status="SCHEDULED",
+            content_hash="t", source_manifest_version="t",
+            source_updated_at=NOW, observed_at=NOW))
+        for book, total, sides in books:
+            for selection in sides:
+                session.add(OddsQuote(
+                    data_mode="LIVE_RESEARCH", canonical_game_id=GAME, provider="t",
+                    provider_mode="LIVE", sportsbook=book, market="TOTAL",
+                    selection=selection, line=total, american=-110,
+                    decimal_odds=1.91, is_live=False,
+                    observed_at=NOW - timedelta(minutes=5),
+                    raw_hash=hashlib.sha256(
+                        f"{book}{selection}{total}".encode()).hexdigest()))
+        session.commit()
+
+    def _total(self, session):
+        snap, _ = build_consensus(
+            session, canonical_game_id=GAME, market="TOTAL", as_of_at=NOW,
+            kickoff_utc=KICK, data_mode=DataMode.LIVE_RESEARCH)
+        return snap
+
+    def test_evenly_published_totals_are_unchanged(self, session) -> None:
+        """The common case, and the reason this went unnoticed."""
+        self._seed_totals(session, [
+            ("draftkings", 34.5, ("OVER", "UNDER")),
+            ("fanduel", 35.5, ("OVER", "UNDER")),
+            ("betmgm", 36.5, ("OVER", "UNDER")),
+        ])
+        snap = self._total(session)
+        assert snap is not None
+        assert snap.median_line == 35.5
+
+    def test_unevenly_published_totals_no_longer_skew(self, session) -> None:
+        """Books offered 34.5, 34.5, 40.5, 40.5 - a median of 37.5.
+
+        Counting rows returned 34.5, because the two-sided books
+        contributed four values against the one-sided books' two.
+        """
+        self._seed_totals(session, [
+            ("draftkings", 34.5, ("OVER", "UNDER")),
+            ("fanduel", 34.5, ("OVER", "UNDER")),
+            ("betmgm", 40.5, ("OVER",)),
+            ("caesars", 40.5, ("OVER",)),
+        ])
+        snap = self._total(session)
+        assert snap is not None
+        assert snap.median_line == 37.5
+
+    def test_agreeing_books_show_no_total_dispersion(self, session) -> None:
+        self._seed_totals(session, [
+            ("draftkings", 44.5, ("OVER", "UNDER")),
+            ("fanduel", 44.5, ("OVER", "UNDER")),
+            ("betmgm", 44.5, ("OVER",)),
+        ])
+        snap = self._total(session)
+        assert snap is not None
+        assert snap.line_dispersion == pytest.approx(0.0)
