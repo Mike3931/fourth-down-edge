@@ -388,20 +388,35 @@ class TestOnlyIdentityBearingTablesMayBeResolved:
         with pytest.raises(UnknownTable):
             apply_plan(None, forged)
 
-    def test_the_allowlist_matches_the_migration(self) -> None:
-        """Two lists of the same four tables drift. This fails when they do."""
+    @pytest.mark.parametrize(
+        ("relative_path", "declaration"),
+        [
+            ("migrations/versions/b7e2f9c41a68_domain_identity_hashes.py",
+             "_TABLES: tuple[tuple[str, str], ...] = ("),
+            ("scripts/identity_duplicate_inventory.py",
+             "TABLES: tuple[tuple[str, str], ...] = ("),
+        ],
+    )
+    def test_every_copy_of_the_table_list_agrees(
+        self, relative_path, declaration
+    ) -> None:
+        """Three hand-kept lists of the same four tables.
+
+        The migration decides which tables get the constraint, the
+        inventory decides which are scanned for duplicates, and the
+        allowlist decides which may be written. They have to describe the
+        same set, and this repository has already been bitten once by two
+        copies of the same thing drifting apart.
+        """
         import pathlib
         import re
 
         from fde_api.forward.identity_resolution import RESOLVABLE_TABLES
 
-        migration = (pathlib.Path(__file__).resolve().parents[1] / "migrations"
-                     / "versions" / "b7e2f9c41a68_domain_identity_hashes.py")
-        source = migration.read_text(encoding="utf-8")
-        block = source.split("_TABLES: tuple[tuple[str, str], ...] = (", 1)[1]
-        # Split on the line-initial ")" that closes the outer tuple; the
-        # first bare ")" closes the first INNER tuple and truncated the
-        # block to a single table.
-        block = block.split("\n)", 1)[0]
-        in_migration = set(re.findall(r'\("([a-z_]+)",', block))
-        assert in_migration == RESOLVABLE_TABLES
+        source = (pathlib.Path(__file__).resolve().parents[1] / relative_path
+                  ).read_text(encoding="utf-8")
+        # Split on the line-initial ")" closing the OUTER tuple; the first
+        # bare ")" closes the first inner tuple and truncates to one table.
+        block = source.split(declaration, 1)[1].split("\n)", 1)[0]
+        declared = set(re.findall(r'\("([a-z_]+)",', block))
+        assert declared == set(RESOLVABLE_TABLES), relative_path
