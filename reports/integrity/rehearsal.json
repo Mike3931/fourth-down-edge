@@ -6,7 +6,7 @@
   "cohort": "fixture",
   "data_mode": "DEMO",
   "entries_with_clv": 1,
-  "generated_at_utc": "2026-08-06T21:30:40.104580+00:00",
+  "generated_at_utc": "2026-08-08T13:17:42.857472+00:00",
   "job_statuses": {
     "availability_computation": "finished",
     "closing_capture": "finished",
@@ -93,7 +93,7 @@
     "data_health_reconciliation"
   ],
   "scenario_manifest_version": "scenario-manifest-v1",
-  "semantic_chain_hash": "ed8b9472fd3a71a984c55c523f193beca07735a5a9428fc7645bc724fa9868b1",
+  "semantic_chain_hash": "349a14be260283b22e940d89e0463991ca399dcfa33426bc17bd0c26700a0253",
   "semantic_chain_version": "chain-semantic-v2",
   "settled_entries": 2,
   "stages_failed": [],

@@ -25,7 +25,26 @@ from fde_api.forward.cohort import combine_provider_modes
 from fde_api.forward.modes import DataMode
 from fde_api.util import utc_now
 
-CONSENSUS_METHOD_VERSION = "consensus-v1"
+# v2: three corrections to how a consensus is computed, each of which
+# changes the number produced from identical quotes.
+#
+#   * the spread median is taken over HOME-side lines only. Across both
+#     sides it measured the sign convention and returned ~0 for any
+#     balanced market.
+#   * the away side is priced at its own mirror of the consensus line
+#     rather than at the home number, which matched nothing and fell
+#     through to every away quote.
+#   * the total takes one line per BOOK. Counting rows weighted a
+#     two-sided book twice as heavily as a one-sided one.
+#
+# The version has to move with them. It is part of the consensus logical
+# identity, so recomputing an old snapshot under the new method would
+# otherwise collide with the original at the same slot and be reported as
+# a CONFLICT - a contradiction between two methods, described as a
+# contradiction about the market. A new version makes it what it is: a
+# legitimately different record, with the old one left readable and
+# unchanged.
+CONSENSUS_METHOD_VERSION = "consensus-v2"
 
 # Books accepted into consensus. An unrecognized book is excluded rather
 # than trusted, because an unknown source cannot be quality-assessed.

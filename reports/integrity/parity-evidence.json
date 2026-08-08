@@ -1,7 +1,7 @@
 {
   "artifact": "direct-scheduler-parity-evidence",
   "artifact_schema_version": "parity-evidence-v1",
-  "artifact_sha256": "9e9619cbf30909f44bc0b26ac7bdfda7e378e2bc1f13cc5d457cc50776e1ea97",
+  "artifact_sha256": "fc578ad7215d62776acb587d2efe88e1b322f807eccc9eff3bdb144b9c0be495",
   "ci_run": "local",
   "decision_context_hashes": {
     "direct": {
@@ -39,9 +39,9 @@
       ]
     }
   },
-  "direct_chain_hash": "747707117a200ffc7264c35f73eb0ae57325c94a0bb95feac26f2736ebca50d1",
+  "direct_chain_hash": "e488c2d13b9434fc687aecc7bdf753f2442267c2c81b531af461a220b5ab07d7",
   "domain_field_differences": 0,
-  "generated_at_utc": "2026-08-06T11:29:06.152223+00:00",
+  "generated_at_utc": "2026-08-08T13:17:35.496573+00:00",
   "governance_differences": 0,
   "hashes_equal": true,
   "lineage_differences": 0,
@@ -57,12 +57,12 @@
     "direct": {
       "EARLY_WEEK": "f9ea319e0edcc7c21d566f985d61c0a94664c43eefe8e93e3b5505b2ea4babea",
       "OPENING": "f9ea319e0edcc7c21d566f985d61c0a94664c43eefe8e93e3b5505b2ea4babea",
-      "PRACTICE_UPDATE": "323d31c39ee7e797db747bbfcb050997ea9c07aa794b980fe1e99c961018d409"
+      "PRACTICE_UPDATE": "6640370cabdf049d3886e4e199fcc2e66f688d79cc438fde46aaf6d6fd3bda6b"
     },
     "scheduler": {
       "EARLY_WEEK": "f9ea319e0edcc7c21d566f985d61c0a94664c43eefe8e93e3b5505b2ea4babea",
       "OPENING": "f9ea319e0edcc7c21d566f985d61c0a94664c43eefe8e93e3b5505b2ea4babea",
-      "PRACTICE_UPDATE": "323d31c39ee7e797db747bbfcb050997ea9c07aa794b980fe1e99c961018d409"
+      "PRACTICE_UPDATE": "6640370cabdf049d3886e4e199fcc2e66f688d79cc438fde46aaf6d6fd3bda6b"
     }
   },
   "record_counts_by_type": {
@@ -96,11 +96,11 @@
   "rendered_text_differences": 0,
   "scenario_manifest_hash": "e567704fce1fa3b575d2fe362808d958b131151b0c58650935839904a06a05a3",
   "scenario_manifest_version": "scenario-manifest-v1",
-  "scheduler_chain_hash": "747707117a200ffc7264c35f73eb0ae57325c94a0bb95feac26f2736ebca50d1",
+  "scheduler_chain_hash": "e488c2d13b9434fc687aecc7bdf753f2442267c2c81b531af461a220b5ab07d7",
   "scope_limits": [
     "Covers the single scenario declared by the manifest above.",
     "Not a statement about model quality, profitability, predictive superiority, production approval, or readiness for real-money use."
   ],
   "semantic_chain_version": "chain-semantic-v2",
-  "source_commit": "b3cf8d7ed1f573869ba773493fc5073e08b7588e"
+  "source_commit": "d5dd2b351c3114e6fc22990df4c216ff1a9296b9"
 }
