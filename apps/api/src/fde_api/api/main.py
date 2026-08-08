@@ -389,12 +389,15 @@ def get_model_comparison() -> schemas.ModelComparisonResponse:
 
 
 @app.get("/v1/forward/live", dependencies=[Auth])
-def get_forward_live(data_mode: str = "LIVE_RESEARCH", hours: int = 72) -> dict[str, Any]:
+def get_forward_live(
+    data_mode: str = "LIVE_RESEARCH", hours: int = 72, lookback_hours: int = 72
+) -> dict[str, Any]:
     from datetime import timedelta
 
     from fde_api.db.forward_models import ConsensusSnapshot, OddsQuote, ScheduleObservation
     from fde_api.forward.consensus import select_eligible_quotes
     from fde_api.forward.modes import DataMode
+    from fde_api.forward.results import result_scores
 
     now = utc_now()
     mode = DataMode(data_mode)
@@ -405,7 +408,11 @@ def get_forward_live(data_mode: str = "LIVE_RESEARCH", hours: int = 72) -> dict[
             s.scalars(
                 select(ScheduleObservation).where(
                     ScheduleObservation.data_mode == mode.value,
-                    ScheduleObservation.kickoff_utc >= now - timedelta(hours=6),
+                    # A six-hour lookback dropped a game the moment it
+                    # finished - taking the result, the closing line and
+                    # the CLV comparison off the screen at exactly the
+                    # point they became the most informative thing on it.
+                    ScheduleObservation.kickoff_utc >= now - timedelta(hours=lookback_hours),
                     ScheduleObservation.kickoff_utc <= horizon,
                 ).order_by(ScheduleObservation.kickoff_utc)
             )
@@ -415,6 +422,13 @@ def get_forward_live(data_mode: str = "LIVE_RESEARCH", hours: int = 72) -> dict[
         latest: dict[str, Any] = {}
         for o in observations:
             latest[o.canonical_game_id] = o
+
+        # The FINAL observation carries the score, so the newest
+        # observation per game is not necessarily the one that has it.
+        finals: dict[str, Any] = {
+            obs.canonical_game_id: obs
+            for obs in observations if obs.game_status == "FINAL"
+        }
 
         games: list[dict[str, Any]] = []
         for gid, o in sorted(latest.items(), key=lambda kv: kv[1].kickoff_utc):
@@ -476,8 +490,20 @@ def get_forward_live(data_mode: str = "LIVE_RESEARCH", hours: int = 72) -> dict[
                     "eligible": report.eligible,
                     "considered": report.considered,
                 }
+            final = finals.get(gid)
+            scores = (
+                result_scores(s, canonical_game_id=gid, data_mode=mode)
+                if final is not None else None
+            )
+            home_score, away_score = scores if scores else (None, None)
             games.append({
                 "canonical_game_id": gid,
+                "final": None if final is None else {
+                    "home_score": home_score,
+                    "away_score": away_score,
+                    "observed_at": final.observed_at.isoformat(),
+                    "provider": final.provider,
+                },
                 "away_team_id": o.away_team_id,
                 "home_team_id": o.home_team_id,
                 "kickoff_utc": o.kickoff_utc.isoformat(),

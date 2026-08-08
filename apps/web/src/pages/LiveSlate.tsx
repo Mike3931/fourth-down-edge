@@ -39,8 +39,16 @@ interface MarketBlock {
   considered: number;
 }
 
+interface FinalScore {
+  home_score: number | null;
+  away_score: number | null;
+  observed_at: string;
+  provider: string;
+}
+
 interface LiveGame {
   canonical_game_id: string;
+  final: FinalScore | null;
   away_team_id: string;
   home_team_id: string;
   kickoff_utc: string;
@@ -159,6 +167,12 @@ export default function LiveSlate() {
               {g.neutral_site && (
                 <span className="rounded bg-bg-subtle px-2 py-0.5 text-xs text-muted">neutral site</span>
               )}
+              {g.final && (
+                <span className="rounded bg-fg/10 px-2 py-0.5 text-sm font-semibold text-fg">
+                  FINAL {g.away_team_id} {g.final.away_score} — {g.home_team_id}{' '}
+                  {g.final.home_score}
+                </span>
+              )}
             </div>
             <p className="mt-1 text-sm text-muted">
               Kickoff {g.kickoff_utc} · {g.venue ?? 'venue unknown'} · {g.game_status}
@@ -167,6 +181,13 @@ export default function LiveSlate() {
               Fixture attested by <strong>{g.schedule_provider}</strong>, observed {g.observed_at} ·{' '}
               <code>{g.canonical_game_id}</code>
             </p>
+            {g.final && (
+              <p className="mt-1 text-xs text-muted">
+                Result recorded from <strong>{g.final.provider}</strong> at{' '}
+                {g.final.observed_at}. The score is a captured observation, not a
+                settlement: no wager was placed and none is implied.
+              </p>
+            )}
           </div>
 
           <div className="border-b border-border p-4">

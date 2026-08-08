@@ -200,6 +200,7 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
 
     from fde_api.db.engine import get_engine
     from fde_api.db.forward_models import OddsQuote, ScheduleObservation
+    from fde_api.forward.venues import resolve_venue
 
     counts = {"games_created": 0, "games_existing": 0, "quotes_written": 0,
               "quotes_duplicate": 0, "results_recorded": 0, "results_refused": 0}
@@ -208,6 +209,8 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
 
     with factory() as session:
         for g in games:
+            venue = resolve_venue(stadium_id=None, stadium_name=g["venue"],
+                                  neutral_site=g["neutral_site"])
             existing = session.scalars(
                 select(ScheduleObservation).where(
                     ScheduleObservation.canonical_game_id == g["canonical_game_id"],
@@ -227,7 +230,15 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                     away_team_id=g["away"],
                     kickoff_utc=g["kickoff_utc"],
                     venue_timezone=None,
-                    stadium_id=None,
+                    # Attempt resolution rather than asserting None. It
+                    # will often fail here - the governed table resolves
+                    # international venues by name, and domestic ones
+                    # arrive with an id from the schedule feed that this
+                    # provider does not supply - and an unresolved venue is
+                    # then correctly reported by `unmapped_venues`. What
+                    # matters is that the gap is discovered rather than
+                    # declared.
+                    stadium_id=(venue.id if venue else None),
                     stadium_name=g["venue"],
                     neutral_site=g["neutral_site"],
                     international=False,
