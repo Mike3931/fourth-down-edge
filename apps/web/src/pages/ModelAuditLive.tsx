@@ -80,13 +80,13 @@ export default function ModelAuditLive() {
           </p>
         </div>
         <div className="overflow-x-auto p-3">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm" aria-label="Registered models">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-muted">
-                <th className="py-1 pr-4">Model</th>
-                <th className="py-1 pr-4">Approval</th>
-                <th className="py-1 pr-4">Algorithm</th>
-                <th className="py-1">Feature set</th>
+                <th scope="col" className="py-1 pr-4">Model</th>
+                <th scope="col" className="py-1 pr-4">Approval</th>
+                <th scope="col" className="py-1 pr-4">Algorithm</th>
+                <th scope="col" className="py-1">Feature set</th>
               </tr>
             </thead>
             <tbody>
@@ -140,13 +140,16 @@ export default function ModelAuditLive() {
               )}
             </div>
             <div className="overflow-x-auto p-3">
-              <table className="w-full text-sm tabular-nums">
+              <table
+                className="w-full text-sm tabular-nums"
+                aria-label={`Backtest scores for ${scope}`}
+              >
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-muted">
-                    <th className="py-1 pr-4">Model</th>
-                    <th className="py-1 pr-4 text-right">Brier</th>
-                    <th className="py-1 pr-4 text-right">vs market</th>
-                    <th className="py-1">Verdict</th>
+                    <th scope="col" className="py-1 pr-4">Model</th>
+                    <th scope="col" className="py-1 pr-4 text-right">Brier</th>
+                    <th scope="col" className="py-1 pr-4 text-right">vs market</th>
+                    <th scope="col" className="py-1">Verdict</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -153,15 +153,15 @@ export default function SlateLive() {
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full text-sm" aria-label="Ingested fixtures">
           <thead>
             <tr className="text-left text-xs uppercase tracking-wide text-muted">
-              <th className="py-2 pr-4">Kickoff</th>
-              <th className="py-2 pr-4">Matchup</th>
-              <th className="py-2 pr-4">Season</th>
-              <th className="py-2 pr-4">Venue</th>
-              <th className="py-2 pr-4">Status</th>
-              <th className="py-2">Fixture source</th>
+              <th scope="col" className="py-2 pr-4">Kickoff</th>
+              <th scope="col" className="py-2 pr-4">Matchup</th>
+              <th scope="col" className="py-2 pr-4">Season</th>
+              <th scope="col" className="py-2 pr-4">Venue</th>
+              <th scope="col" className="py-2 pr-4">Status</th>
+              <th scope="col" className="py-2">Fixture source</th>
             </tr>
           </thead>
           <tbody>

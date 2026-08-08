@@ -268,15 +268,21 @@ export default function LiveSlate() {
               </span>
             </h3>
             <div className="mt-2 overflow-x-auto">
-              <table className="w-full text-sm">
+              {/* Named per game, not "quotes": with several fixtures on
+                  screen the tables are otherwise indistinguishable to
+                  anyone navigating by landmark. */}
+              <table
+                className="w-full text-sm"
+                aria-label={`Captured quotes for ${g.away_team_id} at ${g.home_team_id}`}
+              >
                 <thead>
                   <tr className="text-left text-xs uppercase tracking-wide text-muted">
-                    <th className="py-1 pr-4">Book</th>
-                    <th className="py-1 pr-4">Market</th>
-                    <th className="py-1 pr-4">Quote</th>
-                    <th className="py-1 pr-4 text-right">Price</th>
-                    <th className="py-1 pr-4">Source</th>
-                    <th className="py-1">Observed</th>
+                    <th scope="col" className="py-1 pr-4">Book</th>
+                    <th scope="col" className="py-1 pr-4">Market</th>
+                    <th scope="col" className="py-1 pr-4">Quote</th>
+                    <th scope="col" className="py-1 pr-4 text-right">Price</th>
+                    <th scope="col" className="py-1 pr-4">Source</th>
+                    <th scope="col" className="py-1">Observed</th>
                   </tr>
                 </thead>
                 <tbody className="tabular-nums">
