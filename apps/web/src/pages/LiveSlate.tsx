@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
+import { describeConsensus, describeQuote } from '@fde/calculations';
+import { fmtAgoLive, fmtInstant } from '../lib/format';
 
 /**
  * The only screen in this app backed by real captured data.
@@ -85,10 +87,10 @@ function fmtAmerican(n: number): string {
   return n > 0 ? `+${n}` : `${n}`;
 }
 
-function fmtLine(n: number | null): string {
-  if (n === null) return '—';
-  return n > 0 ? `+${n}` : `${n}`;
-}
+// Lines are STORED home-relative. `describeQuote` / `describeConsensus`
+// flip the away spread back to the away team's own number and name the
+// side that owns it, so a row cannot be read as the opposite of what the
+// book is offering. See packages/calculations/src/marketDisplay.ts.
 
 export default function LiveSlate() {
   const { data, isLoading, error, dataUpdatedAt, refetch, isFetching } = useQuery({
@@ -142,9 +144,17 @@ export default function LiveSlate() {
             {isFetching ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
+        {/* Readable on the surface, exact on hover: every `title` below
+            carries the stored UTC instant verbatim. */}
         <p className="text-sm text-muted">
-          Data mode <strong>{data?.data_mode}</strong> · generated {data?.generated_at_utc} · last
-          fetched {new Date(dataUpdatedAt).toISOString()}
+          Data mode <strong>{data?.data_mode}</strong> · captured{' '}
+          <span title={data?.generated_at_utc}>
+            {data ? fmtAgoLive(data.generated_at_utc) : '—'}
+          </span>{' '}
+          · last fetched{' '}
+          <span title={new Date(dataUpdatedAt).toISOString()}>
+            {fmtAgoLive(new Date(dataUpdatedAt).toISOString())}
+          </span>
         </p>
       </header>
 
@@ -175,17 +185,20 @@ export default function LiveSlate() {
               )}
             </div>
             <p className="mt-1 text-sm text-muted">
-              Kickoff {g.kickoff_utc} · {g.venue ?? 'venue unknown'} · {g.game_status}
+              Kickoff <span title={g.kickoff_utc}>{fmtInstant(g.kickoff_utc)}</span> ·{' '}
+              {g.venue ?? 'venue unknown'} · {g.game_status}
             </p>
             <p className="mt-1 text-xs text-muted">
-              Fixture attested by <strong>{g.schedule_provider}</strong>, observed {g.observed_at} ·{' '}
+              Fixture attested by <strong>{g.schedule_provider}</strong>, observed{' '}
+              <span title={g.observed_at}>{fmtAgoLive(g.observed_at)}</span> ·{' '}
               <code>{g.canonical_game_id}</code>
             </p>
             {g.final && (
               <p className="mt-1 text-xs text-muted">
-                Result recorded from <strong>{g.final.provider}</strong> at{' '}
-                {g.final.observed_at}. The score is a captured observation, not a
-                settlement: no wager was placed and none is implied.
+                Result recorded from <strong>{g.final.provider}</strong>{' '}
+                <span title={g.final.observed_at}>{fmtAgoLive(g.final.observed_at)}</span>. The
+                score is a captured observation, not a settlement: no wager was
+                placed and none is implied.
               </p>
             )}
           </div>
@@ -198,7 +211,10 @@ export default function LiveSlate() {
                   <div className="text-xs uppercase tracking-wide text-muted">{market}</div>
                   {block.consensus ? (
                     <div className="mt-1 text-lg font-semibold text-fg">
-                      {fmtLine(block.consensus.median_line)}
+                      {describeConsensus(market, block.consensus.median_line, {
+                        homeTeamId: g.home_team_id,
+                        awayTeamId: g.away_team_id,
+                      })}
                       <span className="ml-2 text-xs font-normal text-muted">
                         {block.consensus.eligible_books} books
                       </span>
@@ -231,8 +247,7 @@ export default function LiveSlate() {
                   <tr className="text-left text-xs uppercase tracking-wide text-muted">
                     <th className="py-1 pr-4">Book</th>
                     <th className="py-1 pr-4">Market</th>
-                    <th className="py-1 pr-4">Selection</th>
-                    <th className="py-1 pr-4 text-right">Line</th>
+                    <th className="py-1 pr-4">Quote</th>
                     <th className="py-1 pr-4 text-right">Price</th>
                     <th className="py-1 pr-4">Source</th>
                     <th className="py-1">Observed</th>
@@ -243,13 +258,19 @@ export default function LiveSlate() {
                     <tr key={`${q.sportsbook}-${q.market}-${q.selection}-${i}`} className="border-t border-border">
                       <td className="py-1 pr-4">{q.sportsbook}</td>
                       <td className="py-1 pr-4">{q.market}</td>
-                      <td className="py-1 pr-4">{q.selection}</td>
-                      <td className="py-1 pr-4 text-right">{fmtLine(q.line)}</td>
+                      <td className="py-1 pr-4 font-medium text-fg">
+                        {describeQuote(q.market, q.selection, q.line, {
+                          homeTeamId: g.home_team_id,
+                          awayTeamId: g.away_team_id,
+                        })}
+                      </td>
                       <td className="py-1 pr-4 text-right">{fmtAmerican(q.american)}</td>
                       <td className="py-1 pr-4 text-xs text-muted">
                         {q.provider} / {q.provider_mode}
                       </td>
-                      <td className="py-1 text-xs text-muted">{q.observed_at}</td>
+                      <td className="py-1 text-xs text-muted" title={q.observed_at}>
+                        {fmtAgoLive(q.observed_at)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

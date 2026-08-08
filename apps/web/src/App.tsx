@@ -40,7 +40,13 @@ export default function App() {
   return (
     <Routes>
       <Route element={<Shell />}>
-        <Route path="/" element={<TodaysPicks />} />
+        {/* The front door is real captured data. It used to be Today's
+            Picks, so the app opened on a generated "Strong pick" with a
+            dollar stake beside it — accurate to its own disclaimer and
+            still the first thing a tired person saw at 7pm on a Sunday.
+            The demo screens are all still reachable, by name. */}
+        <Route path="/" element={<Navigate to="/live" replace />} />
+        <Route path="/picks-demo" element={<TodaysPicks />} />
         <Route path="/live" element={<LiveSlate />} />
         <Route path="/slate" element={<SlateLive />} />
         <Route path="/slate-demo" element={<WeeklySlate />} />

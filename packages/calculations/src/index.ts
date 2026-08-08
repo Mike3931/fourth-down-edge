@@ -8,3 +8,4 @@ export * from './distributions';
 export * from './recommendation';
 export * from './performance';
 export * from './ledger';
+export * from './marketDisplay';

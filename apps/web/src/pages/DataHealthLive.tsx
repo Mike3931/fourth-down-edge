@@ -1,5 +1,6 @@
 import { useForwardHealth, type HealthCheck } from '../lib/engine';
 import EngineDown from '../components/EngineDown';
+import { fmtAgoLive } from '../lib/format';
 
 /**
  * The engine's real health checks, grouped by the scope each speaks for.
@@ -71,6 +72,9 @@ export default function DataHealthLive() {
   if (!data) return null;
 
   const failing = data.total - data.ok;
+  const blocking = Object.values(data.by_scope)
+    .flat()
+    .filter((c) => c.suppresses_candidates && c.status !== 'OK');
   const banner =
     data.worst_severity === 'CRITICAL'
       ? 'bg-danger/10 border-danger/40 text-danger'
@@ -94,8 +98,39 @@ export default function DataHealthLive() {
             : `${failing} outstanding — worst severity ${data.worst_severity}.`}
         </div>
         <p className="text-xs text-muted">
-          Data mode {data.data_mode} · generated {data.generated_at_utc}
+          Data mode {data.data_mode} · generated{' '}
+          <span title={data.generated_at_utc}>{fmtAgoLive(data.generated_at_utc)}</span>
         </p>
+
+        {/* The blocking set, gathered.
+            `suppresses_candidates` is the only flag on this page that
+            answers "can the system produce anything right now" — and the
+            checks carrying it were spread across two scope sections, so
+            the answer had to be assembled by reading forty rows. Scope
+            grouping is right for diagnosis and wrong for this one
+            question, so the question gets its own box. Nothing here is a
+            new judgement: it is the same checks, hoisted. */}
+        {blocking.length > 0 && (
+          <div className="rounded border border-danger/40 bg-danger/10 p-3">
+            <p className="text-sm font-semibold text-danger">
+              No candidates can be produced until {blocking.length === 1 ? 'this is' : 'these are'}{' '}
+              resolved.
+            </p>
+            <ul className="mt-2 space-y-1.5">
+              {blocking.map((c) => (
+                <li key={c.id} className="text-sm">
+                  <code className="text-fg">{c.id}</code>
+                  <span className="text-muted"> — {c.explanation}</span>
+                  {c.remediation && (
+                    <div className="text-xs text-muted">
+                      <span className="font-medium">Fix:</span> {c.remediation}
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </header>
 
       {Object.entries(data.by_scope).map(([scope, checks]) => {

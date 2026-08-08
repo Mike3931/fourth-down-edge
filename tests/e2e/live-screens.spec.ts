@@ -50,7 +50,9 @@ test.describe('engine-backed screens', () => {
   }
 
   test('the navigation separates live screens from demonstration screens', async ({ page }) => {
-    await expect(page.getByText('Live engine data')).toBeVisible();
+    // Exact, so the nav's grouping heading is not confused with the
+    // header's per-screen state line, which also says "data".
+    await expect(page.getByText('Live engine data', { exact: true })).toBeVisible();
     await expect(page.getByText('Demonstration data', { exact: true })).toBeVisible();
   });
 });

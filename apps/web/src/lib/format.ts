@@ -64,6 +64,54 @@ export function fmtAgo(iso: string, nowIso: string): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
+/**
+ * A captured instant, in the reader's own timezone.
+ *
+ * The live screens were printing the stored value verbatim —
+ * "2026-08-08T03:24:33.941758+00:00" — which is precise, auditable, and
+ * unreadable. Six of those in a table is a wall. The exact UTC string is
+ * kept as the `title` wherever this is used, so nothing is lost: the
+ * screen becomes legible and the audit value stays one hover away.
+ */
+export function fmtInstant(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short', day: 'numeric',
+      hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+    }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
+}
+
+/**
+ * Age against the real wall clock.
+ *
+ * `fmtAgo` takes an explicit "now" because the demo dataset is frozen and
+ * must not drift. The live screens have no frozen clock — staleness there
+ * is the actual signal — so they get a separate function rather than a
+ * caller-supplied `new Date().toISOString()` that would silently read as
+ * demo behaviour.
+ */
+export function fmtAgoLive(iso: string, now: Date = new Date()): string {
+  const ms = now.getTime() - new Date(iso).getTime();
+  if (Number.isNaN(ms)) return '—';
+  // A future timestamp is a real condition (a scheduled kickoff), not an
+  // error, and "-3m ago" is nonsense. Say which direction it points.
+  if (ms < 0) return `in ${humanSpan(-ms)}`;
+  const mins = Math.round(ms / 60_000);
+  if (mins < 1) return 'just now';
+  return `${humanSpan(ms)} ago`;
+}
+
+function humanSpan(ms: number): string {
+  const mins = Math.round(ms / 60_000);
+  if (mins < 60) return `${Math.max(mins, 1)}m`;
+  const h = Math.floor(mins / 60);
+  if (h < 48) return `${h}h ${mins % 60}m`;
+  return `${Math.floor(h / 24)}d`;
+}
+
 export function fmtNum(x: number, decimals = 1): string {
   return x.toFixed(decimals);
 }

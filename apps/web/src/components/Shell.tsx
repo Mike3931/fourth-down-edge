@@ -17,7 +17,7 @@ const NAV = (firstGameId: string | undefined) => [
   { to: '/slate', label: 'Slate', icon: '▤', live: true },
   { to: '/models', label: 'Model Audit', icon: '⌘', live: true },
   { to: '/health', label: 'Data Health', icon: '♥', live: true },
-  { to: '/', label: "Today's Picks", icon: '★', live: false },
+  { to: '/picks-demo', label: "Today's Picks", icon: '★', live: false },
   { to: firstGameId ? `/game/${firstGameId}` : '/slate', label: 'Game Lab', icon: '⚗', live: false },
   { to: '/injuries', label: 'Injury Center', icon: '✚', live: false },
   { to: '/market', label: 'Market Monitor', icon: '≋', live: false },
@@ -25,6 +25,17 @@ const NAV = (firstGameId: string | undefined) => [
   { to: '/performance', label: 'Performance Lab', icon: '∿', live: false },
   { to: '/settings', label: 'Settings', icon: '⚙', live: false },
 ];
+
+// The four engine-backed routes. Kept as an explicit list rather than
+// derived from NAV, because NAV holds one dynamic path (`/game/:id`) and a
+// prefix match over it would quietly reclassify screens as the router
+// grows. A screen that is wrongly called live is the failure that matters,
+// so the list is stated rather than inferred.
+const LIVE_ROUTES = new Set(['/live', '/slate', '/models', '/health']);
+
+function isLiveRoute(pathname: string): boolean {
+  return LIVE_ROUTES.has(pathname);
+}
 
 export default function Shell() {
   const { data: ds } = useDataset();
@@ -39,6 +50,7 @@ export default function Shell() {
 
   const overallHealth = ds ? worstFreshness(ds.feedStatuses.map((f) => f.status)) : 'MISSING';
   const bankroll = store.ledger?.bankrollBalance;
+  const onLiveScreen = isLiveRoute(location.pathname);
 
   return (
     <div className="flex min-h-screen bg-bg">
@@ -96,35 +108,58 @@ export default function Shell() {
 
       {/* Main column */}
       <div className="flex min-w-0 flex-1 flex-col">
+        {/* The header describes the DATA ON THE SCREEN BELOW IT. It used
+            to describe the demo dataset unconditionally, so the live
+            screens carried a frozen demo clock, a demo season and week, a
+            demo bankroll, and a red banner reading DEMONSTRATION DATA —
+            directly above real captured book prices. Chrome that
+            contradicts its own content teaches the reader to ignore the
+            chrome, which is the opposite of what these labels are for. */}
         <header className="sticky top-0 z-20 border-b border-edge bg-panel/95 backdrop-blur">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1 px-4 py-2">
-            <div className="text-xs text-ink-muted">
-              Season <Mono className="text-ink">{ds?.season ?? '—'}</Mono> · Week{' '}
-              <Mono className="text-ink">{ds?.week ?? '—'}</Mono>{' '}
-              <span className="text-warn">(DEMO)</span>
-            </div>
-            <div className="text-xs text-ink-muted">
-              Last refresh:{' '}
-              <Mono className="text-ink" title={ds ? ds.demoNow : undefined}>
-                {ds ? fmtAgo(ds.demoNow, ds.demoNow) : '—'}
-              </Mono>{' '}
-              <span className="text-ink-faint">(frozen demo clock)</span>
-            </div>
-            <div className="flex items-center gap-1.5 text-xs text-ink-muted">
-              Data health: <FreshBadge status={overallHealth} />
-            </div>
+            {onLiveScreen ? (
+              <div className="flex items-center gap-1.5 text-xs text-ink-muted">
+                <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                Real captured data — no generated values on this screen. Capture
+                time and provider are stated per item below.
+              </div>
+            ) : (
+              <>
+                <div className="text-xs text-ink-muted">
+                  Season <Mono className="text-ink">{ds?.season ?? '—'}</Mono> · Week{' '}
+                  <Mono className="text-ink">{ds?.week ?? '—'}</Mono>{' '}
+                  <span className="text-warn">(DEMO)</span>
+                </div>
+                <div className="text-xs text-ink-muted">
+                  Last refresh:{' '}
+                  <Mono className="text-ink" title={ds ? ds.demoNow : undefined}>
+                    {ds ? fmtAgo(ds.demoNow, ds.demoNow) : '—'}
+                  </Mono>{' '}
+                  <span className="text-ink-faint">(frozen demo clock)</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-ink-muted">
+                  Data health: <FreshBadge status={overallHealth} />
+                </div>
+              </>
+            )}
+            {/* Paper mode is a real setting about real behaviour, so it is
+                stated on every screen regardless of the data source. */}
             <Pill tone={store.settings.mode === 'PAPER' ? 'accent' : 'warn'}>
               {store.settings.mode === 'PAPER' ? 'PAPER MODE' : 'REAL TRACKING MODE'}
             </Pill>
-            <div className="text-xs text-ink-muted">
-              Bankroll: <Mono className="text-ink">{bankroll !== undefined ? fmtMoney(bankroll) : '—'}</Mono>
-            </div>
-            <div className="text-xs text-ink-muted">
-              Open exposure:{' '}
-              <Mono className="text-ink">
-                {fmtMoney(store.openStake)} ({fmtPct(store.weeklyExposurePct)})
-              </Mono>
-            </div>
+            {!onLiveScreen && (
+              <>
+                <div className="text-xs text-ink-muted">
+                  Bankroll: <Mono className="text-ink">{bankroll !== undefined ? fmtMoney(bankroll) : '—'}</Mono>
+                </div>
+                <div className="text-xs text-ink-muted">
+                  Open exposure:{' '}
+                  <Mono className="text-ink">
+                    {fmtMoney(store.openStake)} ({fmtPct(store.weeklyExposurePct)})
+                  </Mono>
+                </div>
+              </>
+            )}
             <div className="ml-auto flex items-center gap-2">
               <span className="text-xs text-ink-faint">{user?.email}</span>
               <button
@@ -135,9 +170,11 @@ export default function Shell() {
               </button>
             </div>
           </div>
-          <div className="px-4 pb-2">
-            <DemoBanner label={ds?.label ?? 'DEMONSTRATION DATA — NOT FOR REAL-MONEY DECISIONS'} />
-          </div>
+          {!onLiveScreen && (
+            <div className="px-4 pb-2">
+              <DemoBanner label={ds?.label ?? 'DEMONSTRATION DATA — NOT FOR REAL-MONEY DECISIONS'} />
+            </div>
+          )}
         </header>
 
         <main className="min-w-0 flex-1 px-4 py-4">

@@ -13,9 +13,22 @@ test.describe('Fourth Down Edge core journey', () => {
 
     // 1) Sign in with the local demo session.
     await page.getByRole('button', { name: /enter local demo session/i }).click();
-    await expect(page.getByText('DEMONSTRATION DATA — NOT FOR REAL-MONEY DECISIONS').first()).toBeVisible();
 
-    // 2) Today's Picks (the home page) shows the simple top-picks list.
+    // 2) The front door is the engine-backed slate, not a generated pick.
+    // `/` used to render Today's Picks, so the app opened on a fabricated
+    // "Strong pick" with a stake beside it. It now redirects.
+    await expect(page).toHaveURL(/\/live$/);
+
+    // The demo banner belongs to demo screens ONLY. Asserting its absence
+    // here is the point: a red DEMONSTRATION DATA bar above real captured
+    // book prices trains the reader to ignore the bar.
+    await expect(
+      page.getByText('DEMONSTRATION DATA — NOT FOR REAL-MONEY DECISIONS'),
+    ).toHaveCount(0);
+
+    // 3) The demo picks screen still exists, by name, and still warns.
+    await page.goto('/picks-demo');
+    await expect(page.getByText('DEMONSTRATION DATA — NOT FOR REAL-MONEY DECISIONS').first()).toBeVisible();
     await expect(page.getByRole('heading', { name: "Today's Top Picks" })).toBeVisible();
     await expect(page.getByText('Full analysis →').first()).toBeVisible();
 

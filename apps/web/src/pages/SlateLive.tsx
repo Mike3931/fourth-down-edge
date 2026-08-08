@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForwardSlate, type SlateGame } from '../lib/engine';
 import EngineDown from '../components/EngineDown';
 
@@ -22,11 +22,40 @@ export default function SlateLive() {
   const { data, isLoading, error } = useForwardSlate();
   const [query, setQuery] = useState('');
   const [onlyUpcoming, setOnlyUpcoming] = useState(true);
+  // '' means every week. The default is chosen below once the data
+  // arrives: a full season is 272 rows, and a screen that opens on all of
+  // them answers "what is in the database" when the question is "what is
+  // on this week".
+  const [week, setWeek] = useState<string>('');
+  const [weekTouched, setWeekTouched] = useState(false);
+
+  const weeks = useMemo(() => {
+    const seen = new Set<number>();
+    for (const g of data?.games ?? []) if (g.week) seen.add(g.week);
+    return [...seen].sort((a, b) => a - b);
+  }, [data]);
+
+  // The soonest week that still has a game ahead of it — the one a person
+  // opening this screen is almost always asking about.
+  const nextWeek = useMemo(() => {
+    const now = Date.now();
+    const upcoming = (data?.games ?? [])
+      .filter((g) => g.week && new Date(g.kickoff_utc).getTime() >= now)
+      .sort((a, b) => new Date(a.kickoff_utc).getTime() - new Date(b.kickoff_utc).getTime());
+    return upcoming[0]?.week ?? null;
+  }, [data]);
+
+  // Applied once, and never again after the reader picks for themselves —
+  // a default that keeps reasserting itself is a screen fighting its user.
+  useEffect(() => {
+    if (!weekTouched && week === '' && nextWeek !== null) setWeek(String(nextWeek));
+  }, [nextWeek, week, weekTouched]);
 
   const games = useMemo(() => {
     const all = data?.games ?? [];
     const now = Date.now();
     return all.filter((g) => {
+      if (week !== '' && String(g.week ?? '') !== week) return false;
       if (onlyUpcoming && new Date(g.kickoff_utc).getTime() < now) return false;
       if (!query.trim()) return true;
       const q = query.trim().toUpperCase();
@@ -36,7 +65,7 @@ export default function SlateLive() {
         g.canonical_game_id.toUpperCase().includes(q)
       );
     });
-  }, [data, query, onlyUpcoming]);
+  }, [data, query, onlyUpcoming, week]);
 
   if (isLoading) return <div className="p-6 text-sm text-muted">Asking the engine…</div>;
   if (error) return <EngineDown title="Slate" message={(error as Error).message} />;
@@ -62,10 +91,30 @@ export default function SlateLive() {
       </header>
 
       <div className="flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-2 text-sm text-muted">
+          Week
+          <select
+            value={week}
+            onChange={(e) => {
+              setWeek(e.target.value);
+              setWeekTouched(true);
+            }}
+            className="rounded border border-border bg-bg px-2 py-1.5 text-sm text-fg"
+          >
+            <option value="">All weeks</option>
+            {weeks.map((w) => (
+              <option key={w} value={String(w)}>
+                Week {w}
+                {w === nextWeek ? ' (next)' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Filter by team or id…"
+          aria-label="Filter by team or id"
           className="rounded border border-border bg-bg px-3 py-1.5 text-sm text-fg placeholder:text-muted"
         />
         <label className="flex items-center gap-2 text-sm text-muted">
@@ -76,7 +125,25 @@ export default function SlateLive() {
           />
           Upcoming only
         </label>
-        <span className="text-sm text-muted">{games.length} shown</span>
+        <span className="text-sm text-muted">
+          {games.length} shown
+          {week !== '' && (
+            <>
+              {' '}
+              of {data?.count ?? 0} ·{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setWeek('');
+                  setWeekTouched(true);
+                }}
+                className="underline hover:text-fg"
+              >
+                show all weeks
+              </button>
+            </>
+          )}
+        </span>
       </div>
 
       {games.length === 0 && (
