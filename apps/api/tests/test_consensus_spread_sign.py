@@ -1,18 +1,19 @@
-"""The spread consensus must be measured from one side, not both.
+"""The spread consensus, under the convention the capture path writes.
 
-A spread arrives as the provider gives it: -3 on the favourite and +3 on
-the underdog, one row each. Taking the median across BOTH rows measures
-the sign convention rather than the market, and it fails in the worst
-possible way - silently, with a plausible-looking number.
+SPREAD lines are stored HOME-RELATIVE: `_write_quote` negates the away
+point, so both rows of a book carry the same number. Every test here seeds
+that way, because seeding the provider's raw mirrored values describes
+data the system never actually holds - and a test built on a convention
+the code does not use will happily confirm the wrong behaviour.
 
-Three books all posting home -3 produced:
+That is not hypothetical. An earlier version of this file seeded HOME -3 /
+AWAY +3, concluded the median was broken, and passed against a change that
+matched the away side at `-median_line` - which under home-relative
+storage matches nothing at all, silently turning the `or away_q` fallback
+into the only path.
 
-    median_line     0.0     (there is no 0.0 spread anywhere in the market)
-    line_dispersion 3.0     (reads as total disagreement; they agree exactly)
-
-`median_line` is what CLV is measured against, so a systematically wrong
-consensus line would have quietly corrupted every closing-line comparison
-in the forward test.
+Both sides therefore match on `median_line` itself, and the median is
+taken over one row per book so the dispersion means something.
 """
 
 from __future__ import annotations
@@ -50,8 +51,9 @@ def _seed(session, per_book: list[tuple[str, float]], price: int = -110) -> None
         content_hash="t", source_manifest_version="t",
         source_updated_at=NOW, observed_at=NOW))
     for book, home_line in per_book:
-        # Exactly how a provider reports it: mirrored points, one row a side.
-        for selection, point in (("HOME", home_line), ("AWAY", -home_line)):
+        # Home-relative, as `_write_quote` stores it: the away row carries
+        # the home team's number, not its own mirror.
+        for selection, point in (("HOME", home_line), ("AWAY", home_line)):
             session.add(OddsQuote(
                 data_mode="LIVE_RESEARCH", canonical_game_id=GAME, provider="t",
                 provider_mode="LIVE", sportsbook=book, market="SPREAD",
@@ -205,3 +207,77 @@ class TestTheTotalIsAlsoOneLinePerBook:
         snap = self._total(session)
         assert snap is not None
         assert snap.line_dispersion == pytest.approx(0.0)
+
+
+class TestTheAwaySideIsPricedAtTheConsensusLine:
+    """The at-line filter must actually select something.
+
+    Matching the away side at `-median_line` under home-relative storage
+    selects nothing, and the `or away_q` fallback silently becomes the only
+    path - pricing the away side across every line on offer while appearing
+    to price it at the consensus. The median is robust enough that the
+    resulting number is often still right, which is exactly why this needs
+    testing at the filter rather than at the output.
+    """
+
+    def _seed_with_prices(self, session, books) -> None:
+        session.add(ScheduleObservation(
+            data_mode="LIVE_RESEARCH", canonical_game_id=GAME, provider="t",
+            provider_game_id="x", season=2026, season_type="REG", week=1,
+            home_team_id="SEA", away_team_id="NE", kickoff_utc=KICK,
+            neutral_site=False, international=False, game_status="SCHEDULED",
+            content_hash="t", source_manifest_version="t",
+            source_updated_at=NOW, observed_at=NOW))
+        for book, line, home_price, away_price in books:
+            for selection, price in (("HOME", home_price), ("AWAY", away_price)):
+                session.add(OddsQuote(
+                    data_mode="LIVE_RESEARCH", canonical_game_id=GAME, provider="t",
+                    provider_mode="LIVE", sportsbook=book, market="SPREAD",
+                    selection=selection, line=line, american=price,
+                    decimal_odds=1.9, is_live=False,
+                    observed_at=NOW - timedelta(minutes=5),
+                    raw_hash=hashlib.sha256(
+                        f"{book}{selection}{line}".encode()).hexdigest()))
+        session.commit()
+
+    def test_the_away_price_ignores_books_off_the_consensus_line(
+        self, session
+    ) -> None:
+        """Prices chosen so the two paths cannot agree by luck.
+
+        Three books at the -3.0 consensus priced -200/-150/-100, and one
+        outlier at -9.0 priced +500. At the line the median is -150;
+        falling through to all four away quotes gives -125. An earlier
+        version of this test used prices whose medians coincided, so it
+        passed against the broken filter and proved nothing - the median is
+        robust enough that a fall-through is usually invisible in the
+        output, which is why the case has to be built to expose it.
+        """
+        self._seed_with_prices(session, [
+            ("draftkings", -3.0, -110, -200),
+            ("fanduel", -3.0, -110, -150),
+            ("betmgm", -3.0, -110, -100),
+            ("caesars", -9.0, -110, 500),
+        ])
+        snap = _consensus(session)
+        assert snap is not None
+        assert snap.median_line == -3.0
+        assert snap.away_price_american == -150, (
+            "fell through to every away quote; -125 is the all-books median"
+        )
+
+    def test_the_home_and_away_filters_select_the_same_books(
+        self, session
+    ) -> None:
+        """Under home-relative storage both sides carry the same number, so
+        a filter that works for one has to work for the other."""
+        self._seed_with_prices(session, [
+            ("draftkings", -2.5, -108, -112),
+            ("fanduel", -2.5, -108, -112),
+            ("betmgm", -6.0, 200, -400),
+        ])
+        snap = _consensus(session)
+        assert snap is not None
+        assert snap.median_line == -2.5
+        assert snap.home_price_american == -108
+        assert snap.away_price_american == -112

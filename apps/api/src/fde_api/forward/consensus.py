@@ -184,17 +184,12 @@ def build_consensus(
 
     if market == "SPREAD":
         home_q, away_q = side("HOME"), side("AWAY")
-        # A spread is stored as the provider gives it: -3 on the favourite
-        # and +3 on the underdog, one row each. Taking the median across
-        # BOTH rows measured the sign convention rather than the market -
-        # three books all posting home -3 yielded a median of 0.0 and a
-        # dispersion of 3.0, reading as total disagreement between books
-        # that agreed exactly. For any balanced two-sided market it
-        # returned approximately zero, always, and `median_line` is what
-        # CLV is measured against.
-        #
-        # So: one line per book, all from the HOME side. Folding the away
-        # mirrors back in would double-count every book.
+        # SPREAD lines are stored HOME-RELATIVE: `_write_quote` negates the
+        # away point, so both rows of a book carry the same number. Reading
+        # the median over all rows therefore gave the right answer, and
+        # taking it over home rows only gives the same answer from half the
+        # data - which is what this does, because one row per book is what
+        # the dispersion needs to be meaningful.
         home_lines = [q.line for q in home_q if q.line is not None]
         if not home_lines or not home_q or not away_q:
             rep.reasons.append("spread requires both sides and a line")
@@ -202,9 +197,15 @@ def build_consensus(
         median_line = float(statistics.median(home_lines))
         # Price the consensus at the median line only — averaging prices
         # across different lines would invent a quote nobody offered.
-        # The away side is matched at its own mirror of that line.
+        #
+        # BOTH sides match on `median_line`, not on its negation. Storage is
+        # home-relative, so an away row at the consensus line holds the
+        # consensus number itself. Matching the away side at `-median_line`
+        # matches nothing at all, and the `or away_q` fallback then quietly
+        # becomes the only path - pricing the away side across every line
+        # on offer while appearing to price it at the consensus.
         at_line_home = [q for q in home_q if q.line == median_line] or home_q
-        at_line_away = [q for q in away_q if q.line == -median_line] or away_q
+        at_line_away = [q for q in away_q if q.line == median_line] or away_q
         home_price = int(statistics.median([q.american for q in at_line_home]))
         away_price = int(statistics.median([q.american for q in at_line_away]))
         no_vig_home, _ = no_vig_two_way(home_price, away_price)

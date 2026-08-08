@@ -156,8 +156,22 @@ def _quotes_from_odds(odds: dict[str, Any], *, home: str, away: str) -> list[dic
         except ValueError:
             line = None
         if american is not None and line is not None:
+            # Stored HOME-RELATIVE, matching `_write_quote` on the Odds API
+            # path and the nflverse/bookmaker convention: the away row
+            # carries the home team's number, not its own. Storing it
+            # away-relative would have put two opposite conventions in one
+            # column, and a consensus drawing on both would have averaged
+            # a line against its own mirror.
             out.append({"sportsbook": book_key, "market": "SPREAD",
-                        "selection": side.upper(), "line": line, "american": american})
+                        "selection": side.upper(),
+                        "line": -line if side == "away" else line,
+                        "american": american})
+
+    # Bounds identical to `_write_quote`. Without them this path stored
+    # numerically impossible prices that the consensus would later reject
+    # anyway - but only after they had been written and displayed.
+    out = [q for q in out if 100 <= abs(q["american"]) <= 100_000
+           and (q["line"] is None or abs(q["line"]) <= 100)]
 
     ml = odds.get("moneyline") or {}
     for side in ("home", "away"):
@@ -179,7 +193,8 @@ def _quotes_from_odds(odds: dict[str, Any], *, home: str, away: str) -> list[dic
         if american is not None and line is not None:
             out.append({"sportsbook": book_key, "market": "TOTAL",
                         "selection": sel, "line": line, "american": american})
-    return out
+    return [q for q in out if 100 <= abs(q["american"]) <= 100_000
+            and (q["line"] is None or abs(q["line"]) <= 100)]
 
 
 def discover(payload: dict[str, Any]) -> list[dict[str, Any]]:

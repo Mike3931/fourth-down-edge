@@ -184,17 +184,22 @@ class TestTheFinalScoreIsRecorded:
 
 
 class TestTheSpreadSignIsNeverInferredFromPosition:
-    """The per-side block is the source of truth for a handicap.
+    """Two separate things, and they are easy to confuse.
 
-    When it was missing the code fell back to the scalar `spread`, which is
-    unsigned with respect to a side, and inferred the sign from position -
-    getting it exactly backwards. It recorded the favourite as the
-    underdog, and nothing about that is visible afterwards: an inverted
-    line is a perfectly plausible number.
+    WHAT IS STORED is home-relative: both rows of a book carry the home
+    team's number, matching `_write_quote` on the Odds API path. Storing
+    the away row away-relative would have put two opposite conventions in
+    one column, and a consensus drawing on both sources would have averaged
+    a line against its own mirror.
 
-    The same shape as the consensus median bug, one layer earlier. That one
-    was caught because a spread of zero looked odd; this one would not have
-    looked odd at all.
+    WHAT THE SIGN IS DERIVED FROM is the per-side block, or failing that
+    the provider's explicit favourite/underdog flags. The old fallback took
+    the unsigned scalar `spread` and inferred the sign from position,
+    getting it backwards - recording the favourite as the underdog, which
+    is invisible afterwards because an inverted line is a plausible line.
+
+    Every expectation below is therefore HOME == AWAY, and the sign is the
+    home team's.
     """
 
     HOME_DOG: ClassVar[dict] = {
@@ -216,14 +221,14 @@ class TestTheSpreadSignIsNeverInferredFromPosition:
         odds = {**self.HOME_DOG, "pointSpread": {
             "home": {"close": {"line": "+1.5", "odds": "-115"}},
             "away": {"close": {"line": "-1.5", "odds": "-105"}}}}
-        assert self._spreads(odds) == {"HOME": 1.5, "AWAY": -1.5}
+        assert self._spreads(odds) == {"HOME": 1.5, "AWAY": 1.5}
 
     def test_a_missing_line_takes_its_sign_from_the_favourite_flag(self) -> None:
-        """The bug returned HOME -1.5 / AWAY +1.5 here - inverted."""
+        """The bug derived the home sign as -1.5 here, inverted."""
         odds = {**self.HOME_DOG, "pointSpread": {
             "home": {"close": {"odds": "-115"}},
             "away": {"close": {"odds": "-105"}}}}
-        assert self._spreads(odds) == {"HOME": 1.5, "AWAY": -1.5}
+        assert self._spreads(odds) == {"HOME": 1.5, "AWAY": 1.5}
 
     def test_a_home_favourite_gets_the_negative_number(self) -> None:
         odds = {
@@ -234,7 +239,7 @@ class TestTheSpreadSignIsNeverInferredFromPosition:
             "pointSpread": {"home": {"close": {"odds": "-110"}},
                             "away": {"close": {"odds": "-110"}}},
         }
-        assert self._spreads(odds) == {"HOME": -3.0, "AWAY": 3.0}
+        assert self._spreads(odds) == {"HOME": -3.0, "AWAY": -3.0}
 
     def test_one_side_stating_it_is_enough(self) -> None:
         """Only the away block is populated; the home sign follows."""
@@ -245,7 +250,7 @@ class TestTheSpreadSignIsNeverInferredFromPosition:
             "pointSpread": {"home": {"close": {"odds": "-110"}},
                             "away": {"close": {"odds": "-110"}}},
         }
-        assert self._spreads(odds) == {"HOME": 2.5, "AWAY": -2.5}
+        assert self._spreads(odds) == {"HOME": 2.5, "AWAY": 2.5}
 
     def test_nothing_is_emitted_when_the_sign_is_unknowable(self) -> None:
         """No line and no flags. A guess here is a coin flip recorded as a
