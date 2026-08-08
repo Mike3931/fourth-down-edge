@@ -50,6 +50,30 @@ SOURCE_VERSION = "espn-public-scoreboard-v1"
 # ESPN season types. 1 = preseason, 2 = regular, 3 = postseason.
 _SEASON_TYPE = {1: "PRE", 2: "REG", 3: "POST"}
 
+# ESPN status -> the schedule vocabulary, which is deliberately narrow:
+# SCHEDULED / POSTPONED / CANCELLED / UNRESOLVED.
+#
+# FINAL is absent on purpose. In this system FINAL means "a result has been
+# recorded", and the score lives in that observation's change summary. A
+# schedule capture that stamped FINAL created an observation claiming the
+# game had finished while carrying no score, so the real score arriving
+# afterwards was rejected as a correction to a final that already existed.
+# The guard was right; the status was the lie. `ingest_result` promotes the
+# game to FINAL, with the score, and nothing else may.
+#
+# An unrecognised status maps to UNRESOLVED rather than SCHEDULED, because
+# the safe default is "we do not know" rather than "it has not happened".
+_GAME_STATUS = {
+    "STATUS_SCHEDULED": "SCHEDULED",
+    "STATUS_IN_PROGRESS": "SCHEDULED",
+    "STATUS_HALFTIME": "SCHEDULED",
+    "STATUS_END_PERIOD": "SCHEDULED",
+    "STATUS_FINAL": "SCHEDULED",
+    "STATUS_POSTPONED": "POSTPONED",
+    "STATUS_CANCELED": "CANCELLED",
+    "STATUS_SUSPENDED": "POSTPONED",
+}
+
 
 def _american_to_decimal(american: int) -> float:
     return 1.0 + (american / 100.0 if american > 0 else 100.0 / abs(american))
@@ -157,6 +181,13 @@ def discover(payload: dict[str, Any]) -> list[dict[str, Any]]:
             "venue": (comp.get("venue") or {}).get("fullName"),
             "neutral_site": bool(comp.get("neutralSite")),
             "status": (comp.get("status") or {}).get("type", {}).get("name"),
+            "completed": bool((comp.get("status") or {}).get("type", {}).get("completed")),
+            "scores": {
+                c.get("homeAway"): (
+                    int(c["score"]) if str(c.get("score", "")).strip().isdigit() else None
+                )
+                for c in comp.get("competitors", [])
+            },
             "books": sorted({q["sportsbook"] for q in quotes}),
             "quotes": quotes,
         })
@@ -171,7 +202,7 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
     from fde_api.db.forward_models import OddsQuote, ScheduleObservation
 
     counts = {"games_created": 0, "games_existing": 0, "quotes_written": 0,
-              "quotes_duplicate": 0}
+              "quotes_duplicate": 0, "results_recorded": 0, "results_refused": 0}
     now = datetime.now(UTC)
     factory = sessionmaker(bind=get_engine(), future=True)
 
@@ -200,7 +231,7 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                     stadium_name=g["venue"],
                     neutral_site=g["neutral_site"],
                     international=False,
-                    game_status="SCHEDULED",
+                    game_status=_GAME_STATUS.get(g["status"] or "", "UNRESOLVED"),
                     # Over the fields that define the fixture, so a later
                     # observation of the same game can be compared rather
                     # than blindly appended.
@@ -219,8 +250,14 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                 counts["games_existing"] += 1
 
             for q in g["quotes"]:
-                raw = json.dumps({**q, "game": g["canonical_game_id"],
-                                  "observed": now.isoformat()}, sort_keys=True)
+                # The capture instant is deliberately NOT in the hash. It
+                # used to be, so two runs over an unchanged market produced
+                # different hashes, the duplicate check never matched, and
+                # every re-run appended a full set of rows - inventing price
+                # movement that never happened and growing without bound.
+                # Identity here is the price itself: book, market, side,
+                # line, odds, for this game.
+                raw = json.dumps({**q, "game": g["canonical_game_id"]}, sort_keys=True)
                 raw_hash = hashlib.sha256(raw.encode()).hexdigest()
                 if session.scalars(
                     select(OddsQuote).where(OddsQuote.raw_hash == raw_hash).limit(1)
@@ -249,6 +286,44 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                     raw_hash=raw_hash,
                 ))
                 counts["quotes_written"] += 1
+        session.commit()
+
+    # Results go through the governed path, not a direct write. It refuses
+    # a score for a game it believes was never played and returns a typed
+    # disposition rather than leaving the caller to infer what happened.
+    # Discarding a final score that the provider had already handed us was
+    # simply losing data the system has a place for.
+    from fde_api.forward.modes import DataMode
+    from fde_api.forward.results import (
+        ResultIngestionError,
+        ResultObservation,
+        ingest_result,
+    )
+
+    with factory() as session:
+        for g in games:
+            if not g.get("completed"):
+                continue
+            home, away = g["scores"].get("home"), g["scores"].get("away")
+            if home is None or away is None:
+                continue
+            try:
+                _obs, disposition = ingest_result(
+                    session,
+                    ResultObservation(
+                        canonical_game_id=g["canonical_game_id"],
+                        home_score=home, away_score=away,
+                        observed_at=now, provider=PROVIDER,
+                    ),
+                    data_mode=DataMode(data_mode_value),
+                )
+                counts["results_recorded"] += 1 if disposition in (
+                    "recorded", "corrected") else 0
+            except ResultIngestionError:
+                # Refusal is a legitimate outcome, not a crash: the guard
+                # exists so a score is never attached to a game the record
+                # says was not played.
+                counts["results_refused"] += 1
         session.commit()
     return counts
 
@@ -289,7 +364,9 @@ def main() -> int:
     counts = persist(games, data_mode_value=args.data_mode)
     print(f"  games created {counts['games_created']}  existing {counts['games_existing']}")
     print(f"  quotes written {counts['quotes_written']}  "
-          f"duplicate {counts['quotes_duplicate']}\n")
+          f"duplicate {counts['quotes_duplicate']}")
+    print(f"  results recorded {counts['results_recorded']}  "
+          f"refused {counts['results_refused']}\n")
     return 0
 
 

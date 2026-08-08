@@ -231,6 +231,28 @@ def _fail(
 
 
 
+# Which providers can substantiate a LIVE claim, and under what condition.
+#
+# `the-odds-api` is credential-gated, so its records are only live when the
+# service itself is live. `espn` needs no credential: it either answered or
+# it did not, so a live claim from it stands on its own. Anything absent
+# from this table cannot substantiate LIVE - fail-closed, because the check
+# exists to catch fixture data wearing a live label.
+_LIVE_CAPABLE_PROVIDERS: dict[str, str] = {
+    "the-odds-api": "requires the service to be in LIVE provider mode",
+    "espn": "public endpoint, no credential; liveness is unconditional",
+}
+
+
+def _can_be_live(provider: str | None, provider_mode: ProviderMode) -> bool:
+    rule = _LIVE_CAPABLE_PROVIDERS.get((provider or "").strip())
+    if rule is None:
+        return False
+    if provider == "the-odds-api":
+        return provider_mode is ProviderMode.LIVE
+    return True
+
+
 def _provenance_checks(
     session: Session, *, provider_mode: ProviderMode,
     data_mode: DataMode, now: datetime,
@@ -259,22 +281,49 @@ def _provenance_checks(
         for mode, count in rows:
             combined[mode] = combined.get(mode, 0) + count
 
-    # 1. Live claims while the service is not on a live provider.
-    live_rows = combined.get(ProviderMode.LIVE.value, 0)
-    if provider_mode is not ProviderMode.LIVE and live_rows:
+    # LIVE claims, grouped by the provider that made them.
+    #
+    # The service's `provider_mode` describes ONE provider - the one gated
+    # by FDE_ODDS_API_KEY. Asking "is the service live?" of every record
+    # means a second, genuinely live source is reported as a governance
+    # breach for telling the truth. The question worth asking is whether
+    # THIS record's provider could have supplied live data at all.
+    live_by_provider: dict[str, int] = {
+        str(provider): int(count)
+        for provider, count in session.execute(
+            select(OddsQuote.provider, func.count(OddsQuote.id))
+            .where(OddsQuote.provider_mode == ProviderMode.LIVE.value)
+            .group_by(OddsQuote.provider)
+        ).all()
+    }
+
+    # 1. Live claims the producing provider could not have substantiated.
+    #
+    # Unsubstantiated is the DEFAULT for an unrecognised provider, not the
+    # exception: this check exists to catch a fixture payload stored as
+    # live market data, and a new source must be admitted deliberately
+    # rather than by being unknown to the registry.
+    unsubstantiated = {
+        provider: count
+        for provider, count in live_by_provider.items()
+        if not _can_be_live(provider, provider_mode)
+    }
+    if unsubstantiated:
+        total = sum(unsubstantiated.values())
         checks.append(_fail(
             "provenance_live_claim_without_live_provider", Severity.CRITICAL,
-            f"{live_rows} record(s) claim LIVE provenance while the service "
-            f"is running in {provider_mode.value} mode",
+            f"{total} record(s) claim LIVE provenance their provider could not "
+            f"have supplied: {unsubstantiated} (service mode {provider_mode.value})",
             "investigate before reporting any result; a fixture payload may "
             "have been captured as live market data", now,
-            detail={"counts": combined},
+            detail={"counts": combined, "unsubstantiated": unsubstantiated,
+                    "live_by_provider": live_by_provider},
         ))
     else:
         checks.append(_ok(
             "provenance_live_claim_without_live_provider", Severity.CRITICAL,
-            "no record claims live provenance the service could not have obtained", now,
-        ))
+            "every live claim is backed by a provider that could have supplied it",
+            now, detail={"live_by_provider": live_by_provider}))
 
     # 2. Records with no recorded provenance.
     unknown = combined.get(ProviderMode.UNKNOWN_LEGACY.value, 0)
