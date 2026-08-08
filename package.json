@@ -14,7 +14,8 @@
     "test": "npm run test -w @fde/calculations && npm run test -w @fde/api-client",
     "test:db": "node supabase/test/validate-migrations.mjs",
     "test:e2e": "npm run build -w @fde/web && playwright test",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "audit:bundle": "node scripts/audit-bundle-secrets.mjs"
   },
   "engines": {
     "node": ">=20"

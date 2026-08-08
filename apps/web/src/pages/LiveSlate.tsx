@@ -19,7 +19,6 @@ import { useQuery } from '@tanstack/react-query';
 // failure surfaces as a bare "Failed to fetch" that looks like the engine
 // is down when it is answering perfectly well on curl.
 const API_BASE = (import.meta.env.VITE_FDE_API_URL as string | undefined) ?? '/research-api';
-const API_TOKEN = import.meta.env.VITE_FDE_API_TOKEN as string | undefined;
 
 interface Quote {
   sportsbook: string;
@@ -65,9 +64,9 @@ interface LiveResponse {
 }
 
 async function fetchLive(): Promise<LiveResponse> {
-  const res = await fetch(`${API_BASE}/v1/forward/live`, {
-    headers: API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {},
-  });
+  // No credential here: a VITE_-prefixed variable would be inlined into
+  // the shipped bundle. The dev proxy adds the header server-side.
+  const res = await fetch(`${API_BASE}/v1/forward/live`);
   if (!res.ok) {
     throw new Error(`Engine returned ${res.status} ${res.statusText}`);
   }

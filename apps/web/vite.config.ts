@@ -33,6 +33,16 @@ export default defineConfig({
         target: process.env.FDE_RESEARCH_API ?? 'http://127.0.0.1:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/research-api/, ''),
+        // The bearer token is attached HERE, in the dev server, from a
+        // variable with no VITE_ prefix. Vite inlines VITE_-prefixed
+        // variables into the client bundle as string literals, so reading
+        // the token in browser code published it to every visitor.
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            const token = process.env.FDE_API_TOKEN;
+            if (token) proxyReq.setHeader('authorization', `Bearer ${token}`);
+          });
+        },
       },
     },
   },

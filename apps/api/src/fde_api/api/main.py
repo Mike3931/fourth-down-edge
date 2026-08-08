@@ -392,8 +392,8 @@ def get_model_comparison() -> schemas.ModelComparisonResponse:
 def get_forward_live(data_mode: str = "LIVE_RESEARCH", hours: int = 72) -> dict[str, Any]:
     from datetime import timedelta
 
-    from fde_api.db.forward_models import OddsQuote, ScheduleObservation
-    from fde_api.forward.consensus import build_consensus
+    from fde_api.db.forward_models import ConsensusSnapshot, OddsQuote, ScheduleObservation
+    from fde_api.forward.consensus import select_eligible_quotes
     from fde_api.forward.modes import DataMode
 
     now = utc_now()
@@ -428,10 +428,31 @@ def get_forward_live(data_mode: str = "LIVE_RESEARCH", hours: int = 72) -> dict[
             )
             markets: dict[str, Any] = {}
             for market in ("SPREAD", "TOTAL", "MONEYLINE"):
-                snap, report = build_consensus(
-                    s, canonical_game_id=gid, market=market, as_of_at=now,
-                    kickoff_utc=o.kickoff_utc, data_mode=mode,
+                # READ the consensus the scheduler captured. Calling
+                # build_consensus here would PERSIST one on every request:
+                # it upserts, `as_of_at` is the wall clock, so each call
+                # creates a new logical identity. A page polling every 60
+                # seconds across the slate would have manufactured
+                # consensus records that no scheduled job produced, dated
+                # to whenever someone happened to have the tab open - and
+                # they would have entered the forward-test record as if
+                # they were captures.
+                snap = s.scalars(
+                    select(ConsensusSnapshot).where(
+                        ConsensusSnapshot.canonical_game_id == gid,
+                        ConsensusSnapshot.market == market,
+                        ConsensusSnapshot.data_mode == mode.value,
+                    ).order_by(ConsensusSnapshot.observed_at.desc()).limit(1)
+                ).first()
+
+                market_quotes = [q for q in quotes if q.market == market]
+                # Pure: filters a list and reports counts, writes nothing.
+                eligible, report = select_eligible_quotes(
+                    market_quotes, as_of_at=now, max_age_minutes=60,
+                    kickoff_utc=o.kickoff_utc,
                 )
+                books = sorted({q.sportsbook for q in eligible})
+
                 markets[market] = {
                     "consensus": None if snap is None else {
                         "median_line": snap.median_line,
@@ -443,8 +464,15 @@ def get_forward_live(data_mode: str = "LIVE_RESEARCH", hours: int = 72) -> dict[
                         "observed_at": snap.observed_at.isoformat(),
                         "method_version": snap.method_version,
                     },
-                    # The verdict is the payload, not an error path.
-                    "reasons": list(report.reasons),
+                    # Why there is no consensus, computed without creating
+                    # one. The count of eligible BOOKS is the binding
+                    # constraint, not the count of quotes.
+                    "reasons": (
+                        [] if snap is not None
+                        else [f"no consensus captured yet; {len(books)} eligible "
+                              f"book(s) in the current window, minimum is 3"]
+                    ),
+                    "eligible_books_now": len(books),
                     "eligible": report.eligible,
                     "considered": report.considered,
                 }
@@ -484,10 +512,11 @@ def get_forward_live(data_mode: str = "LIVE_RESEARCH", hours: int = 72) -> dict[
         "games": games,
         "research_banner": RESEARCH_BANNER,
         "not_a_claim": (
-            "Captured market data and the consensus builder's own verdict. "
-            "No model probability, edge, or recommendation is included or "
-            "implied. Nothing here is a claim about profitability or "
-            "readiness for real money."
+            "Captured market data and the consensus the scheduler recorded. "
+            "This endpoint reads; it never builds a consensus. No model "
+            "probability, edge, or recommendation is included or implied. "
+            "Nothing here is a claim about profitability or readiness for "
+            "real money."
         ),
     }
 

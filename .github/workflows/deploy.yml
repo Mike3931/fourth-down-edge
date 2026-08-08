@@ -42,6 +42,13 @@ jobs:
       - name: Typecheck & build
         run: npm run build
 
+      # Vite inlines every VITE_-prefixed variable into client JavaScript.
+      # Reading a bearer token in browser code published it to every
+      # visitor; this builds with canary credentials injected and greps the
+      # output for them.
+      - name: Bundle secret audit
+        run: npm run audit:bundle
+
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
 

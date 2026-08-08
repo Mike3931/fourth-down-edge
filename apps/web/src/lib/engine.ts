@@ -15,12 +15,15 @@ import { useQuery } from '@tanstack/react-query';
 // "Failed to fetch" that looks like the engine is down when it is fine.
 export const ENGINE_BASE =
   (import.meta.env.VITE_FDE_API_URL as string | undefined) ?? '/research-api';
-const TOKEN = import.meta.env.VITE_FDE_API_TOKEN as string | undefined;
-
+// No credential is read here, deliberately.
+//
+// Vite inlines every VITE_-prefixed variable into the shipped bundle as a
+// string literal. A `VITE_FDE_API_TOKEN` therefore published the engine's
+// bearer token to anyone who loaded the page - verified by building with
+// one set and grepping the output. The dev proxy attaches the header
+// server-side instead, from a variable Vite never sees.
 export async function engineGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${ENGINE_BASE}${path}`, {
-    headers: TOKEN ? { Authorization: `Bearer ${TOKEN}` } : {},
-  });
+  const res = await fetch(`${ENGINE_BASE}${path}`);
   if (!res.ok) throw new Error(`Engine returned ${res.status} ${res.statusText}`);
   return (await res.json()) as T;
 }
