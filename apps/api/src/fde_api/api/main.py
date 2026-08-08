@@ -17,7 +17,10 @@ import os
 import secrets
 import threading
 import uuid
-from typing import Annotated, Any, Literal, cast
+from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
+
+if TYPE_CHECKING:
+    from fde_api.forward.consensus import EligibilityReport
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -388,6 +391,44 @@ def get_model_comparison() -> schemas.ModelComparisonResponse:
 # rendering an empty slot as a number is how a screen starts lying.
 
 
+def _no_consensus_reasons(eligible_books: int, report: EligibilityReport) -> list[str]:
+    """Why no consensus exists, said so a person can act on it.
+
+    The screen showed "0 eligible book(s), minimum is 3" directly above a
+    table headed "Captured quotes (6 from draftkings)". Both true, and
+    together they read as a bug: six quotes are plainly present and the
+    line above insists there are none. What is missing is the word
+    BETWEEN them - the quotes exist and were EXCLUDED, for a reason the
+    eligibility filter already computed and the endpoint then discarded.
+
+    This adds no judgement and no new computation. It reports counters
+    that were already there, and it never implies a consensus that does
+    not exist: the first line still states the binding constraint.
+    """
+    reasons = [
+        f"no consensus captured yet; {eligible_books} eligible "
+        f"book(s) in the current window, minimum is 3"
+    ]
+    if report.considered == 0:
+        reasons.append("no quotes have been captured for this market at all")
+        return reasons
+    # Ordered most-likely-actionable first. Each is stated only when it
+    # actually accounts for something, so the list never pads.
+    excluded = [
+        (report.rejected_stale, "older than the freshness window, or newer than the cutoff"),
+        (report.rejected_live, "observed after kickoff, so in-play"),
+        (report.rejected_unknown_book, "from a book that is not on the recognised list"),
+        (report.rejected_invalid, "carrying an implausible price or line"),
+        (report.rejected_duplicate, "superseded by a newer quote from the same book"),
+    ]
+    parts = [f"{n} {why}" for n, why in excluded if n]
+    if parts:
+        reasons.append(
+            f"{report.considered} quote(s) were considered and excluded: " + "; ".join(parts)
+        )
+    return reasons
+
+
 @app.get("/v1/forward/live", dependencies=[Auth])
 def get_forward_live(
     data_mode: str = "LIVE_RESEARCH", hours: int = 72, lookback_hours: int = 72
@@ -483,8 +524,7 @@ def get_forward_live(
                     # constraint, not the count of quotes.
                     "reasons": (
                         [] if snap is not None
-                        else [f"no consensus captured yet; {len(books)} eligible "
-                              f"book(s) in the current window, minimum is 3"]
+                        else _no_consensus_reasons(len(books), report)
                     ),
                     "eligible_books_now": len(books),
                     "eligible": report.eligible,

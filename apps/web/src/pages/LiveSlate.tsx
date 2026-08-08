@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { describeConsensus, describeQuote } from '@fde/calculations';
+import EngineDown from '../components/EngineDown';
 import { fmtAgoLive, fmtInstant } from '../lib/format';
 
 /**
@@ -108,23 +109,14 @@ export default function LiveSlate() {
   if (error) {
     // Never silently fall back to demo content: a page that quietly swaps
     // real data for generated data is worse than a page that is down.
+    // This used to be a hand-rolled copy of EngineDown, which meant the
+    // other three live screens and this one drifted independently.
     return (
-      <div className="p-6">
-        <h1 className="text-xl font-semibold text-fg">Live Slate</h1>
-        <div className="mt-4 rounded border border-danger/40 bg-danger/10 p-4 text-sm">
-          <p className="font-medium text-danger">The analytical engine is not reachable.</p>
-          <p className="mt-2 text-muted">{(error as Error).message}</p>
-          <p className="mt-3 text-muted">
-            Expected at <code>{API_BASE}</code>. Start it with:
-          </p>
-          <pre className="mt-2 overflow-x-auto rounded bg-bg p-2 text-xs">
-            cd apps/api &amp;&amp; FDE_ALLOW_UNAUTHENTICATED=1 uvicorn fde_api.api.main:app --port 8000
-          </pre>
-          <p className="mt-3 text-muted">
-            No demonstration data is shown here. This screen is empty rather than misleading.
-          </p>
-        </div>
-      </div>
+      <EngineDown
+        title="Live Slate"
+        message={(error as Error).message}
+        expectedAt={API_BASE}
+      />
     );
   }
 
