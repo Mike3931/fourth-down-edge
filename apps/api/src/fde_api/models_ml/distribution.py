@@ -6,11 +6,18 @@ outcomes* by unit-width bins:
 
     P(M = k) = Φ((k+0.5−μ)/σ) − Φ((k−0.5−μ)/σ)
 
-Everything downstream — win, cover, over, push probabilities and the
-80% interval — is computed from that one discrete distribution, so
+Every PROBABILITY downstream — win, cover, over, push — is computed from
+that one discrete distribution and normalized by its retained mass, so
 moneyline/spread/total probabilities cannot disagree with each other,
 pushes have real mass on integer lines, and a more favorable line can
 never produce a lower cover probability (verified property-based).
+
+The 80% interval is the exception and is stated separately because it is
+not derived from the pmf at all: it is the continuous Normal quantile,
+mu ± 1.2816·sigma, reported unrounded. At sigma 13.5 that puts the
+margin p10 at −15.30 where the discrete pmf puts it at −15 — close, but
+they are two different objects, and the earlier wording claimed one
+source for both.
 
 Documented limitations: independence of margin and total is an
 approximation; ties are folded into the margin distribution's zero bin
@@ -66,10 +73,27 @@ class GameDistribution:
     # -- derived probabilities ------------------------------------------ #
 
     def home_win_prob(self) -> float:
+        # Normalised by the retained mass, exactly as `spread_probs` and
+        # `total_probs` are. The pmf is truncated to +/-_RANGE, so at large
+        # sigma it sums to less than one, and a bare sum silently reports
+        # the missing tail as neither a win nor a loss. Two of the three
+        # methods divided by the mass and this one did not, which made the
+        # module's own guarantee - that win, cover and total probabilities
+        # cannot disagree - false: against `spread_probs(0)` this drifted
+        # 2.3 points at sigma 50 and 10.6 at sigma 80.
+        #
+        # No model in the registry emits a sigma near those (fitted margin
+        # sigma runs 12-14, and the hardcoded fallback is 13.5), so nothing
+        # shipped was wrong. But the invariant is documented without a
+        # stated range, nothing enforces one, and the divergence is silent
+        # where it does bite.
         pmf = self.margin_pmf()
+        mass = sum(pmf.values())
+        if mass <= 0:
+            return 0.5
         win = sum(p for k, p in pmf.items() if k > 0)
         tie = pmf.get(0, 0.0)
-        return min(1.0, max(0.0, win + 0.5 * tie))
+        return min(1.0, max(0.0, (win + 0.5 * tie) / mass))
 
     def spread_probs(self, home_line: float) -> tuple[float, float, float]:
         """(cover, push, lose) for the HOME side at `home_line`

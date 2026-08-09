@@ -255,6 +255,55 @@ game and both values, rather than being resolved by picking, averaging,
 or taking the newest — two conflicting observations of one closing market
 are a data question, not a modelling one.
 
+**One probability was not normalized like the other two.** `distribution.py`
+promises that moneyline, spread and total probabilities "cannot disagree
+with each other" — the reason no model can publish a moneyline
+contradicting its own spread. `spread_probs` and `total_probs` divided by
+the retained mass of the pmf, which is truncated to ±100; `home_win_prob`
+summed the same pmf and did not. Asked the same question two ways —
+`home_win_prob()` against `spread_probs(0) → cover + 0.5·push` — the
+answers agree to 1e-14 at the sigma the fitted models produce (12–14,
+fallback 13.5) but drift **2.3 points at sigma 50 and 10.6 at sigma 80**,
+both remaining entirely plausible probabilities.
+
+Nothing shipped was wrong, because no registered model emits a sigma in
+that range. The defect was that the invariant was documented with no
+stated range, nothing enforced one, and the failure is silent where it
+bites. `home_win_prob` now normalizes. The docstring also claimed the 80%
+interval came from the discrete pmf; it does not — it is the continuous
+Normal quantile, and that is now stated rather than glossed.
+
+### Recommended next, not built here
+
+**The Model Audit noise band is a rule of thumb presented as a
+threshold.** The screen decides "indistinguishable from the market" by
+comparing a Brier difference against `1.96 × 0.25 / √n` — a standing
+assumption about per-game Brier spread, computed from nothing in the
+data. It is wide in the wrong-but-safe direction: 0.25 is the spread of
+Brier *levels*, whereas the band judges a *difference* between two models
+scored on the same games, which is far less variable because the two are
+highly correlated. So real differences get called noise; at n=285 the
+band is 0.029, and `glm-ridge-v1` at +0.01182 is reported as
+indistinguishable on that basis.
+
+The engine already has the right tool and already uses it for log loss:
+`week_block_bootstrap` resamples whole weeks, which is what the
+within-week correlation requires. It is not applied to Brier, and no
+paired model-versus-benchmark CI is stored — `ModelEvaluation.metrics`
+carries `log_loss_ci90` but no `brier_ci90`.
+
+The correct version bootstraps the *per-game paired difference* between
+each model and the benchmark over week blocks, stores it alongside the
+other metrics, and lets the screen use a measured interval instead of a
+constant. That is additive rather than destructive, but it changes
+displayed verdicts and would need the evaluation artifacts regenerated to
+take effect, so it belongs with the walk-forward regeneration decision
+above rather than ahead of it.
+
+The screen now states plainly that the threshold is a heuristic and which
+way it errs, so nothing currently overstates. That is a correction of the
+claim, not of the statistic.
+
 ### Noted, not changed
 
 `MarketResidual.fit` estimates `sigma_margin` from residuals of the rows

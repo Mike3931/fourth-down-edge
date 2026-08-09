@@ -127,9 +127,24 @@ export default function ModelAuditLive() {
           <section key={scope} className="rounded border border-border">
             <div className="border-b border-border p-3">
               <h2 className="text-base font-medium text-fg">{scope}</h2>
+              {/* Says what this number IS. It reads as a measured noise
+                  threshold and it is not one: it is 1.96·0.25/√n, a
+                  standing assumption about per-game Brier spread, not
+                  anything computed from these games. It is also wide on
+                  purpose — 0.25 is the spread of Brier LEVELS, while this
+                  band judges a DIFFERENCE between two models scored on
+                  the same games, which is far less variable. So it errs
+                  toward calling a real difference indistinguishable, and
+                  a reader deciding what to trust should know that is the
+                  direction it errs in. */}
               <p className="mt-0.5 text-xs text-muted">
                 {n} games · lower Brier is better · differences smaller than ±{band.toFixed(5)}{' '}
-                cannot be told from noise at this sample size
+                are treated as indistinguishable
+              </p>
+              <p className="mt-0.5 text-xs text-muted">
+                That threshold is a deliberately wide rule of thumb
+                (1.96&nbsp;×&nbsp;0.25&nbsp;÷&nbsp;√{n}), not a confidence interval measured
+                from these games. It errs toward calling a difference noise.
               </p>
               {inconsistent.length > 0 && (
                 <p className="mt-1 text-xs text-warning">
