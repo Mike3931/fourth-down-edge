@@ -176,3 +176,89 @@ This does not resolve the product question above; it only converts the
 current behaviour from convention into construction. Whichever way that
 question is decided, it should be decided by changing this guard
 deliberately.
+
+## Model-layer audit (2026-08-09)
+
+A read of `models_ml/`, `features/`, `calibration.py`, and `backtest/`
+looking for the class of error that had already cost a day elsewhere in
+the codebase: a convention held only in the author's head, or a number
+verified against a fixture that encoded the answer it was checking.
+
+### Verified sound
+
+**The spread sign convention, against outcomes rather than a fixture.**
+`MarketResidual.predict` computes `mu_margin = -market.home_line`, so an
+inverted convention here would flip every prediction while remaining
+entirely plausible on screen. Checked against 4,454 real games with both
+a closing spread and a result: mean of `margin + home_line` is **-0.011**
+(inverted would be +3.45), correlation of `-home_line` with actual home
+margin is **+0.45**, and the largest home favourites at -22 won by ~25.
+The convention holds and the market is close to unbiased.
+
+**Three separate layers agree on it.** `OddsSnapshot.line`, the quotes
+the engine captures, and everything in `backtest/execution.py` are all
+home-relative. `settle` scores HOME as `margin + line` and AWAY as its
+exact negation; `_worsen_line` moves the home line by -0.5 for HOME and
++0.5 for AWAY; `simulate_bets` passes `ref.home_line` for both sides.
+Consistent throughout. (`Recommendation.line` in the TypeScript layer is
+the one *selection*-relative field; that boundary is documented in
+`packages/shared-types` and pinned by
+`packages/api-client/tests/spread-convention.test.ts`.)
+
+**Walk-forward split discipline.** Feature half-life, ridge alpha,
+ratings k, calibration method, and the edge threshold are all selected on
+season N-1 and the fold is tested once on season N. Nothing selects on
+test.
+
+**Point-in-time discipline in the feature layer.** Every accessor in
+`LeagueHistory` filters on `observed_at` — the result-availability
+instant, not kickoff — and excludes the game being predicted.
+`_decayed` raises `LookaheadError` on a negative age rather than
+weighting a future game at less than one. Rows are sorted by kickoff at
+load, so "the most recent prior game" really is that.
+
+### Corrected
+
+**Calibration was selected in-sample.** Each candidate was fitted on the
+validation sample and then scored on that same sample, which does not
+compare calibrators — it ranks them by parameter count. `none` has none,
+platt two, beta three, isotonic ~100 knots. On perfectly-calibrated input
+the identity method could essentially never win, and on separable input
+platt scored a log loss of exactly 0.0 and was reported as the best
+available. Measured on held-out data the ordering inverted: at n=1600 the
+in-sample winner was the **worst** of four, 0.016 of log loss worse than
+leaving the probabilities untouched.
+
+Selection is now by out-of-fold log loss over a seeded 5-fold partition,
+with the winner refitted on the whole sample. Isotonic is offered only
+when every *training* fold clears `MIN_ISOTONIC_N`, not merely the full
+sample.
+
+*Consequence for the published evaluation:* the stored Phase 2 reports
+record `cal_beta_val2023` and `cal_beta_val2024` — beta, the most
+flexible method eligible at ~285 validation games. Those artifacts were
+produced under the in-sample rule and **have not been regenerated**.
+`scripts/certify_walkforward.py` reruns each recorded walk-forward from
+its own stored config and diffs, which is the way to see what the
+corrected selection changes. That is a deliberate decision to take, not a
+side effect to absorb.
+
+**The market reference could be decided by row order.** `load_market_refs`
+assigned by key, so a second `CLOSING_BENCHMARK` row for the same
+(game, market) silently overwrote the first. The database holds exactly
+two rows for every one of **6,681** (game, market) pairs — the historical
+ingest is not idempotent — and every field agrees, so last-write-wins
+happened to pick an identical value. Nothing checked that, and nothing
+would have noticed it changing; row order out of a bare `SELECT` is not
+guaranteed. Conflicts now raise `ConflictingMarketReference` naming the
+game and both values, rather than being resolved by picking, averaging,
+or taking the newest — two conflicting observations of one closing market
+are a data question, not a modelling one.
+
+### Noted, not changed
+
+`MarketResidual.fit` estimates `sigma_margin` from residuals of the rows
+it just fitted, so the stated uncertainty is optimistic. At ~1,650 fit
+rows against 12 features the understatement is under 0.5%, which does not
+justify changing a governed model; it is recorded because the direction
+of the error is toward overconfidence.

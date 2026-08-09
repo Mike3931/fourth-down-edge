@@ -1,16 +1,26 @@
 """Independent probability calibration.
 
-Candidate methods are fitted on PRIOR out-of-fold predictions only and
-selected by log loss there; the final test period never touches the
-fit. Artifacts are versioned rows (CalibrationArtifact) carrying their
-parameters, fitting window, and sample size, and every report includes
-the identity (no-calibration) comparison.
+Candidate methods are fitted on PRIOR out-of-fold model predictions only;
+the final test period never touches the fit. Artifacts are versioned rows
+(CalibrationArtifact) carrying their parameters, fitting window, and
+sample size, and every report includes the identity (no-calibration)
+comparison.
 
-Methods:
-    none      identity
-    platt     logistic recalibration on logit(p)  (2 params)
+There are two separate out-of-sample questions here and only one of them
+used to be answered. The SAMPLE is out-of-fold with respect to the model,
+which is what keeps the test season clean. But the choice AMONG
+calibrators was made in-sample on that sample - each candidate fitted on
+it and then scored on it - which ranked methods by how many parameters
+they had rather than by how well they generalised. Selection is now by
+out-of-fold log loss within the sample too; see `select_calibration`.
+
+Methods, in ascending order of flexibility - the ordering that used to
+decide the winner on its own:
+    none      identity                                        (0 params)
+    platt     logistic recalibration on logit(p)              (2 params)
     beta      Beta calibration: logistic on [ln p, −ln(1−p)]  (3 params)
-    isotonic  only offered when n >= MIN_ISOTONIC_N; stored as knots
+    isotonic  offered only when every training fold clears
+              MIN_ISOTONIC_N; stored as knots               (~100 knots)
 """
 
 from __future__ import annotations
@@ -96,21 +106,72 @@ def fit_calibration(method: str, probs: list[float], outcomes: list[int]) -> Fit
     raise ValueError(f"unknown calibration method {method}")
 
 
+SELECTION_FOLDS = 5
+SELECTION_SEED = 20260801
+
+
+def _fold_indices(n: int, k: int) -> list[np.ndarray]:
+    """A fixed, reproducible partition of 0..n-1 into k parts.
+
+    Seeded rather than random: this partition decides which calibrator is
+    written into a governed CalibrationArtifact, and a selection that
+    changes between two runs over identical inputs is not a record.
+    """
+    order = np.random.default_rng(SELECTION_SEED).permutation(n)
+    return [order[i::k] for i in range(k)]
+
+
+def _out_of_fold_score(method: str, p: list[float], y: list[int], k: int) -> float:
+    """Log loss of predictions each made by a fit that never saw them."""
+    n = len(p)
+    oof = np.zeros(n)
+    for held_out in _fold_indices(n, k):
+        mask = np.ones(n, dtype=bool)
+        mask[held_out] = False
+        train_p = [p[i] for i in range(n) if mask[i]]
+        train_y = [y[i] for i in range(n) if mask[i]]
+        fit = fit_calibration(method, train_p, train_y)
+        for i in held_out:
+            oof[i] = fit.apply(p[i])
+    return log_loss(oof.tolist(), y)
+
+
 def select_calibration(
-    probs: list[float], outcomes: list[int]
+    probs: list[float], outcomes: list[int], folds: int = SELECTION_FOLDS
 ) -> tuple[FittedCalibration, dict[str, float]]:
-    """Fit all eligible methods on the prior OOF sample; pick by log loss.
-    Returns the winner plus every candidate's score (for the report —
-    including the identity comparison)."""
+    """Choose a calibrator by OUT-OF-FOLD log loss, then refit it on all of
+    the sample. Returns the winner plus every candidate's score (for the
+    report — including the identity comparison).
+
+    The scores used to be in-sample: each candidate was fitted on `probs`
+    and then scored on `probs`. That does not compare calibrators, it ranks
+    them by flexibility, because the more parameters a method has the more
+    of its own fitting sample it can reproduce. `none` has none, platt has
+    two, beta three, isotonic a hundred knots — so isotonic won whenever it
+    was eligible, and on perfectly-calibrated input the identity method
+    never won at all. Measured on held-out data the ordering inverts: at
+    n=1600 the in-sample winner scored WORST of the four, and 0.016 of log
+    loss worse than leaving the probabilities alone.
+
+    A calibrator is the last thing standing between a model probability and
+    a stated edge, so one selected for its ability to memorise a validation
+    season is a direct route to overstated confidence.
+
+    Each candidate is now scored on predictions made by fits that never saw
+    the row being predicted. The winner is then refitted on the whole
+    sample, which is standard: cross-validation chooses the METHOD, and the
+    final artifact should still use all available data.
+    """
+    n = len(probs)
     candidates = ["none", "platt", "beta"]
-    if len(probs) >= MIN_ISOTONIC_N:
+    # Isotonic is offered only when every TRAINING fold clears the minimum,
+    # not merely the full sample. Scoring it via fits below the threshold
+    # it declares for itself would compare a method against a version of
+    # itself the module says is unfit.
+    smallest_train = n - -(-n // folds)  # n minus the largest fold
+    if n >= MIN_ISOTONIC_N and smallest_train >= MIN_ISOTONIC_N:
         candidates.append("isotonic")
-    scores: dict[str, float] = {}
-    fits: dict[str, FittedCalibration] = {}
-    for m in candidates:
-        fit = fit_calibration(m, probs, outcomes)
-        applied = [fit.apply(p) for p in probs]
-        scores[m] = log_loss(applied, outcomes)
-        fits[m] = fit
+
+    scores = {m: _out_of_fold_score(m, probs, outcomes, folds) for m in candidates}
     best = min(scores, key=lambda m: scores[m])
-    return fits[best], scores
+    return fit_calibration(best, probs, outcomes), scores

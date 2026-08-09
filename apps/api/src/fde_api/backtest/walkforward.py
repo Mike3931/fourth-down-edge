@@ -122,21 +122,80 @@ def build_or_load_features(
     return out
 
 
+class ConflictingMarketReference(ValueError):
+    """Two closing benchmarks for one game and market that disagree."""
+
+
 def load_market_refs(session: Session) -> tuple[dict[str, MarketRef], dict[str, dict[str, Any]]]:
+    """The market reference every model is measured against.
+
+    `market-benchmark-v1` IS this number and `market-residual-v1` predicts
+    a correction to it, so a wrong value here does not degrade one model,
+    it moves the yardstick and every score reported against it.
+
+    The loop below assigns by key, so where a (game, market) has more than
+    one benchmark row the last one read wins. That is currently harmless
+    and entirely invisible: the database holds exactly two rows for every
+    one of 6,681 (game, market) pairs — the historical ingest is not
+    idempotent — and all of them agree on every field, so last-write-wins
+    picks an identical value. Nothing checked that, and nothing would have
+    noticed it changing. Row order out of a bare SELECT is not guaranteed,
+    so the day two benchmarks disagree the yardstick becomes whichever the
+    database happened to hand over last.
+
+    Refusing is the right response rather than picking, averaging, or
+    taking the newest: a benchmark is an observation, and two conflicting
+    observations of one closing market are a data question, not a
+    modelling one.
+    """
     refs: dict[str, dict[str, Any]] = {}
+    seen: dict[tuple[str, str], dict[str, Any]] = {}
+    conflicts: list[str] = []
+
+    def claim(game_id: str, market: str, values: dict[str, Any]) -> bool:
+        """True when these values may be written; records a conflict if a
+        previous row for the same (game, market) said something else."""
+        key = (game_id, market)
+        prior = seen.get(key)
+        if prior is None:
+            seen[key] = values
+            return True
+        if prior != values:
+            conflicts.append(f"{game_id}/{market}: {prior} vs {values}")
+        return False
+
     for snap in session.scalars(select(OddsSnapshot).where(OddsSnapshot.snapshot_kind == "CLOSING_BENCHMARK")):
         r = refs.setdefault(snap.game_id, {})
         if snap.market == "SPREAD":
-            r["home_line"] = snap.line
-            r["spread_home_price"] = snap.home_price_american
-            r["spread_away_price"] = snap.away_price_american
+            values = {
+                "home_line": snap.line,
+                "spread_home_price": snap.home_price_american,
+                "spread_away_price": snap.away_price_american,
+            }
         elif snap.market == "TOTAL":
-            r["total_line"] = snap.line
-            r["over_price"] = snap.over_price_american
-            r["under_price"] = snap.under_price_american
+            values = {
+                "total_line": snap.line,
+                "over_price": snap.over_price_american,
+                "under_price": snap.under_price_american,
+            }
         elif snap.market == "MONEYLINE":
-            r["home_ml"] = snap.home_price_american
-            r["away_ml"] = snap.away_price_american
+            values = {
+                "home_ml": snap.home_price_american,
+                "away_ml": snap.away_price_american,
+            }
+        else:
+            continue
+        if claim(snap.game_id, snap.market, values):
+            r.update(values)
+
+    if conflicts:
+        shown = "; ".join(sorted(conflicts)[:5])
+        raise ConflictingMarketReference(
+            f"{len(conflicts)} closing benchmark(s) disagree with a duplicate "
+            f"of themselves, so the market reference would depend on row "
+            f"order: {shown}"
+        )
+
     return {
         gid: MarketRef(
             home_line=v.get("home_line"),
