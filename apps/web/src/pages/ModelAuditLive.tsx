@@ -55,6 +55,17 @@ export default function ModelAuditLive() {
     const existing = scope.get(r.model_version_id);
     if (existing) {
       if (r.metrics?.brier !== undefined) existing.briers.add(r.metrics.brier);
+      // Keep the LATEST evaluation, not the first one to arrive. The
+      // endpoint now returns these oldest-first, so a later row supersedes
+      // the one held. Previously the first row won, and since the endpoint
+      // imposed no order on the pair, WHICH number appeared was arbitrary.
+      //
+      // It matters here specifically: `team-ratings-v1` carries two
+      // evaluations per test scope, the before and after of the
+      // deterministic-ordering correction, and reports/integrity/
+      // CERTIFICATION.md records the earlier ones as superseded and not to
+      // be cited. The screen was showing 0.21589 — the superseded value.
+      existing.row = r;
     } else {
       scope.set(r.model_version_id, {
         row: r,
@@ -185,9 +196,14 @@ export default function ModelAuditLive() {
                           {briers.size > 1 && (
                             <span
                               className="ml-2 rounded bg-warning/15 px-1.5 py-0.5 text-[11px] text-warning"
-                              title={`Backtest runs disagree: ${[...briers].map((x) => x.toFixed(7)).join(' vs ')}`}
+                              title={
+                                `${briers.size} backtest runs scored this model over the same ` +
+                                `games: ${[...briers].map((x) => x.toFixed(7)).join(' vs ')}. ` +
+                                `The latest is shown. Which run supersedes which is settled in ` +
+                                `reports/integrity/CERTIFICATION.md, not by this screen.`
+                              }
                             >
-                              runs disagree
+                              {briers.size} runs · latest shown
                             </span>
                           )}
                         </td>

@@ -373,7 +373,27 @@ def get_model_comparison() -> schemas.ModelComparisonResponse:
         schemas.ModelComparisonRow(
             model_version_id=e.model_version_id, scope=e.scope, sample_size=e.sample_size, metrics=e.metrics
         )
-        for e in s.scalars(select(ModelEvaluation).order_by(ModelEvaluation.scope, ModelEvaluation.model_version_id))
+        # Ordered by `created_at` LAST so that where a model+scope has more
+        # than one evaluation, the rows arrive oldest-first and the reader
+        # gets the same one every time. Without it the pair is returned in
+        # whatever order the database chose, and the screen - which keeps
+        # the first row it sees - displayed an arbitrary member of the pair.
+        #
+        # `team-ratings-v1` has exactly that: two evaluations per test
+        # scope, the before and after of the deterministic-ordering
+        # correction. CERTIFICATION.md states the earlier numbers are
+        # SUPERSEDED and must not be cited, and the screen was showing
+        # them. This ordering does not decide which is authoritative -
+        # that is settled in the certification record, not by a timestamp -
+        # it only makes the answer stable and lets the screen say which
+        # run it is showing.
+        for e in s.scalars(
+            select(ModelEvaluation).order_by(
+                ModelEvaluation.scope,
+                ModelEvaluation.model_version_id,
+                ModelEvaluation.created_at,
+            )
+        )
     ]
     return schemas.ModelComparisonResponse(
         rows=rows, market_benchmark_id="market-benchmark-v1", research_banner=RESEARCH_BANNER

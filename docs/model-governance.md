@@ -273,6 +273,26 @@ bites. `home_win_prob` now normalizes. The docstring also claimed the 80%
 interval came from the discrete pmf; it does not — it is the continuous
 Normal quantile, and that is now stated rather than glossed.
 
+**The screen displayed a superseded metric.** `team-ratings-v1` carries
+two evaluations per test scope — the before and after of the
+deterministic-ordering correction. Both are kept, correctly: the record is
+append-only and the earlier run genuinely happened. Section 7 above states
+that the earlier numbers are **superseded and must not be cited**.
+
+The Model Audit screen was citing them. `/v1/models/comparison` ordered by
+`(scope, model_version_id)` with no tiebreak, so the pair came back in
+whatever order the query plan produced, and the screen kept the first row
+it saw. It showed `brier = 0.21589` — the superseded value — and would
+have shown either one depending on the database's mood. Found by pulling
+on the screen's own "runs disagree" badge, which flagged the condition
+without anyone having asked why.
+
+The endpoint now orders by `created_at` as well, and the screen keeps the
+latest rather than the first. That does not make either component the
+authority on which run supersedes which — this document is — it makes the
+answer stable and lets the screen say which run it is showing
+("2 runs · latest shown", with both values on hover).
+
 ### Recommended next, not built here
 
 **The Model Audit noise band is a rule of thumb presented as a
