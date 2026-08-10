@@ -47,8 +47,25 @@ const NAV = (firstGameId: string | undefined) => [
 // so the list is stated rather than inferred.
 const LIVE_ROUTES = new Set(['/live', '/slate', '/models', '/health']);
 
+// Screens that read NO dataset — neither the engine nor the demo
+// generator. Settings is the whole list: it holds paper mode, the hard
+// monthly loss budget and the bankroll caps, and it reads none of them
+// from a dataset.
+//
+// The nav already stopped filing these under "Demonstration data",
+// because saying so told the reader those controls were part of the
+// demo. The header was still stamping DEMONSTRATION DATA — NOT FOR
+// REAL-MONEY DECISIONS directly above them, which is the same claim by
+// another route. A banner about the data on screen does not belong on a
+// screen that shows no data.
+const SETUP_ROUTES = new Set(['/settings']);
+
 function isLiveRoute(pathname: string): boolean {
   return LIVE_ROUTES.has(pathname);
+}
+
+function isSetupRoute(pathname: string): boolean {
+  return SETUP_ROUTES.has(pathname);
 }
 
 export default function Shell() {
@@ -65,6 +82,9 @@ export default function Shell() {
   const overallHealth = ds ? worstFreshness(ds.feedStatuses.map((f) => f.status)) : 'MISSING';
   const bankroll = store.ledger?.bankrollBalance;
   const onLiveScreen = isLiveRoute(location.pathname);
+  const onSetupScreen = isSetupRoute(location.pathname);
+  // Demo chrome belongs only to screens that actually show demo data.
+  const onDemoScreen = !onLiveScreen && !onSetupScreen;
 
   return (
     <div className="flex min-h-screen bg-bg">
@@ -91,7 +111,11 @@ export default function Shell() {
               <NavLink
                 to={item.to}
                 end={item.to === '/'}
-                title={item.live ? `${item.label} — live engine data` : `${item.label} — demonstration data`}
+                // From the group, not from `live`. Deriving it from `live`
+                // gave Settings the tooltip "Settings — demonstration
+                // data", the same claim the heading above it had already
+                // stopped making.
+                title={`${item.label} — ${item.group.toLowerCase()}`}
                 className={({ isActive }) =>
                   cn(
                     'mx-2 my-0.5 flex items-center justify-center gap-2.5 rounded px-2.5 py-1.5 text-[13px] lg:justify-start',
@@ -131,7 +155,12 @@ export default function Shell() {
             chrome, which is the opposite of what these labels are for. */}
         <header className="sticky top-0 z-20 border-b border-edge bg-panel/95 backdrop-blur">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1 px-4 py-2">
-            {onLiveScreen ? (
+            {onSetupScreen ? (
+              <div className="text-xs text-ink-muted">
+                Your settings. These control real behaviour and are not part of
+                the demonstration data.
+              </div>
+            ) : onLiveScreen ? (
               <div className="flex items-center gap-1.5 text-xs text-ink-muted">
                 <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                 Real captured data — no generated values on this screen. Capture
@@ -161,7 +190,7 @@ export default function Shell() {
             <Pill tone={store.settings.mode === 'PAPER' ? 'accent' : 'warn'}>
               {store.settings.mode === 'PAPER' ? 'PAPER MODE' : 'REAL TRACKING MODE'}
             </Pill>
-            {!onLiveScreen && (
+            {onDemoScreen && (
               <>
                 <div className="text-xs text-ink-muted">
                   Bankroll: <Mono className="text-ink">{bankroll !== undefined ? fmtMoney(bankroll) : '—'}</Mono>
@@ -184,7 +213,7 @@ export default function Shell() {
               </button>
             </div>
           </div>
-          {!onLiveScreen && (
+          {onDemoScreen && (
             <div className="px-4 pb-2">
               <DemoBanner label={ds?.label ?? 'DEMONSTRATION DATA — NOT FOR REAL-MONEY DECISIONS'} />
             </div>

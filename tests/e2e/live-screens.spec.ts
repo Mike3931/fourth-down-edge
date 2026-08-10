@@ -56,3 +56,38 @@ test.describe('engine-backed screens', () => {
     await expect(page.getByText('Demonstration data', { exact: true })).toBeVisible();
   });
 });
+
+test.describe('screens that show no dataset at all', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /enter local demo session/i }).click();
+  });
+
+  test('Settings carries neither live nor demonstration chrome', async ({ page }) => {
+    // Settings holds paper mode, the hard monthly loss budget and the
+    // bankroll caps, and reads no dataset. The nav stopped filing it under
+    // "Demonstration data" because that told the reader those controls
+    // were part of the demo — but the header went on stamping
+    // DEMONSTRATION DATA directly above them, which is the same claim by
+    // another route.
+    await page.goto('/settings');
+
+    await expect(
+      page.getByText('DEMONSTRATION DATA — NOT FOR REAL-MONEY DECISIONS'),
+    ).toHaveCount(0);
+    await expect(page.getByText(/Real captured data/)).toHaveCount(0);
+    await expect(page.getByText(/These control real behaviour/)).toBeVisible();
+
+    // The controls it exists for are still there and still say what they are.
+    await expect(page.getByText('PAPER MODE').first()).toBeVisible();
+  });
+
+  test('the demonstration screens still carry their banner', async ({ page }) => {
+    // The guard on the fix above: quieting the banner must not have
+    // quieted it where it belongs.
+    await page.goto('/picks-demo');
+    await expect(
+      page.getByText('DEMONSTRATION DATA — NOT FOR REAL-MONEY DECISIONS').first(),
+    ).toBeVisible();
+  });
+});

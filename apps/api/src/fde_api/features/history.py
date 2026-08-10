@@ -8,6 +8,7 @@ when building features for that game.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -83,6 +84,35 @@ class LeagueHistory:
         self._team_rows: dict[str, list[TeamGameRow]] = {}
         for row in sorted(team_games, key=lambda r: r.kickoff):
             self._team_rows.setdefault(row.team, []).append(row)
+
+    def fingerprint(self) -> str:
+        """What a feature build computed FROM, as one digest.
+
+        Feature snapshots are cached on disk keyed only by feature-set
+        version, half-life and horizon — nothing about the data. That is
+        fine until the data changes: re-ingesting a game with a corrected
+        score, or adding a season, leaves the cache untouched and every
+        later run silently reads features derived from superseded rows.
+        The values stay plausible, so nothing downstream can notice.
+
+        Covers exactly the inputs a snapshot depends on: the games and
+        their results, and the per-team rows with their observation
+        instants and stats. Ordering is fixed by the constructor, so the
+        digest is stable across runs over identical data.
+        """
+        h = hashlib.sha256()
+        for g in self.games:
+            h.update(
+                f"{g.id}|{g.kickoff.isoformat()}|{g.result_observed_at}"
+                f"|{g.home_score}|{g.away_score}\n".encode()
+            )
+        for team in sorted(self._team_rows):
+            for r in self._team_rows[team]:
+                stats = ",".join(f"{k}={r.stats[k]}" for k in sorted(r.stats))
+                h.update(
+                    f"{r.game_id}|{r.team}|{r.observed_at.isoformat()}|{stats}\n".encode()
+                )
+        return h.hexdigest()
 
     @classmethod
     def load(cls, session: Session) -> LeagueHistory:

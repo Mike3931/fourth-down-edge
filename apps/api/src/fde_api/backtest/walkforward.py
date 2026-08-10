@@ -33,7 +33,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -104,21 +104,68 @@ def _feature_cache_path(half_life: float, horizon: PredictionHorizon) -> Any:
     return settings.artifacts_dir / f"features_{FEATURE_SET_VERSION}_hl{int(half_life)}_{horizon.value}.json"
 
 
+FEATURE_CACHE_FORMAT = 2
+
+
 def build_or_load_features(
     history: LeagueHistory, half_life: float, horizon: PredictionHorizon
 ) -> dict[str, dict[str, Any]]:
+    """Feature snapshots for every game, cached on disk.
+
+    The cache is keyed by feature-set version, half-life and horizon —
+    nothing about the DATA. That was silently wrong the moment the data
+    changed: re-ingesting a game with a corrected score, or adding a
+    season, left the file untouched and every later run read features
+    derived from superseded rows. The values stay entirely plausible, so
+    no downstream check could notice.
+
+    The file now carries the fingerprint of the history it was built from
+    and is rebuilt when that no longer matches. Files written by the
+    previous format have no fingerprint and are treated as stale, which
+    costs one rebuild and cannot change a result: the same data produces
+    the same features.
+    """
     path = _feature_cache_path(half_life, horizon)
+    fingerprint = history.fingerprint()
     if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
+        cached = json.loads(path.read_text(encoding="utf-8"))
+        if (
+            isinstance(cached, dict)
+            and cached.get("format") == FEATURE_CACHE_FORMAT
+            and cached.get("history_fingerprint") == fingerprint
+        ):
+            return cast(dict[str, dict[str, Any]], cached["features"])
+
     builder = CoreV1Builder(history, DecayConfig(half_life_days=half_life))
     out: dict[str, dict[str, Any]] = {}
+    skipped: list[str] = []
     for g in history.games:
         try:
             snap = builder.build(g, horizon)
         except Exception:
-            continue  # snapshot impossible → DATA_INCOMPLETE downstream
+            # A snapshot can be genuinely impossible — the first games of
+            # the earliest season have no prior history to decay. Recorded
+            # rather than merely skipped, so a build that starts dropping
+            # games leaves a trace instead of a quietly smaller dataset.
+            skipped.append(g.id)
+            continue
         out[g.id] = snap.values
-    path.write_text(json.dumps(out, default=str), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "format": FEATURE_CACHE_FORMAT,
+                "feature_set": FEATURE_SET_VERSION,
+                "half_life_days": half_life,
+                "horizon": horizon.value,
+                "history_fingerprint": fingerprint,
+                "games_covered": len(out),
+                "games_skipped": skipped,
+                "features": out,
+            },
+            default=str,
+        ),
+        encoding="utf-8",
+    )
     return out
 
 
