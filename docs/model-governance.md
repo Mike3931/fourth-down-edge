@@ -217,6 +217,19 @@ instant, not kickoff — and excludes the game being predicted.
 weighting a future game at less than one. Rows are sorted by kickoff at
 load, so "the most recent prior game" really is that.
 
+**The reported CRPS is exact.** `crps_normal` appears in every report as
+`crps_margin` and `crps_total`. Checked against numerical integration of
+the CRPS definition — ∫(F(x) − 1{x ≥ y})² dx — rather than against the
+same closed form written a second time, over nine cases including
+symmetric, far-tail and small-sigma ones: worst relative error 4.2e-16,
+i.e. exact to machine precision.
+
+**The block bootstrap is the right shape.** `week_block_bootstrap`
+resamples whole weeks with replacement, which is what within-week
+correlation requires, and takes a 90% interval from the 0.05/0.95
+quantiles. Correct — the issue is only that it is not applied to Brier
+(see below).
+
 ### Corrected
 
 **Calibration was selected in-sample.** Each candidate was fitted on the
