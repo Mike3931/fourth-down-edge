@@ -47,7 +47,7 @@ if TYPE_CHECKING:
 from fde_api.db.forward_models import ScheduledJobRun
 from fde_api.forward.cohort import Cohort, ProviderMode
 from fde_api.forward.modes import DataMode
-from fde_api.forward.recovery import bound_key, build_recovery_key
+from fde_api.forward.recovery import IDEMPOTENCY_KEY_MAX, bound_key, build_recovery_key
 from fde_api.forward.state import DomainState, Outcome, StateOrigin, apply_state
 from fde_api.util import current_code_commit, redact_secrets, utc_now
 
@@ -670,7 +670,25 @@ class Scheduler:
                             "error": last_error, "idempotency_key": key}
                 # A retry is a NEW attempt under a distinct key suffix, so the
                 # failed row is preserved as history rather than overwritten.
-                key = f"{key}#r{attempt}"
+                #
+                # Bounded, because this suffix was outside the arithmetic
+                # budget that `recovery.py` sets up. That budget caps a base
+                # key at BASE_KEY_MAX so the worst-case RECOVERY suffix still
+                # fits the VARCHAR(160) column "by construction rather than
+                # by luck" — but it never accounted for the RETRY suffix
+                # appended here, and this loop appends cumulatively. A
+                # worst-case recovery key is exactly 160 characters, so a
+                # recovery that then failed and retried produced 163, 166 and
+                # 169 — the same overflow `make_idempotency_key` was written
+                # to prevent, and with the same signature: SQLite does not
+                # enforce VARCHAR length so every local test passes, while
+                # PostgreSQL raises StringDataRightTruncation.
+                #
+                # `bound_key` keeps short keys byte-for-byte, so ordinary
+                # retries are unchanged; only a key that would overflow is
+                # rewritten, and it is rewritten to a digest of the whole
+                # input so two distinct attempts cannot collapse onto one.
+                key = bound_key(f"{key}#r{attempt}", IDEMPOTENCY_KEY_MAX)
         return {"job": job_name, "status": "dead_letter", "error": last_error}
 
     def _record_blocked_recovery(
@@ -752,8 +770,21 @@ class Scheduler:
         return results
 
     def missed_runs(self, *, lookback: timedelta) -> list[dict[str, Any]]:
-        """Slots that should have executed in the window but have no
-        terminal run recorded."""
+        """Slots in the window with NO run row at all.
+
+        Diagnostic only — nothing in the running system calls this.
+
+        Deliberately stated as "no row" rather than "no terminal run",
+        which is what this said before and did not do: a slot whose only
+        attempt failed, dead-lettered or is still running has a row, so it
+        is reported as not missed. Whether that is the right definition is
+        a question for whoever first needs this; the docstring should not
+        answer it differently from the code in the meantime.
+
+        The key is also computed without params, matching what `tick`
+        generates. A run invoked manually WITH params carries a different
+        key and would be reported here as missed.
+        """
         now = self.clock.now()
         missed: list[dict[str, Any]] = []
         with self._session() as s:

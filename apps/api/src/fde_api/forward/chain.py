@@ -403,10 +403,21 @@ def reconcile_chain(
             f"{len(dupes)} evaluation identity(ies) appear more than once")
 
     # --- governance consistency ------------------------------------------ #
-    modes = {e.data_mode for e in ledger}
-    if len(modes) > 1:
-        add("cohort_mismatch", ChainVerdict.CORRUPTED, None,
-            f"ledger rows for one game span cohorts {sorted(modes)}")
+    # A `cohort_mismatch` check used to sit here, comparing
+    # `{e.data_mode for e in ledger}` against a length of one. It could
+    # never fire: `ledger_stmt` above filters `data_mode == data_mode`
+    # unconditionally, so that set has at most one member by construction.
+    # It read as coverage of a corruption class and provided none.
+    #
+    # It is removed rather than widened. Widening means querying the game
+    # across ALL modes, and whether a game legitimately holds both DEMO and
+    # LIVE_RESEARCH ledger rows is a design question this function is not
+    # the place to settle — a game replayed in demo and then captured live
+    # would trip it on every call. Deciding that is a deliberate change to
+    # what "corrupted" means, not a repair.
+    #
+    # The policy check below is NOT vacuous: `policy_version` filters only
+    # when one is supplied, so an unscoped call genuinely spans policies.
     policies = {e.policy_version for e in ledger}
     if len(policies) > 1:
         add("policy_mismatch", ChainVerdict.CORRUPTED, None,

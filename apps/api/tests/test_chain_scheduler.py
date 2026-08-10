@@ -285,7 +285,19 @@ class TestChainReconciliation:
             ChainVerdict.MANUAL_REVIEW.value, ChainVerdict.CORRUPTED.value
         }
 
-    def test_a_cohort_mismatch_is_corrupting(self, chain: SchedulerChain) -> None:
+    def test_a_row_leaving_the_cohort_is_detected_as_a_gap(
+        self, chain: SchedulerChain
+    ) -> None:
+        """Renamed from `test_a_cohort_mismatch_is_corrupting`, which
+        promised more than it checked.
+
+        There WAS a `cohort_mismatch` finding in `reconcile_chain`, and it
+        could never fire — the ledger query filters on `data_mode`, so the
+        set it compared had at most one member by construction. This test
+        passed anyway, on the gap the moved row leaves behind, exactly as
+        the comment below always said. The dead check has been removed;
+        the behaviour this actually verifies is unchanged.
+        """
         with chain.session() as s:
             row = s.scalars(select(ForwardLedgerEntry).where(
                 ForwardLedgerEntry.canonical_game_id == GAME)).first()

@@ -360,10 +360,44 @@ def inspect_prior_effects(
     category = JOB_CATEGORIES.get(job_kind, JobCategory.OBSERVATION)
     source = _EFFECT_SOURCES.get(job_kind)
     if source is None:
+        # Three jobs are categorised in JOB_CATEGORIES but have no entry in
+        # _EFFECT_SOURCES: feature_snapshot (SNAPSHOT), closing_capture and
+        # result_ingestion (both TERMINAL). They do write domain tables —
+        # ClosingCapture and a FINAL ScheduleObservation respectively — so
+        # the old reason here, "job writes no tracked domain table", was
+        # simply false for them, and they never reached the
+        # SCOPE_REQUIRED branch that exists so a TERMINAL job refuses to
+        # guess.
+        #
+        # Replay is nonetheless safe for both TODAY, because both handlers
+        # are idempotent by construction: a ClosingCapture is immutable
+        # with a uniqueness constraint, and `ingest_result` refuses a
+        # correction to an existing final. The DECISION is right; what was
+        # wrong was the stated reason, and the fact that the safety rests
+        # on those handlers happening to be idempotent rather than on this
+        # function determining anything.
+        #
+        # Registering them would make a scheduled (paramless) recovery of
+        # either one demand a canonical_game_id and otherwise block on
+        # MANUAL_REVIEW_REQUIRED. That is what this module's stated
+        # principle implies, and it is an availability decision — it would
+        # stop recoveries that currently complete safely — so it is
+        # recorded rather than taken here.
+        untracked = job_kind not in JOB_CATEGORIES
         return EffectInspection(
             job_kind=job_kind, category=category, record_type="unknown",
             recommended_decision=ReplayDecision.NO_PRIOR_EFFECTS_REPLAY,
-            reason="job writes no tracked domain table; replay is safe",
+            reason=(
+                "job is not categorised and writes no tracked domain table; "
+                "replay is safe"
+                if untracked
+                else (
+                    f"{job_kind} is categorised {category.value} but has no registered "
+                    "effect source, so prior effects were NOT inspected; replay rests on "
+                    "the handler being idempotent, not on evidence"
+                )
+            ),
+            attribution_detail="no effect source registered for this job",
         )
 
     table = source.table

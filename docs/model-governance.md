@@ -376,6 +376,36 @@ The screen now states plainly that the threshold is a heuristic and which
 way it errs, so nothing currently overstates. That is a correction of the
 claim, not of the statistic.
 
+### Open decisions from the scheduler/chain/recovery read (2026-08-10)
+
+Two findings from the line-by-line pass are DECISIONS rather than
+defects, and are recorded rather than taken.
+
+**Two TERMINAL jobs are not effect-inspected.** `closing_capture` and
+`result_ingestion` are categorised TERMINAL in `JOB_CATEGORIES` but have
+no entry in `_EFFECT_SOURCES`, so a recovery of either returns
+`NO_PRIOR_EFFECTS_REPLAY` without inspecting anything — never reaching the
+`SCOPE_REQUIRED` branch that exists precisely so a terminal job refuses to
+guess. Replay is safe for both today because both handlers are idempotent
+by construction (an immutable `ClosingCapture` with a uniqueness
+constraint; `ingest_result` refusing a correction to an existing final),
+so the decision is right and only the stated reason was false — it has
+been corrected.
+
+Registering them would make a scheduled, paramless recovery of either
+demand a `canonical_game_id` and otherwise block on
+`MANUAL_REVIEW_REQUIRED`. That follows the module's own stated principle,
+but it would stop recoveries that currently complete safely, so it trades
+correctness-of-principle against availability. `feature_snapshot`
+(SNAPSHOT) is unregistered on the same footing but carries less risk.
+
+**`missed_runs` reports slots with no run row at all**, not slots with no
+*terminal* run, which is what its docstring claimed. A slot whose only
+attempt failed or dead-lettered reads as not missed. Nothing in the
+running system calls it — it is diagnostic only — so the docstring was
+corrected to match rather than the behaviour changed. Which definition is
+wanted is for whoever first needs the function.
+
 ### Noted, not changed
 
 `MarketResidual.fit` estimates `sigma_margin` from residuals of the rows
