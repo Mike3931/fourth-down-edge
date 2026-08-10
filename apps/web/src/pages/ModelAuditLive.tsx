@@ -1,3 +1,4 @@
+import { valuesDisagree } from '@fde/calculations';
 import { useEngineModels, useModelComparison, type ComparisonRow } from '../lib/engine';
 import EngineDown from '../components/EngineDown';
 
@@ -48,6 +49,23 @@ export default function ModelAuditLive() {
   // surfaced rather than silently resolved: two runs of the same model
   // over the same games that return different numbers is a reproducibility
   // problem, and quietly taking the last one hides it.
+  //
+  // "Different" needs a tolerance. Comparing raw floats made every model
+  // trip the warning the moment a rerun happened, because reruns differ in
+  // the last bits from summation order and from normalising `home_win_prob`
+  // — around 1e-13. The screen then announced "6 models scored differently"
+  // and offered "0.2028300 vs 0.2028300" as the evidence.
+  //
+  // That is worse than saying nothing. This badge is what surfaced a real
+  // defect earlier — the screen citing a superseded metric — and a warning
+  // that fires on every row is one nobody reads again. The threshold sits
+  // well above float noise and well below anything that could matter: the
+  // genuine `team-ratings-v1` determinism delta is 9.65e-06, six orders of
+  // magnitude above it.
+  // `valuesDisagree` lives in @fde/calculations, where the tolerance and the
+  // two cases that bracket it are pinned by tests: 2e-16 of float noise must
+  // not fire, and the real 9.65e-06 determinism delta must.
+  const runsDisagree = (briers: Set<number>): boolean => valuesDisagree(briers);
   const byScope = new Map<string, Map<string, { row: ComparisonRow; briers: Set<number> }>>();
   for (const r of rows) {
     if (!byScope.has(r.scope)) byScope.set(r.scope, new Map());
@@ -133,7 +151,7 @@ export default function ModelAuditLive() {
         const sorted = [...entries].sort(
           (a, b) => (a.row.metrics?.brier ?? 9) - (b.row.metrics?.brier ?? 9),
         );
-        const inconsistent = entries.filter((e) => e.briers.size > 1);
+        const inconsistent = entries.filter((e) => runsDisagree(e.briers));
         return (
           <section key={scope} className="rounded border border-border">
             <div className="border-b border-border p-3">
@@ -193,7 +211,7 @@ export default function ModelAuditLive() {
                               benchmark
                             </span>
                           )}
-                          {briers.size > 1 && (
+                          {runsDisagree(briers) && (
                             <span
                               className="ml-2 rounded bg-warning/15 px-1.5 py-0.5 text-[11px] text-warning"
                               title={

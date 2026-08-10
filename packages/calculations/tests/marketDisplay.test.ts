@@ -20,6 +20,7 @@ import {
   describeQuote,
   formatLine,
   lineForSelection,
+  valuesDisagree,
 } from '../src/marketDisplay';
 
 const TEAMS = { homeTeamId: 'ARI', awayTeamId: 'CAR' };
@@ -130,5 +131,56 @@ describe('describeConsensus', () => {
 
   it('renders a refused consensus as an em dash', () => {
     expect(describeConsensus('SPREAD', null, TEAMS)).toBe('—');
+  });
+});
+
+describe('valuesDisagree', () => {
+  // The real numbers from the Model Audit screen. Comparing raw floats made
+  // every model trip the reproducibility warning after a rerun, which is how
+  // "6 models scored differently" appeared with "0.2028300 vs 0.2028300"
+  // offered as the evidence.
+  const FLOAT_NOISE = [0.2028300123456789, 0.2028300123456791]; // ~2e-16 apart
+  const REAL_DELTA = [0.2158905902667402, 0.2159002395310044]; // 9.65e-06 apart
+
+  it('does not call float noise a disagreement', () => {
+    expect(valuesDisagree(FLOAT_NOISE)).toBe(false);
+  });
+
+  it('still catches the delta that mattered', () => {
+    // team-ratings-v1 before and after the determinism correction. If the
+    // tolerance ever swallows this, the warning stops being able to find
+    // the defect it was built to find.
+    expect(valuesDisagree(REAL_DELTA)).toBe(true);
+  });
+
+  it('there are six orders of magnitude between those two cases', () => {
+    const noise = Math.abs(FLOAT_NOISE[1]! - FLOAT_NOISE[0]!);
+    const real = Math.abs(REAL_DELTA[1]! - REAL_DELTA[0]!);
+    expect(real / noise).toBeGreaterThan(1e6);
+  });
+
+  it('a single run cannot disagree with itself', () => {
+    expect(valuesDisagree([0.2])).toBe(false);
+    expect(valuesDisagree([])).toBe(false);
+  });
+
+  it('identical values agree', () => {
+    expect(valuesDisagree([0.2, 0.2, 0.2])).toBe(false);
+  });
+
+  it('compares the extremes, not adjacent pairs', () => {
+    // Three runs each a hair apart but spanning a real gap must disagree.
+    expect(valuesDisagree([0.20, 0.20 + 4e-10, 0.20 + 8e-10])).toBe(false);
+    expect(valuesDisagree([0.20, 0.20 + 4e-10, 0.20 + 1e-5])).toBe(true);
+  });
+
+  it('ignores values that are not finite rather than throwing', () => {
+    expect(valuesDisagree([0.2, NaN])).toBe(false);
+    expect(valuesDisagree([0.2, Infinity, 0.2])).toBe(false);
+  });
+
+  it('accepts an explicit tolerance', () => {
+    expect(valuesDisagree(REAL_DELTA, 1e-3)).toBe(false);
+    expect(valuesDisagree(FLOAT_NOISE, 0)).toBe(true);
   });
 });

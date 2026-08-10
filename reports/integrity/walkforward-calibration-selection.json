@@ -1,0 +1,758 @@
+{
+  "counts_after": {
+    "calibrations": 4,
+    "evaluations": 12,
+    "models": 6,
+    "predictions": 3420,
+    "recommendations": 2280,
+    "runs": 2
+  },
+  "counts_before": {
+    "calibrations": 2,
+    "evaluations": 12,
+    "models": 6,
+    "predictions": 3420,
+    "recommendations": 2280,
+    "runs": 2
+  },
+  "difference_count": 8098,
+  "differences": {
+    "calibrations": [
+      {
+        "kind": "added",
+        "path": "cal_none_val2023"
+      },
+      {
+        "kind": "added",
+        "path": "cal_none_val2024"
+      }
+    ],
+    "evaluations": [
+      {
+        "after": 7.768674801960789,
+        "before": 3.8118764906143223,
+        "delta": 3.956798311346467,
+        "kind": "numeric",
+        "path": "naive-homefield-v1|test:2024:PREGAME.metrics.calibration_intercept"
+      },
+      {
+        "after": -42.992227105564886,
+        "before": -20.546013912232215,
+        "delta": -22.44621319333267,
+        "kind": "numeric",
+        "path": "naive-homefield-v1|test:2024:PREGAME.metrics.calibration_slope"
+      },
+      {
+        "after": -0.8063562944226026,
+        "before": -2.131364886644297,
+        "delta": 1.3250085922216945,
+        "kind": "numeric",
+        "path": "naive-homefield-v1|test:2025:PREGAME.metrics.calibration_intercept"
+      },
+      {
+        "after": 5.054270005011529,
+        "before": 12.122778074663032,
+        "delta": -7.068508069651503,
+        "kind": "numeric",
+        "path": "naive-homefield-v1|test:2025:PREGAME.metrics.calibration_slope"
+      }
+    ],
+    "models": [
+      {
+        "after": "cal_none_val2024",
+        "before": "cal_beta_val2024",
+        "kind": "exact",
+        "path": "market-residual-v1.calibration_version"
+      }
+    ],
+    "predictions": [
+      {
+        "after": 0.7519910119835691,
+        "before": 0.7519910109177592,
+        "delta": 1.0658098847926567e-09,
+        "kind": "numeric",
+        "path": "pred_2024_03_CAR_LV_team-ratings-v1_PREGAME.outputs.home_win_prob"
+      },
+      {
+        "after": 0.8886855452961234,
+        "before": 0.888685542964688,
+        "delta": 2.3314353780889974e-09,
+        "kind": "numeric",
+        "path": "pred_2024_13_CHI_DET_naive-rolling-v1_PREGAME.outputs.home_win_prob"
+      },
+      {
+        "after": 0.8628485646669612,
+        "before": 0.8628485636153151,
+        "delta": 1.0516461035336988e-09,
+        "kind": "numeric",
+        "path": "pred_2024_18_CLE_BAL_naive-rolling-v1_PREGAME.outputs.home_win_prob"
+      },
+      {
+        "after": 0.7913264677748235,
+        "before": 0.791326465296343,
+        "delta": 2.478480531920013e-09,
+        "kind": "numeric",
+        "path": "pred_2025_01_DAL_PHI_team-ratings-v1_PREGAME.outputs.home_win_prob"
+      },
+      {
+        "after": 0.7589007435325369,
+        "before": 0.7589007422949348,
+        "delta": 1.2376021318871722e-09,
+        "kind": "numeric",
+        "path": "pred_2025_01_TEN_DEN_team-ratings-v1_PREGAME.outputs.home_win_prob"
+      },
+      {
+        "after": 0.8638881401103,
+        "before": 0.8638881389141246,
+        "delta": 1.1961753809686115e-09,
+        "kind": "numeric",
+        "path": "pred_2025_02_CLE_BAL_naive-rolling-v1_PREGAME.outputs.home_win_prob"
+      },
+      {
+        "after": 0.8298161965614892,
+        "before": 0.829816190534461,
+        "delta": 6.027028209842911e-09,
+        "kind": "numeric",
+        "path": "pred_2025_02_CLE_BAL_team-ratings-v1_PREGAME.outputs.home_win_prob"
+      },
+      {
+        "after": 0.7940202501037429,
+        "before": 0.7940202474729656,
+        "delta": 2.630777262702111e-09,
+        "kind": "numeric",
+        "path": "pred_2025_03_MIA_BUF_team-ratings-v1_PREGAME.outputs.home_win_prob"
+      },
+      {
+        "after": 0.8638881401103,
+        "before": 0.8638881389141246,
+        "delta": 1.1961753809686115e-09,
+        "kind": "numeric",
+        "path": "pred_2025_08_TEN_IND_naive-rolling-v1_PREGAME.outputs.home_win_prob"
+      }
+    ],
+    "recommendations": [
+      {
+        "after": {
+          "line": -6.5,
+          "note": "filled after ~3min manual entry",
+          "price": -110
+        },
+        "before": null,
+        "kind": "exact",
+        "path": "2024_01_ARI_BUF|SPREAD|AWAY|2024-09-08T15:30:00+00:00.execution"
+      },
+      {
+        "after": 0.06458680553757457,
+        "before": -0.0037819190409639214,
+        "delta": 0.06836872457853849,
+        "kind": "numeric",
+        "path": "2024_01_ARI_BUF|SPREAD|AWAY|2024-09-08T15:30:00+00:00.reasons.edge"
+      },
+      {
+        "after": 0.5767819274887941,
+        "before": 0.5084132029102556,
+        "delta": 0.06836872457853849,
+        "kind": "numeric",
+        "path": "2024_01_ARI_BUF|SPREAD|AWAY|2024-09-08T15:30:00+00:00.reasons.model_prob"
+      },
+      {
+        "after": "calibrated edge 0.065 >= 0.03",
+        "before": "edge -0.004 below threshold",
+        "kind": "exact",
+        "path": "2024_01_ARI_BUF|SPREAD|AWAY|2024-09-08T15:30:00+00:00.reasons.reasons[0]"
+      },
+      {
+        "after": {
+          "pnl_units": 0.9090909090909091,
+          "result": "WIN"
+        },
+        "before": null,
+        "kind": "exact",
+        "path": "2024_01_ARI_BUF|SPREAD|AWAY|2024-09-08T15:30:00+00:00.settlement"
+      },
+      {
+        "after": "RESEARCH_CANDIDATE",
+        "before": "PASS",
+        "kind": "exact",
+        "path": "2024_01_ARI_BUF|SPREAD|AWAY|2024-09-08T15:30:00+00:00.status"
+      },
+      {
+        "after": -0.1116656484190266,
+        "before": -0.09614366242563921,
+        "delta": -0.015521985993387388,
+        "kind": "numeric",
+        "path": "2024_01_ARI_BUF|SPREAD|HOME|2024-09-08T15:30:00+00:00.reasons.edge"
+      },
+      {
+        "after": 0.4232180725112059,
+        "before": 0.4387400585045933,
+        "delta": -0.015521985993387388,
+        "kind": "numeric",
+        "path": "2024_01_ARI_BUF|SPREAD|HOME|2024-09-08T15:30:00+00:00.reasons.model_prob"
+      },
+      {
+        "after": "edge -0.112 below threshold",
+        "before": "edge -0.096 below threshold",
+        "kind": "exact",
+        "path": "2024_01_ARI_BUF|SPREAD|HOME|2024-09-08T15:30:00+00:00.reasons.reasons[0]"
+      },
+      {
+        "after": -0.05557892715829349,
+        "before": -0.020230625537511704,
+        "delta": -0.035348301620781786,
+        "kind": "numeric",
+        "path": "2024_01_ARI_BUF|TOTAL|OVER|2024-09-08T15:30:00+00:00.reasons.edge"
+      },
+      {
+        "after": 0.4636518420724758,
+        "before": 0.49900014369325757,
+        "delta": -0.035348301620781786,
+        "kind": "numeric",
+        "path": "2024_01_ARI_BUF|TOTAL|OVER|2024-09-08T15:30:00+00:00.reasons.model_prob"
+      },
+      {
+        "after": "edge -0.056 below threshold",
+        "before": "edge -0.020 below threshold",
+        "kind": "exact",
+        "path": "2024_01_ARI_BUF|TOTAL|OVER|2024-09-08T15:30:00+00:00.reasons.reasons[0]"
+      },
+      {
+        "after": -0.022362982068454773,
+        "before": 0.0014902508248844093,
+        "delta": -0.023853232893339182,
+        "kind": "numeric",
+        "path": "2024_01_ARI_BUF|TOTAL|UNDER|2024-09-08T15:30:00+00:00.reasons.edge"
+      },
+      {
+        "after": 0.505938904723998,
+        "before": 0.5297921376173372,
+        "delta": -0.023853232893339182,
+        "kind": "numeric",
+        "path": "2024_01_ARI_BUF|TOTAL|UNDER|2024-09-08T15:30:00+00:00.reasons.model_prob"
+      },
+      {
+        "after": "edge -0.022 below threshold",
+        "before": "edge 0.001 below threshold",
+        "kind": "exact",
+        "path": "2024_01_ARI_BUF|TOTAL|UNDER|2024-09-08T15:30:00+00:00.reasons.reasons[0]"
+      },
+      {
+        "after": -0.05384716253533445,
+        "before": -0.020944977816797383,
+        "delta": -0.032902184718537064,
+        "kind": "numeric",
+        "path": "2024_01_BAL_KC|SPREAD|AWAY|2024-09-05T22:50:00+00:00.reasons.edge"
+      },
+      {
+        "after": 0.4874372411343903,
+        "before": 0.5203394258529274,
+        "delta": -0.032902184718537064,
+        "kind": "numeric",
+        "path": "2024_01_BAL_KC|SPREAD|AWAY|2024-09-05T22:50:00+00:00.reasons.model_prob"
+      },
+      {
+        "after": "edge -0.054 below threshold",
+        "before": "edge -0.021 below threshold",
+        "kind": "exact",
+        "path": "2024_01_BAL_KC|SPREAD|AWAY|2024-09-05T22:50:00+00:00.reasons.reasons[0]"
+      },
+      {
+        "after": -0.023847039011485383,
+        "before": 0.01072182838077318,
+        "delta": -0.03456886739225856,
+        "kind": "numeric",
+        "path": "2024_01_BAL_KC|SPREAD|HOME|2024-09-05T22:50:00+00:00.reasons.edge"
+      },
+      {
+        "after": 0.4811034560380196,
+        "before": 0.5156723234302781,
+        "delta": -0.03456886739225856,
+        "kind": "numeric",
+        "path": "2024_01_BAL_KC|SPREAD|HOME|2024-09-05T22:50:00+00:00.reasons.model_prob"
+      },
+      {
+        "after": "edge -0.024 below threshold",
+        "before": "edge 0.011 below threshold",
+        "kind": "exact",
+        "path": "2024_01_BAL_KC|SPREAD|HOME|2024-09-05T22:50:00+00:00.reasons.reasons[0]"
+      },
+      {
+        "after": -0.07591445076474324,
+        "before": -0.04470485668018209,
+        "delta": -0.031209594084561143,
+        "kind": "numeric",
+        "path": "2024_01_BAL_KC|TOTAL|OVER|2024-09-05T22:50:00+00:00.reasons.edge"
+      },
+      {
+        "after": 0.4478950730447806,
+        "before": 0.47910466712934174,
+        "delta": -0.031209594084561143,
+        "kind": "numeric",
+        "path": "2024_01_BAL_KC|TOTAL|OVER|2024-09-05T22:50:00+00:00.reasons.model_prob"
+      },
+      {
+        "after": "edge -0.076 below threshold",
+        "before": "edge -0.045 below threshold",
+        "kind": "exact",
+        "path": "2024_01_BAL_KC|TOTAL|OVER|2024-09-05T22:50:00+00:00.reasons.reasons[0]"
+      },
+      {
+        "after": -0.002026579312330523,
+        "before": 0.009157143342346963,
+        "delta": -0.011183722654677486,
+        "kind": "numeric",
+        "path": "2024_01_BAL_KC|TOTAL|UNDER|2024-09-05T22:50:00+00:00.reasons.edge"
+      },
+      {
+        "after": 0.5217829444971933,
+        "before": 0.5329666671518708,
+        "delta": -0.011183722654677486,
+        "kind": "numeric",
+        "path": "2024_01_BAL_KC|TOTAL|UNDER|2024-09-05T22:50:00+00:00.reasons.model_prob"
+      },
+      {
+        "after": "edge -0.002 below threshold",
+        "before": "edge 0.009 below threshold",
+        "kind": "exact",
+        "path": "2024_01_BAL_KC|TOTAL|UNDER|2024-09-05T22:50:00+00:00.reasons.reasons[0]"
+      },
+      {
+        "after": {
+          "line": -3.5,
+          "note": "filled after ~3min manual entry",
+          "price": -113
+        },
+        "before": null,
+        "kind": "exact",
+        "path": "2024_01_CAR_NO|SPREAD|AWAY|2024-09-08T15:30:00+00:00.execution"
+      },
+      {
+        "after": 0.055632209540924515,
+        "before": -0.009008373527061742,
+        "delta": 0.06464058306798626,
+        "kind": "numeric",
+        "path": "2024_01_CAR_NO|SPREAD|AWAY|2024-09-08T15:30:00+00:00.reasons.edge"
+      },
+      {
+        "after": 0.5748629787716938,
+        "before": 0.5102223957037075,
+        "delta": 0.06464058306798626,
+        "kind": "numeric",
+        "path": "2024_01_CAR_NO|SPREAD|AWAY|2024-09-08T15:30:00+00:00.reasons.model_prob"
+      },
+      {
+        "after": "calibrated edge 0.056 >= 0.03",
+        "before": "edge -0.009 below threshold",
+        "kind": "exact",
+        "path": "2024_01_CAR_NO|SPREAD|AWAY|2024-09-08T15:30:00+00:00.reasons.reasons[0]"
+      },
+      {
+        "after": {
+          "pnl_units": -1.0,
+          "result": "LOSS"
+        },
+        "before": null,
+        "kind": "exact",
+        "path": "2024_01_CAR_NO|SPREAD|AWAY|2024-09-08T15:30:00+00:00.settlement"
+      },
+      {
+        "after": "RESEARCH_CANDIDATE",
+        "before": "PASS",
+        "kind": "exact",
+        "path": "2024_01_CAR_NO|SPREAD|AWAY|2024-09-08T15:30:00+00:00.status"
+      },
+      {
+        "after": -0.10316486556414667,
+        "before": -0.08602674370392926,
+        "delta": -0.017138121860217403,
+        "kind": "numeric",
+        "path": "2024_01_CAR_NO|SPREAD|HOME|2024-09-08T15:30:00+00:00.reasons.edge"
+      },
+      {
+        "after": 0.42513702122830616,
+        "before": 0.44227514308852356,
+        "delta": -0.017138121860217403,
+        "kind": "numeric",
+        "path": "2024_01_CAR_NO|SPREAD|HOME|2024-09-08T15:30:00+00:00.reasons.model_prob"
+      },
+      {
+        "after": "edge -0.103 below threshold",
+        "before": "edge -0.086 below threshold",
+        "kind": "exact",
+        "path": "2024_01_CAR_NO|SPREAD|HOME|2024-09-08T15:30:00+00:00.reasons.reasons[0]"
+      },
+      {
+        "after": 0.021251419198844546,
+        "before": 0.011641907294533627,
+        "delta": 0.009609511904310919,
+        "kind": "numeric",
+        "path": "2024_01_CAR_NO|TOTAL|OVER|2024-09-08T15:30:00+00:00.reasons.edge"
+      },
+      {
+        "after": 0.5404821884296138,
+        "before": 0.5308726765253029,
+        "delta": 0.009609511904310919,
+        "kind": "numeric",
+        "path": "2024_01_CAR_NO|TOTAL|OVER|2024-09-08T15:30:00+00:00.reasons.model_prob"
+      },
+      {
+        "after": "edge 0.021 within watch band",
+        "before": "edge 0.012 below threshold",
+        "kind": "exact",
+        "path": "2024_01_CAR_NO|TOTAL|OVER|2024-09-08T15:30:00+00:00.reasons.reasons[0]"
+      },
+      {
+        "after": "WATCH",
+        "before": "PASS",
+        "kind": "exact",
+        "path": "2024_01_CAR_NO|TOTAL|OVER|2024-09-08T15:30:00+00:00.status"
+      },
+      {
+        "after": -0.06878407522206664,
+        "before": -0.03407573164166544,
+        "delta": -0.0347083435804012,
+        "kind": "numeric",
+        "path": "2024_01_CAR_NO|TOTAL|UNDER|2024-09-08T15:30:00+00:00.reasons.edge"
+      },
+      {
+        "after": 0.4595178115703862,
+        "before": 0.4942261551507874,
+        "delta": -0.0347083435804012,
+        "kind": "numeric",
+        "path": "2024_01_CAR_NO|TOTAL|UNDER|2024-09-08T15:30:00+00:00.reasons.model_prob"
+      },
+      {
+        "after": "edge -0.069 below threshold",
+        "before": "edge -0.034 below threshold",
+        "kind": "exact",
+        "path": "2024_01_CAR_NO|TOTAL|UNDER|2024-09-08T15:30:00+00:00.reasons.reasons[0]"
+      },
+      {
+        "after": {
+          "line": -2.5,
+          "note": "filled after ~3min manual entry",
+          "price": -117
+        },
+        "before": null,
+        "kind": "exact",
+        "path": "2024_01_DAL_CLE|SPREAD|AWAY|2024-09-08T18:55:00+00:00.execution"
+      },
+      {
+        "after": 0.07511346941472996,
+        "before": -0.052384056195307394,
+        "delta": 0.12749752561003735,
+        "kind": "numeric",
+        "path": "2024_01_DAL_CLE|SPREAD|AWAY|2024-09-08T18:55:00+00:00.reasons.edge"
+      },
+      {
+        "after": 0.6034153562071828,
+        "before": 0.47591783059714543,
+        "delta": 0.12749752561003735,
+        "kind": "numeric",
+        "path": "2024_01_DAL_CLE|SPREAD|AWAY|2024-09-08T18:55:00+00:00.reasons.model_prob"
+      },
+      {
+        "after": "calibrated edge 0.075 >= 0.03",
+        "before": "edge -0.052 below threshold",
+        "kind": "exact",
+        "path": "2024_01_DAL_CLE|SPREAD|AWAY|2024-09-08T18:55:00+00:00.reasons.reasons[0]"
+      },
+      {
+        "after": {
+          "pnl_units": 0.8547008547008547,
+          "result": "WIN"
+        },
+        "before": null,
+        "kind": "exact",
+        "path": "2024_01_DAL_CLE|SPREAD|AWAY|2024-09-08T18:55:00+00:00.settlement"
+      },
+      {
+        "after": "RESEARCH_CANDIDATE",
+        "before": "PASS",
+        "kind": "exact",
+        "path": "2024_01_DAL_CLE|SPREAD|AWAY|2024-09-08T18:55:00+00:00.status"
+      },
+      {
+        "after": -0.12264612543795206,
+        "before": -0.1360169809001021,
+        "delta": 0.013370855462150055,
+        "kind": "numeric",
+        "path": "2024_01_DAL_CLE|SPREAD|HOME|2024-09-08T18:55:00+00:00.reasons.edge"
+      }
+    ],
+    "runs": [
+      {
+        "after": 74,
+        "before": 2,
+        "delta": 72.0,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.betting_simulation.losses"
+      },
+      {
+        "after": 10.742569587975622,
+        "before": 2.0,
+        "delta": 8.742569587975622,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.betting_simulation.max_drawdown_units"
+      },
+      {
+        "after": 163,
+        "before": 4,
+        "delta": 159.0,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.betting_simulation.n_bets"
+      },
+      {
+        "after": 3,
+        "before": 0,
+        "delta": 3.0,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.betting_simulation.pushes"
+      },
+      {
+        "after": [
+          -0.11787169468102852,
+          0.13992956695778586
+        ],
+        "before": null,
+        "kind": "exact",
+        "path": "test_season=2024.metrics.betting_simulation.roi_ci90"
+      },
+      {
+        "after": 0.01038453442687326,
+        "before": -0.023809523809523836,
+        "delta": 0.034194058236397096,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.betting_simulation.roi_per_bet"
+      },
+      {
+        "after": 915,
+        "before": 1083,
+        "delta": -168.0,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.betting_simulation.statuses.PASS"
+      },
+      {
+        "after": 163,
+        "before": 4,
+        "delta": 159.0,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.betting_simulation.statuses.RESEARCH_CANDIDATE"
+      },
+      {
+        "after": 62,
+        "before": 53,
+        "delta": 9.0,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.betting_simulation.statuses.WATCH"
+      },
+      {
+        "after": 1.6926791115803415,
+        "before": -0.09523809523809534,
+        "delta": 1.7879172068184368,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.betting_simulation.total_pnl_units"
+      },
+      {
+        "after": 86,
+        "before": 2,
+        "delta": 84.0,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.betting_simulation.wins"
+      },
+      {
+        "after": "bt_a4d1279a2d82",
+        "before": "bt_25962c7fc4ce",
+        "kind": "exact",
+        "path": "test_season=2024.metrics.run_id"
+      },
+      {
+        "after": 0.6958172344763659,
+        "before": 0.6880216840096361,
+        "delta": 0.00779555046672975,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.selection.calibration.candidate_log_loss.beta"
+      },
+      {
+        "after": 0.6970626026532587,
+        "before": 0.6919310273121843,
+        "delta": 0.005131575341074446,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.selection.calibration.candidate_log_loss.platt"
+      },
+      {
+        "after": "none",
+        "before": "beta",
+        "kind": "exact",
+        "path": "test_season=2024.metrics.selection.calibration.chosen"
+      },
+      {
+        "after": 0.11027336056374212,
+        "before": -Infinity,
+        "delta": Infinity,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.selection.edge_threshold.val_roi_per_bet"
+      },
+      {
+        "after": 7.768674801960789,
+        "before": 3.8118764906143223,
+        "delta": 3.956798311346467,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.test_metrics.naive-homefield-v1.calibration_intercept"
+      },
+      {
+        "after": -42.992227105564886,
+        "before": -20.546013912232215,
+        "delta": -22.44621319333267,
+        "kind": "numeric",
+        "path": "test_season=2024.metrics.test_metrics.naive-homefield-v1.calibration_slope"
+      },
+      {
+        "after": 26,
+        "before": 50,
+        "delta": -24.0,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.betting_simulation.losses"
+      },
+      {
+        "after": 13.146006374664308,
+        "before": 15.97412908818086,
+        "delta": -2.828122713516551,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.betting_simulation.max_drawdown_units"
+      },
+      {
+        "after": 47,
+        "before": 104,
+        "delta": -57.0,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.betting_simulation.n_bets"
+      },
+      {
+        "after": 1,
+        "before": 0,
+        "delta": 1.0,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.betting_simulation.pushes"
+      },
+      {
+        "after": -0.4148739630679884,
+        "before": -0.15649924907739907,
+        "delta": -0.2583747139905893,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.betting_simulation.roi_ci90[0]"
+      },
+      {
+        "after": 0.010176707341856508,
+        "before": 0.15092392845597988,
+        "delta": -0.14074722111412336,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.betting_simulation.roi_ci90[1]"
+      },
+      {
+        "after": -0.17628070797278242,
+        "before": -0.0010629795803595277,
+        "delta": -0.1752177283924229,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.betting_simulation.roi_per_bet"
+      },
+      {
+        "after": 1057,
+        "before": 867,
+        "delta": 190.0,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.betting_simulation.statuses.PASS"
+      },
+      {
+        "after": 47,
+        "before": 104,
+        "delta": -57.0,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.betting_simulation.statuses.RESEARCH_CANDIDATE"
+      },
+      {
+        "after": 36,
+        "before": 169,
+        "delta": -133.0,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.betting_simulation.statuses.WATCH"
+      },
+      {
+        "after": -8.285193274720774,
+        "before": -0.11054987635739089,
+        "delta": -8.174643398363383,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.betting_simulation.total_pnl_units"
+      },
+      {
+        "after": 20,
+        "before": 54,
+        "delta": -34.0,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.betting_simulation.wins"
+      },
+      {
+        "after": "bt_ad805be601b9",
+        "before": "bt_ae29bb505c2c",
+        "kind": "exact",
+        "path": "test_season=2025.metrics.run_id"
+      },
+      {
+        "after": 0.6923907724418351,
+        "before": 0.6839182532629178,
+        "delta": 0.008472519178917337,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.selection.calibration.candidate_log_loss.beta"
+      },
+      {
+        "after": 0.6963592799334335,
+        "before": 0.6897462085440084,
+        "delta": 0.006613071389425129,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.selection.calibration.candidate_log_loss.platt"
+      },
+      {
+        "after": "none",
+        "before": "beta",
+        "kind": "exact",
+        "path": "test_season=2025.metrics.selection.calibration.chosen"
+      },
+      {
+        "after": 0.08,
+        "before": 0.05,
+        "delta": 0.03,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.selection.edge_threshold.chosen"
+      },
+      {
+        "after": 0.013065138254466497,
+        "before": 0.20183150658861368,
+        "delta": -0.18876636833414717,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.selection.edge_threshold.val_roi_per_bet"
+      },
+      {
+        "after": -0.8063562944226026,
+        "before": -2.131364886644297,
+        "delta": 1.3250085922216945,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.test_metrics.naive-homefield-v1.calibration_intercept"
+      },
+      {
+        "after": 5.054270005011529,
+        "before": 12.122778074663032,
+        "delta": -7.068508069651503,
+        "kind": "numeric",
+        "path": "test_season=2025.metrics.test_metrics.naive-homefield-v1.calibration_slope"
+      }
+    ]
+  },
+  "float_tolerance": 1e-09,
+  "identical": false,
+  "post_fix_snapshot_sha256": "ec98b68ff3b11a7ebafd18222ae41ebb544dfb17392253aa9e00350849febf50",
+  "pre_fix_snapshot_sha256": "f02ebd4f1c4236af59379a67d83a1d163bc1086a9cf18c51a72cd5dd6452c8fe",
+  "reran_test_seasons": [
+    2024,
+    2025
+  ]
+}

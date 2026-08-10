@@ -2,7 +2,7 @@
 
 > RESEARCH MODE — MODEL NOT APPROVED FOR REAL-MONEY DECISIONS
 
-Generated 2026-08-01T13:40:45.703702+00:00 · commit `51144321127e` · lock `955525cd6ac3`
+Generated 2026-08-10T02:00:19.601582+00:00 · commit `643c02231d31` · lock `e2d1612b2092`
 
 ## 1. Data coverage by season
 
@@ -63,22 +63,46 @@ Status: **all passing**
 | Model | n | Log loss | Brier | CRPS margin | Margin MAE | Total MAE | Cal. slope |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | market-residual-v1 | 285 | 0.5935 | 0.2028 | 7.125 | 9.72 | 9.79 | 1.49 |
+| market-residual-v1 | 285 | 0.5935 | 0.2028 | 7.125 | 9.72 | 9.79 | 1.49 |
+| market-residual-v1 | 285 | 0.5935 | 0.2028 | 7.125 | 9.72 | 9.79 | 1.49 |
+| market-benchmark-v1 | 285 | 0.5938 | 0.2031 | 7.131 | 9.72 | 9.75 | 1.52 |
+| market-benchmark-v1 | 285 | 0.5938 | 0.2031 | 7.131 | 9.72 | 9.75 | 1.52 |
 | market-benchmark-v1 | 285 | 0.5938 | 0.2031 | 7.131 | 9.72 | 9.75 | 1.52 |
 | glm-ridge-v1 | 285 | 0.6202 | 0.2149 | 7.331 | 10.02 | 9.96 | 1.30 |
+| glm-ridge-v1 | 285 | 0.6202 | 0.2149 | 7.331 | 10.02 | 9.96 | 1.30 |
+| glm-ridge-v1 | 285 | 0.6202 | 0.2149 | 7.331 | 10.02 | 9.96 | 1.30 |
+| team-ratings-v1 | 285 | 0.6215 | 0.2159 | 7.392 | 10.16 | 10.05 | 1.36 |
+| team-ratings-v1 | 285 | 0.6215 | 0.2159 | 7.392 | 10.16 | 10.05 | 1.36 |
 | team-ratings-v1 | 285 | 0.6215 | 0.2159 | 7.392 | 10.16 | 10.05 | 1.36 |
 | naive-rolling-v1 | 285 | 0.6575 | 0.2319 | 7.635 | 10.50 | 10.33 | 0.84 |
+| naive-rolling-v1 | 285 | 0.6575 | 0.2319 | 7.635 | 10.50 | 10.33 | 0.84 |
+| naive-rolling-v1 | 285 | 0.6575 | 0.2319 | 7.635 | 10.50 | 10.33 | 0.84 |
 | naive-homefield-v1 | 285 | 0.6887 | 0.2478 | 8.096 | 11.17 | 10.12 | -20.55 |
+| naive-homefield-v1 | 285 | 0.6887 | 0.2478 | 8.096 | 11.17 | 10.12 | -20.55 |
+| naive-homefield-v1 | 285 | 0.6887 | 0.2478 | 8.096 | 11.17 | 10.12 | -42.99 |
 
 ### test:2025:PREGAME
 
 | Model | n | Log loss | Brier | CRPS margin | Margin MAE | Total MAE | Cal. slope |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | market-benchmark-v1 | 285 | 0.6083 | 0.2113 | 6.908 | 9.67 | 10.40 | 1.17 |
+| market-benchmark-v1 | 285 | 0.6083 | 0.2113 | 6.908 | 9.67 | 10.40 | 1.17 |
+| market-benchmark-v1 | 285 | 0.6083 | 0.2113 | 6.908 | 9.67 | 10.40 | 1.17 |
+| market-residual-v1 | 285 | 0.6149 | 0.2138 | 7.037 | 9.82 | 10.50 | 1.02 |
+| market-residual-v1 | 285 | 0.6149 | 0.2138 | 7.037 | 9.82 | 10.50 | 1.02 |
 | market-residual-v1 | 285 | 0.6149 | 0.2138 | 7.037 | 9.82 | 10.50 | 1.02 |
 | naive-rolling-v1 | 285 | 0.6130 | 0.2123 | 7.244 | 10.03 | 10.84 | 1.45 |
+| naive-rolling-v1 | 285 | 0.6130 | 0.2123 | 7.244 | 10.03 | 10.84 | 1.45 |
+| naive-rolling-v1 | 285 | 0.6130 | 0.2123 | 7.244 | 10.03 | 10.84 | 1.45 |
+| team-ratings-v1 | 285 | 0.6335 | 0.2219 | 7.249 | 10.16 | 10.60 | 0.96 |
+| team-ratings-v1 | 285 | 0.6335 | 0.2219 | 7.249 | 10.16 | 10.60 | 0.96 |
 | team-ratings-v1 | 285 | 0.6335 | 0.2219 | 7.249 | 10.16 | 10.60 | 0.96 |
 | glm-ridge-v1 | 285 | 0.6514 | 0.2295 | 7.480 | 10.41 | 10.53 | 0.84 |
+| glm-ridge-v1 | 285 | 0.6514 | 0.2295 | 7.480 | 10.41 | 10.53 | 0.84 |
+| glm-ridge-v1 | 285 | 0.6514 | 0.2295 | 7.480 | 10.41 | 10.53 | 0.84 |
 | naive-homefield-v1 | 285 | 0.6909 | 0.2489 | 7.971 | 11.00 | 11.00 | 12.12 |
+| naive-homefield-v1 | 285 | 0.6909 | 0.2489 | 7.971 | 11.00 | 11.00 | 12.12 |
+| naive-homefield-v1 | 285 | 0.6909 | 0.2489 | 7.971 | 11.00 | 11.00 | 5.05 |
 
 ## 9. Model versus market
 
@@ -87,9 +111,19 @@ Status: **all passing**
 | Model | Δ log loss | Δ CRPS margin | Δ margin MAE | Beats market (CRPS)? |
 | --- | ---: | ---: | ---: | :--: |
 | market-residual-v1 | -0.0003 | -0.0058 | 0.0025 | yes |
+| market-residual-v1 | -0.0003 | -0.0058 | 0.0025 | yes |
+| market-residual-v1 | -0.0003 | -0.0058 | 0.0025 | yes |
+| glm-ridge-v1 | 0.0264 | 0.1995 | 0.3087 | no |
+| glm-ridge-v1 | 0.0264 | 0.1995 | 0.3087 | no |
 | glm-ridge-v1 | 0.0264 | 0.1995 | 0.3087 | no |
 | team-ratings-v1 | 0.0277 | 0.2609 | 0.4434 | no |
+| team-ratings-v1 | 0.0277 | 0.2611 | 0.4437 | no |
+| team-ratings-v1 | 0.0277 | 0.2611 | 0.4437 | no |
 | naive-rolling-v1 | 0.0637 | 0.5038 | 0.7832 | no |
+| naive-rolling-v1 | 0.0637 | 0.5038 | 0.7832 | no |
+| naive-rolling-v1 | 0.0637 | 0.5038 | 0.7832 | no |
+| naive-homefield-v1 | 0.0949 | 0.9644 | 1.4529 | no |
+| naive-homefield-v1 | 0.0949 | 0.9644 | 1.4529 | no |
 | naive-homefield-v1 | 0.0949 | 0.9644 | 1.4529 | no |
 
 ### test:2025:PREGAME
@@ -97,9 +131,19 @@ Status: **all passing**
 | Model | Δ log loss | Δ CRPS margin | Δ margin MAE | Beats market (CRPS)? |
 | --- | ---: | ---: | ---: | :--: |
 | market-residual-v1 | 0.0066 | 0.1290 | 0.1462 | no |
+| market-residual-v1 | 0.0066 | 0.1290 | 0.1462 | no |
+| market-residual-v1 | 0.0066 | 0.1290 | 0.1462 | no |
+| naive-rolling-v1 | 0.0047 | 0.3360 | 0.3601 | no |
+| naive-rolling-v1 | 0.0047 | 0.3360 | 0.3601 | no |
 | naive-rolling-v1 | 0.0047 | 0.3360 | 0.3601 | no |
 | team-ratings-v1 | 0.0252 | 0.3409 | 0.4904 | no |
+| team-ratings-v1 | 0.0252 | 0.3411 | 0.4909 | no |
+| team-ratings-v1 | 0.0252 | 0.3411 | 0.4909 | no |
 | glm-ridge-v1 | 0.0431 | 0.5721 | 0.7407 | no |
+| glm-ridge-v1 | 0.0431 | 0.5721 | 0.7407 | no |
+| glm-ridge-v1 | 0.0431 | 0.5721 | 0.7407 | no |
+| naive-homefield-v1 | 0.0826 | 1.0630 | 1.3325 | no |
+| naive-homefield-v1 | 0.0826 | 1.0630 | 1.3325 | no |
 | naive-homefield-v1 | 0.0826 | 1.0630 | 1.3325 | no |
 
 ## 8. Calibration
@@ -108,6 +152,8 @@ Candidates (none/platt/beta, isotonic only with n>=800) are fitted on prior out-
 
 - `cal_beta_val2023` — method **beta**, target spread_cover_prob, fitted on val OOF season 2023, n=271
 - `cal_beta_val2024` — method **beta**, target spread_cover_prob, fitted on val OOF season 2024, n=281
+- `cal_none_val2023` — method **none**, target spread_cover_prob, fitted on val OOF season 2023, n=271
+- `cal_none_val2024` — method **none**, target spread_cover_prob, fitted on val OOF season 2024, n=281
 
 ## 10–12. Simulated betting (research candidates only)
 
@@ -131,6 +177,49 @@ Max drawdown: 14.1305 units · CLV: unavailable — see limitations
 | --- | ---: | ---: | ---: | ---: | ---: |
 | SPREAD | 52 | 28 | 24 | 0 | 2.019 |
 | TOTAL | 52 | 26 | 26 | 0 | -2.13 |
+
+### bt_25962c7fc4ce (test season 2024)
+
+Statuses: {'PASS': 1083, 'WATCH': 53, 'RESEARCH_CANDIDATE': 4}
+
+Max drawdown: 2.0 units · CLV: unavailable — see limitations
+
+| Market | Bets | Wins | Losses | Pushes | P/L units |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| SPREAD | 4 | 2 | 2 | 0 | -0.095 |
+
+### bt_ae29bb505c2c (test season 2025)
+
+Statuses: {'PASS': 867, 'WATCH': 169, 'RESEARCH_CANDIDATE': 104}
+
+Max drawdown: 14.1305 units · CLV: unavailable — see limitations
+
+| Market | Bets | Wins | Losses | Pushes | P/L units |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| SPREAD | 52 | 28 | 24 | 0 | 2.019 |
+| TOTAL | 52 | 26 | 26 | 0 | -2.13 |
+
+### bt_a4d1279a2d82 (test season 2024)
+
+Statuses: {'PASS': 915, 'WATCH': 62, 'RESEARCH_CANDIDATE': 163}
+
+Max drawdown: 7.7634 units · CLV: unavailable — see limitations
+
+| Market | Bets | Wins | Losses | Pushes | P/L units |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| SPREAD | 77 | 45 | 29 | 3 | 10.985 |
+| TOTAL | 86 | 41 | 45 | 0 | -9.293 |
+
+### bt_ad805be601b9 (test season 2025)
+
+Statuses: {'PASS': 1057, 'RESEARCH_CANDIDATE': 47, 'WATCH': 36}
+
+Max drawdown: 13.146 units · CLV: unavailable — see limitations
+
+| Market | Bets | Wins | Losses | Pushes | P/L units |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| SPREAD | 26 | 7 | 18 | 1 | -11.833 |
+| TOTAL | 21 | 13 | 8 | 0 | 3.548 |
 
 ## 13. Closing-line value
 

@@ -105,3 +105,30 @@ export function describeConsensus(
 function negateZero(n: number): number {
   return n === 0 ? 0 : n;
 }
+
+/**
+ * Do repeated evaluations of the same thing actually disagree?
+ *
+ * A backtest rerun over identical games should reproduce its numbers. When
+ * it does not, that is a reproducibility problem worth surfacing — it is
+ * how the Model Audit screen revealed it was citing a superseded metric.
+ *
+ * But "not identical" is the wrong test. Reruns differ in the last bits
+ * from summation order and from normalising a probability — around 1e-13 —
+ * so comparing raw floats made every model trip the warning as soon as a
+ * rerun happened, offering "0.2028300 vs 0.2028300" as its evidence. A
+ * warning that fires on every row is one nobody reads again, which costs
+ * more than the warning was ever worth.
+ *
+ * The default tolerance sits well above float noise and well below
+ * anything that could matter: the genuine `team-ratings-v1` determinism
+ * delta is 9.65e-06, six orders of magnitude above it.
+ */
+export function valuesDisagree(
+  values: Iterable<number>,
+  tolerance = 1e-9,
+): boolean {
+  const seen = [...values].filter((v) => Number.isFinite(v));
+  if (seen.length < 2) return false;
+  return Math.max(...seen) - Math.min(...seen) > tolerance;
+}

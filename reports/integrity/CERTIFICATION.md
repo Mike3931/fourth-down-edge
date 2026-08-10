@@ -202,3 +202,138 @@ Trusted hosts: not configured. This service binds to a private research
 deployment and the CORS allowlist already constrains browser origins;
 adding `TrustedHostMiddleware` is a deployment decision, recorded as
 outstanding rather than silently adopted.
+
+## 13. Calibration-selection correction — rerun and comparison
+
+### What changed in the code
+
+Calibrator selection was in-sample: each candidate was fitted on the
+validation sample and then scored on that same sample, which ranks methods
+by parameter count rather than by generalisation. It now selects by
+out-of-fold log loss over a seeded 5-fold partition, refitting the winner
+on the whole sample. See `docs/model-governance.md` and
+`apps/api/tests/test_calibration_selection.py`.
+
+### Rerun
+
+Both recorded walk-forwards replayed from their own stored configs, so
+seasons, grids, seeds and execution assumptions are identical by
+construction. Only the code differs.
+
+| | value |
+| --- | --- |
+| pre-rerun snapshot | `f02ebd4f1c4236af59379a67d83a1d163bc1086a9cf18c51a72cd5dd6452c8fe` |
+| post-rerun snapshot | `ec98b68ff3b11a7ebafd18222ae41ebb544dfb17392253aa9e00350849febf50` |
+| differences | 8098 |
+| artifact | `reports/integrity/walkforward-calibration-selection.json` |
+| artifact sha256 | `85876ec721a38fa636492c9baad70d87ee33f93d0a4fd56bf47e62ac6c46bc6d` |
+
+The pre-rerun snapshot equals the post-rerun snapshot of section 5–6, so
+the certification chain is continuous.
+
+### The selection flipped, consistently and narrowly
+
+Both folds now choose `none` — the identity — over `beta`:
+
+| fold | none | platt | beta | chosen |
+| --- | --- | --- | --- | --- |
+| val 2023, n=271 | **0.694120** | 0.697063 | 0.695817 | none |
+| val 2024, n=281 | **0.690554** | 0.696359 | 0.692391 | none |
+
+Two things about this table matter more than the winner. The margin is
+about 0.002 of log loss, and every value sits within 0.005 of ln 2 =
+0.6931 — the score of a constant 0.5 forecast. Spread cover is close to a
+coin flip by construction, so the calibration sample carries very little
+signal, and "no calibration beats every fitted alternative" is the
+unsurprising reading. The direction is at least consistent across two
+independent folds.
+
+### Model evaluation metrics are unchanged
+
+Every model's Brier, log loss, CRPS and MAE moved by at most 1e-13, which
+is float noise from the `home_win_prob` normalisation (section in
+`docs/model-governance.md`). Calibration is applied only to spread-cover
+probabilities inside the betting simulation; it never touched the metrics
+the Model Audit screen ranks on.
+
+**The model comparison, and every "indistinguishable from the market"
+verdict, is unaffected and remains citable.** `team-ratings-v1` retains
+the 9.65e-06 determinism delta recorded in section 6, and its
+post-correction value remains the current one.
+
+### The betting simulation changed substantially, and for the worse
+
+Applying no calibration stops the probabilities being shrunk, so many more
+apparent edges clear the threshold.
+
+| | 2024 before | 2024 after | 2025 before | 2025 after |
+| --- | --- | --- | --- | --- |
+| bets | 4 | 163 | 104 | 47 |
+| ROI per bet | −2.38% | +1.04% | −0.11% | **−17.63%** |
+| ROI 90% CI | not computed (n<5) | [−11.79%, +13.99%] | [−15.65%, +15.09%] | [−41.49%, +1.02%] |
+| P&L units | −0.095 | +1.693 | −0.111 | **−8.285** |
+| max drawdown | 2.0 | 10.74 | 15.97 | 13.15 |
+
+Net across both test seasons: **−0.21 units before, −6.59 units after.**
+
+The corrected run is the less flattering one. The 2024 column in
+isolation is not a profitability result and must not be read as one: its
+interval spans zero by a wide margin, and the 2025 fold — the more recent
+of the two — returns −17.63% per bet over 47 bets with an interval whose
+upper bound barely reaches zero.
+
+What the old numbers mostly recorded was suppression. Four bets in a
+season is not a strategy that lost slightly; it is a calibrator, selected
+because it reproduced its own fitting sample, shrinking almost every edge
+below the threshold. Removing it did not reveal skill — it revealed that
+the candidate generator produces many apparent edges and that acting on
+them lost money over the two seasons available.
+
+### A finding this rerun exposed: the edge threshold is chosen on a noisy criterion
+
+The candidate edge threshold is selected by maximising simulated ROI over
+a grid on the validation season, guarded only by `n_bets >= 20`. Validation
+ROI over a few dozen bets is extremely noisy, and the rerun shows it
+failing to carry:
+
+| fold | chosen threshold | validation ROI | test ROI |
+| --- | --- | --- | --- |
+| 2024 | 0.03 | +11.03% | +1.04% |
+| 2025 | 0.08 | +1.31% | −17.63% |
+
+This is not leakage — the threshold is chosen on validation and measured
+on test, which is the correct structure. It is a selection made on a
+statistic too noisy to support it, and a reader should treat the test
+figures above as the outcome of a threshold picked essentially at random
+within its grid. Recorded here rather than changed: altering the selection
+criterion is a modelling decision, not a defect fix.
+
+### Where the regenerated state actually lives
+
+`apps/api/data/*.db` is gitignored, so the reran rows � the new
+`BacktestRun`s, the two `cal_none_*` artifacts, the third evaluation per
+model � exist in the working database on the machine that ran the
+certification, not in the repository. What the repository carries is the
+corrected code, this record, the comparison artifact, and the regenerated
+`apps/api/data/reports/phase2_*`, which are tracked and were rebuilt from
+the post-rerun database.
+
+A checkout elsewhere therefore has code that will select `none` on the
+next run, alongside whatever database that machine already had. Anyone
+reproducing these figures must rerun the certification locally; the
+numbers above are not recoverable from a fresh clone alone.
+
+### Certification
+
+**For the calibration-selection correction — NOT CERTIFIED as unchanged:**
+
+> The correction changed the recorded betting simulation. Prior
+> betting-simulation figures — bet counts, ROI, P&L and drawdown, for both
+> test seasons — are superseded and must not be cited.
+
+**Model evaluation metrics — unchanged and citable**, as set out above.
+
+Neither the superseded figures nor the current ones support any claim of
+profitability, predictive superiority, or readiness for real money. Both
+test seasons remain burned for evaluation purposes under section 6 of
+`docs/model-governance.md`.

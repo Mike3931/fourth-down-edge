@@ -17,6 +17,7 @@ import os
 import secrets
 import threading
 import uuid
+from collections.abc import Iterator
 from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
 if TYPE_CHECKING:
@@ -25,6 +26,7 @@ if TYPE_CHECKING:
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from fde_api import RESEARCH_BANNER, __version__
 from fde_api.api import schemas
@@ -111,6 +113,35 @@ def _require_auth(authorization: Annotated[str | None, Header()] = None) -> None
 
 Auth = Depends(_require_auth)
 
+
+def read_session() -> Iterator[Session]:
+    """A session that is always returned to the pool.
+
+    `get_session()` hands back a new Session and closes nothing, so every
+    endpoint that called it bare leaked one pooled connection per request.
+    The default pool is 5 with 10 overflow, so the fifteenth such request
+    exhausted it: subsequent calls blocked for thirty seconds and then
+    failed with `QueuePool limit of size 5 overflow 10 reached`.
+
+    That is a service that stops answering after fifteen page loads. It
+    surfaced as the Model Audit screen hanging on "Asking the engine…"
+    after a day of ordinary use — not as an error anyone would connect to
+    connection handling, which is why it had survived.
+
+    `session_scope()` already did this correctly for the write paths. The
+    read endpoints predate it. This dependency closes but does not commit:
+    these are reads, and `tests/test_read_endpoints_are_read_only.py`
+    exists to keep them that way.
+    """
+    session = get_session()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+Db = Annotated[Session, Depends(read_session)]
+
 # /health must distinguish "deliberately open" from "nobody configured a
 # token". Reporting both as "disabled (local dev)" is how an unprotected
 # deployment reads as a normal one.
@@ -157,8 +188,8 @@ def _start_job(kind: str, params: dict[str, Any], work) -> str:
     return job_id
 
 
-def _load_job(job_id: str) -> Job:
-    job = get_session().get(Job, job_id)
+def _load_job(job_id: str, s: Session) -> Job:
+    job = s.get(Job, job_id)
     if job is None:
         raise HTTPException(status_code=404, detail=f"Unknown job {job_id}")
     return job
@@ -177,9 +208,8 @@ def _job_response(job: Job) -> schemas.JobResponse:
 
 
 @app.get("/health", response_model=schemas.HealthResponse)
-def health() -> schemas.HealthResponse:
+def health(s: Db) -> schemas.HealthResponse:
     try:
-        s = get_session()
         games = s.scalar(select(func.count(Game.id))) or 0
         preds = s.scalar(select(func.count(Prediction.id))) or 0
         db = "ok"
@@ -198,8 +228,7 @@ def health() -> schemas.HealthResponse:
 
 
 @app.get("/v1/models", response_model=list[schemas.ModelSummary], dependencies=[Auth])
-def list_models() -> list[schemas.ModelSummary]:
-    s = get_session()
+def list_models(s: Db) -> list[schemas.ModelSummary]:
     return [
         schemas.ModelSummary(
             id=m.id, name=m.name, target=m.target, algorithm=m.algorithm,
@@ -212,8 +241,7 @@ def list_models() -> list[schemas.ModelSummary]:
 
 
 @app.get("/v1/models/{model_version}", response_model=schemas.ModelDetail, dependencies=[Auth])
-def get_model(model_version: str) -> schemas.ModelDetail:
-    s = get_session()
+def get_model(model_version: str, s: Db) -> schemas.ModelDetail:
     m = s.get(ModelVersion, model_version)
     if m is None:
         raise HTTPException(status_code=404, detail=f"Unknown model version {model_version}")
@@ -235,7 +263,7 @@ def get_model(model_version: str) -> schemas.ModelDetail:
 
 
 @app.post("/v1/data/ingest/nflverse", response_model=schemas.JobResponse, status_code=202, dependencies=[Auth])
-def ingest_nflverse_endpoint(req: schemas.IngestRequest) -> schemas.JobResponse:
+def ingest_nflverse_endpoint(req: schemas.IngestRequest, s: Db) -> schemas.JobResponse:
     def work() -> dict[str, Any]:
         from fde_api.ingest import ingest_nflverse
 
@@ -244,11 +272,11 @@ def ingest_nflverse_endpoint(req: schemas.IngestRequest) -> schemas.JobResponse:
         return {"loads": report.loads, "errors": report.errors,
                 "manifests": [m.version_id for m in report.manifests]}
 
-    return _job_response(_load_job(_start_job("ingest_nflverse", req.model_dump(), work)))
+    return _job_response(_load_job(_start_job("ingest_nflverse", req.model_dump(), work), s))
 
 
 @app.post("/v1/features/build", response_model=schemas.JobResponse, status_code=202, dependencies=[Auth])
-def build_features_endpoint(req: schemas.FeaturesBuildRequest) -> schemas.JobResponse:
+def build_features_endpoint(req: schemas.FeaturesBuildRequest, s: Db) -> schemas.JobResponse:
     def work() -> dict[str, Any]:
         from fde_api.backtest.walkforward import build_or_load_features
         from fde_api.features import LeagueHistory
@@ -260,11 +288,11 @@ def build_features_endpoint(req: schemas.FeaturesBuildRequest) -> schemas.JobRes
         return {"games_with_features": len(feats), "half_life_days": req.half_life_days,
                 "horizon": req.horizon, "feature_set": "nfl-core-v1"}
 
-    return _job_response(_load_job(_start_job("features_build", req.model_dump(), work)))
+    return _job_response(_load_job(_start_job("features_build", req.model_dump(), work), s))
 
 
 @app.post("/v1/backtests/run", response_model=schemas.JobResponse, status_code=202, dependencies=[Auth])
-def run_backtest_endpoint(req: schemas.BacktestRequest) -> schemas.JobResponse:
+def run_backtest_endpoint(req: schemas.BacktestRequest, s: Db) -> schemas.JobResponse:
     def work() -> dict[str, Any]:
         from fde_api.backtest.walkforward import WalkForwardConfig, run_walkforward
 
@@ -272,17 +300,16 @@ def run_backtest_endpoint(req: schemas.BacktestRequest) -> schemas.JobResponse:
             res = run_walkforward(s, WalkForwardConfig(test_season=req.test_season))
         return {"run_id": res["run_id"], "fold": res["fold"]}
 
-    return _job_response(_load_job(_start_job("backtest_run", req.model_dump(), work)))
+    return _job_response(_load_job(_start_job("backtest_run", req.model_dump(), work), s))
 
 
 @app.get("/v1/jobs/{job_id}", response_model=schemas.JobResponse, dependencies=[Auth])
-def get_job(job_id: str) -> schemas.JobResponse:
-    return _job_response(_load_job(job_id))
+def get_job(job_id: str, s: Db) -> schemas.JobResponse:
+    return _job_response(_load_job(job_id, s))
 
 
 @app.get("/v1/backtests/{run_id}", response_model=schemas.BacktestRunResponse, dependencies=[Auth])
-def get_backtest(run_id: str) -> schemas.BacktestRunResponse:
-    s = get_session()
+def get_backtest(run_id: str, s: Db) -> schemas.BacktestRunResponse:
     run = s.get(BacktestRun, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail=f"Unknown backtest run {run_id}")
@@ -293,8 +320,7 @@ def get_backtest(run_id: str) -> schemas.BacktestRunResponse:
 
 
 @app.get("/v1/backtests/{run_id}/metrics", response_model=schemas.BacktestMetricsResponse, dependencies=[Auth])
-def get_backtest_metrics(run_id: str) -> schemas.BacktestMetricsResponse:
-    s = get_session()
+def get_backtest_metrics(run_id: str, s: Db) -> schemas.BacktestMetricsResponse:
     run = s.get(BacktestRun, run_id)
     if run is None:
         raise HTTPException(status_code=404, detail=f"Unknown backtest run {run_id}")
@@ -304,7 +330,7 @@ def get_backtest_metrics(run_id: str) -> schemas.BacktestMetricsResponse:
 
 
 @app.post("/v1/predictions/generate", response_model=schemas.JobResponse, status_code=202, dependencies=[Auth])
-def generate_predictions(req: schemas.GeneratePredictionsRequest) -> schemas.JobResponse:
+def generate_predictions(req: schemas.GeneratePredictionsRequest, s: Db) -> schemas.JobResponse:
     def work() -> dict[str, Any]:
         from fde_api.services.generate import generate_prediction
 
@@ -312,7 +338,7 @@ def generate_predictions(req: schemas.GeneratePredictionsRequest) -> schemas.Job
             pred_id = generate_prediction(s, req.game_id, req.model_version_id, req.horizon)
         return {"prediction_id": pred_id}
 
-    return _job_response(_load_job(_start_job("predictions_generate", req.model_dump(), work)))
+    return _job_response(_load_job(_start_job("predictions_generate", req.model_dump(), work), s))
 
 
 # --------------------------------------------------------------------------- #
@@ -333,8 +359,7 @@ def _prediction_response(s, p: Prediction) -> schemas.PredictionResponse:
 
 
 @app.get("/v1/predictions/{prediction_id}", response_model=schemas.PredictionResponse, dependencies=[Auth])
-def get_prediction(prediction_id: str) -> schemas.PredictionResponse:
-    s = get_session()
+def get_prediction(prediction_id: str, s: Db) -> schemas.PredictionResponse:
     p = s.get(Prediction, prediction_id)
     if p is None:
         raise HTTPException(status_code=404, detail=f"Unknown prediction {prediction_id}")
@@ -342,8 +367,7 @@ def get_prediction(prediction_id: str) -> schemas.PredictionResponse:
 
 
 @app.get("/v1/games/{game_id}/predictions", response_model=list[schemas.PredictionResponse], dependencies=[Auth])
-def get_game_predictions(game_id: str) -> list[schemas.PredictionResponse]:
-    s = get_session()
+def get_game_predictions(game_id: str, s: Db) -> list[schemas.PredictionResponse]:
     if s.get(Game, game_id) is None:
         raise HTTPException(status_code=404, detail=f"Unknown game {game_id}")
     preds = s.scalars(
@@ -353,8 +377,7 @@ def get_game_predictions(game_id: str) -> list[schemas.PredictionResponse]:
 
 
 @app.get("/v1/performance/calibration", response_model=schemas.CalibrationReportResponse, dependencies=[Auth])
-def get_calibration() -> schemas.CalibrationReportResponse:
-    s = get_session()
+def get_calibration(s: Db) -> schemas.CalibrationReportResponse:
     artifacts = [
         {
             "id": a.id, "method": a.method, "target": a.target, "fitted_on": a.fitted_on,
@@ -367,8 +390,7 @@ def get_calibration() -> schemas.CalibrationReportResponse:
 
 
 @app.get("/v1/performance/model-comparison", response_model=schemas.ModelComparisonResponse, dependencies=[Auth])
-def get_model_comparison() -> schemas.ModelComparisonResponse:
-    s = get_session()
+def get_model_comparison(s: Db) -> schemas.ModelComparisonResponse:
     rows = [
         schemas.ModelComparisonRow(
             model_version_id=e.model_version_id, scope=e.scope, sample_size=e.sample_size, metrics=e.metrics
@@ -608,7 +630,7 @@ def get_forward_live(
 
 
 @app.get("/v1/forward/health", dependencies=[Auth])
-def get_forward_health(data_mode: str = "LIVE_RESEARCH") -> dict[str, Any]:
+def get_forward_health(s: Db, data_mode: str = "LIVE_RESEARCH") -> dict[str, Any]:
     """Data-health checks, grouped by the scope each one speaks for.
 
     Scope is the whole point: an expired provider key and a leaked future
@@ -619,7 +641,7 @@ def get_forward_health(data_mode: str = "LIVE_RESEARCH") -> dict[str, Any]:
     from fde_api.forward.modes import DataMode
 
     now = utc_now()
-    report = run_health_checks(get_session(), now=now, data_mode=DataMode(data_mode))
+    report = run_health_checks(s, now=now, data_mode=DataMode(data_mode))
     checks = report["checks"]
 
     grouped: dict[str, list[dict[str, Any]]] = {s.value: [] for s in HealthScope}

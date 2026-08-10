@@ -93,6 +93,29 @@ in persisted `error_summary` rows — see docs/security.md for why that
 matters and what each outcome means. Not useful in CI (no database with
 real history); this is an operational check.
 
+### Database connections
+
+Read endpoints take their session by dependency injection, which returns
+the connection to the pool in a `finally`. This is load-bearing, not
+style: the read endpoints previously called `get_session()` directly and
+never closed it, so each request leaked one pooled connection. With the
+default pool of 5 plus 10 overflow, the fifteenth request exhausted it �
+subsequent calls blocked for thirty seconds and then failed with
+
+```
+sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached
+```
+
+The service appears healthy right up to that point, and `/health` is
+itself one of the affected endpoints, so a health check will not warn you
+in advance � it will simply be among the first things to stop responding.
+
+If a deployment starts hanging for thirty seconds and then returning 500s
+on read endpoints, check for a `get_session()` call in a request handler
+that is not wrapped by `read_session` or `session_scope`.
+`apps/api/tests/test_no_connection_leak.py` asserts the pool ledger is
+empty after traffic well past the exhaustion point.
+
 ## PWA install verification checklist
 
 - Open the HTTPS URL in Chrome/Edge → DevTools → Application → Manifest: no warnings, installability

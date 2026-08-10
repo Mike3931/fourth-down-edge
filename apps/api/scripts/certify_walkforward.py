@@ -67,11 +67,30 @@ def main(argv: list[str] | None = None) -> int:
     print(f"pre-fix snapshot : {before.counts()}")
     print(f"pre-fix hash     : {before_hash}")
 
-    stored = [
-        (r.id, dict(r.config))
-        for r in session.scalars(select(BacktestRun).order_by(BacktestRun.created_at))
-        if r.config and r.config.get("test_season")
-    ]
+    # One rerun per DISTINCT config, not per historical run.
+    #
+    # Every certification appends the runs it performs, and those become
+    # inputs to the next certification. Replaying per run rather than per
+    # config therefore doubles the work each time: two seasons became four
+    # runs after the first certification, and would have become eight
+    # here. The reruns beyond the first per config are exact repeats -
+    # same season, same grids, same seeds - so they add cost and rows
+    # without adding evidence.
+    #
+    # The earliest run carrying each config is the one replayed, which
+    # keeps the choice deterministic rather than dependent on how many
+    # certifications have happened.
+    stored = []
+    seen_configs: set[str] = set()
+    for r in session.scalars(select(BacktestRun).order_by(BacktestRun.created_at)):
+        if not (r.config and r.config.get("test_season")):
+            continue
+        key = json.dumps(dict(r.config), sort_keys=True, default=str)
+        if key in seen_configs:
+            print(f"  skipping {r.id}: config identical to an earlier run")
+            continue
+        seen_configs.add(key)
+        stored.append((r.id, dict(r.config)))
     if not stored:
         print("no recorded walk-forward runs to certify against", file=sys.stderr)
         return 1

@@ -35,9 +35,14 @@ LATER = EARLIER + timedelta(days=2)
 @pytest.fixture()
 def session(monkeypatch, tmp_path) -> Session:
     url = f"sqlite:///{(tmp_path / 'm.db').as_posix()}"
+    import fde_api.db.engine as db_engine
     from fde_api.config import settings
 
     monkeypatch.setattr(settings, "database_url", url)
+    monkeypatch.setenv("FDE_ALLOW_UNAUTHENTICATED", "1")
+    # The app's engine is lru_cached, so without this it would answer from
+    # whichever database a previous test happened to leave cached.
+    db_engine.get_engine.cache_clear()  # type: ignore[attr-defined]
     engine = create_engine(url, future=True)
     Base.metadata.create_all(engine)
     s = sessionmaker(bind=engine, future=True)()
@@ -59,21 +64,31 @@ def session(monkeypatch, tmp_path) -> Session:
             metrics={"brier": brier}, sample_size=285, created_at=created,
         ))
     s.commit()
-    return s
+    yield s
+    s.close()
+    db_engine.get_engine.cache_clear()  # type: ignore[attr-defined]
 
 
 def _rows(session: Session) -> list[dict]:
-    import fde_api.db.engine as db_engine
-    from fde_api.api.main import get_model_comparison
+    """Through the app, not by calling the endpoint function directly.
 
-    db_engine.get_engine.cache_clear()  # type: ignore[attr-defined]
-    try:
-        resp = get_model_comparison()
-    finally:
-        db_engine.get_engine.cache_clear()  # type: ignore[attr-defined]
+    The session now arrives by dependency injection, so calling the
+    function by hand would either fail or require passing a session the
+    real request never uses. Going through `TestClient` exercises the
+    wiring production uses — including the dependency that returns the
+    connection to the pool.
+    """
+    from fastapi.testclient import TestClient
+
+    from fde_api.api.main import app
+
+    with TestClient(app) as client:
+        resp = client.get("/v1/performance/model-comparison")
+    assert resp.status_code == 200, resp.text
     return [
-        {"model": r.model_version_id, "scope": r.scope, "brier": r.metrics.get("brier")}
-        for r in resp.rows
+        {"model": r["model_version_id"], "scope": r["scope"],
+         "brier": (r["metrics"] or {}).get("brier")}
+        for r in resp.json()["rows"]
     ]
 
 

@@ -247,14 +247,26 @@ with the winner refitted on the whole sample. Isotonic is offered only
 when every *training* fold clears `MIN_ISOTONIC_N`, not merely the full
 sample.
 
-*Consequence for the published evaluation:* the stored Phase 2 reports
-record `cal_beta_val2023` and `cal_beta_val2024` — beta, the most
-flexible method eligible at ~285 validation games. Those artifacts were
-produced under the in-sample rule and **have not been regenerated**.
-`scripts/certify_walkforward.py` reruns each recorded walk-forward from
-its own stored config and diffs, which is the way to see what the
-corrected selection changes. That is a deliberate decision to take, not a
-side effect to absorb.
+*Consequence for the published evaluation — now regenerated.* The stored
+reports recorded `cal_beta_val2023` and `cal_beta_val2024`. Both folds
+were replayed from their own stored configs on 2026-08-10 and both now
+select `none`, by about 0.002 of log loss, consistently. Model Brier, log
+loss, CRPS and MAE are unchanged to 1e-13 — calibration is applied only
+to spread-cover probabilities inside the betting simulation, never to the
+metrics the model comparison ranks on.
+
+The betting simulation changed a great deal, and downward: net simulated
+P&L across the two test seasons went from −0.21 units to **−6.59**, with
+2025 at −17.63% per bet over 47 bets. The old figures largely recorded
+suppression — four bets in 2024 is a calibrator shrinking nearly every
+edge below the threshold, not a strategy that lost slightly. Prior
+betting-simulation figures are superseded.
+
+Full record, including the certification scope and the caution that
+neither the old nor the new figures support any profitability claim:
+`reports/integrity/CERTIFICATION.md` section 13, artifact
+`reports/integrity/walkforward-calibration-selection.json`
+(sha256 `85876ec7…`).
 
 **The market reference could be decided by row order.** `load_market_refs`
 assigned by key, so a second `CLOSING_BENCHMARK` row for the same
@@ -307,6 +319,33 @@ answer stable and lets the screen say which run it is showing
 ("2 runs · latest shown", with both values on hover).
 
 ### Recommended next, not built here
+
+**The edge threshold is selected on a statistic too noisy to support it.**
+Exposed by the regeneration rather than by reading the code. The candidate
+threshold is chosen by maximising simulated ROI over a grid on the
+validation season, guarded only by `n_bets >= 20`. Validation ROI over a
+few dozen bets is extremely noisy, and it does not carry:
+
+| fold | chosen | validation ROI | test ROI |
+| --- | --- | --- | --- |
+| 2024 | 0.03 | +11.03% | +1.04% |
+| 2025 | 0.08 | +1.31% | −17.63% |
+
+This is not leakage: the threshold is chosen on validation and measured on
+test, which is the right structure. It is that the criterion carries
+almost no information, so the chosen threshold is close to arbitrary
+within its grid — and the threshold decides how many candidates the system
+emits, which is the single biggest lever on the simulated result.
+
+It is the same *class* of error as the calibration defect corrected above
+— trusting a number computed on a sample too small to bear the weight put
+on it — but the fix is not the same, and it is a modelling decision rather
+than a defect repair. Candidates: shrink toward the largest threshold
+whose ROI is not distinguishable from the best; require the validation
+interval to exclude zero before selecting on it at all; or fix the
+threshold a priori and report ROI at it rather than selecting on ROI.
+Whichever is chosen changes what the system recommends, so it should be
+chosen deliberately.
 
 **The Model Audit noise band is a rule of thumb presented as a
 threshold.** The screen decides "indistinguishable from the market" by
