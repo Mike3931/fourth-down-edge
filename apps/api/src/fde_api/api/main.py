@@ -474,7 +474,17 @@ def _no_consensus_reasons(eligible_books: int, report: EligibilityReport) -> lis
 
 @app.get("/v1/forward/live", dependencies=[Auth])
 def get_forward_live(
-    data_mode: str = "LIVE_RESEARCH", hours: int = 72, lookback_hours: int = 72
+    # `hours` is a KICKOFF horizon, not a capture-age window: games
+    # kicking off within it. At 72 it hid a slate captured minutes
+    # earlier, because preseason and midweek fixtures are three to five
+    # days out — so the screen read "no fixtures captured" while sixty
+    # fresh quotes sat in the table. Ten days covers a full NFL week plus
+    # lead time, and matches the candidates endpoint rather than
+    # disagreeing with it.
+    #
+    # `lookback_hours` stays at 72: that one IS about the past, keeping a
+    # finished game and its result on screen for three days.
+    data_mode: str = "LIVE_RESEARCH", hours: int = 240, lookback_hours: int = 72
 ) -> dict[str, Any]:
     from datetime import timedelta
 

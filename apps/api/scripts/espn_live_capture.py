@@ -200,15 +200,39 @@ def _quotes_from_odds(odds: dict[str, Any], *, home: str, away: str) -> list[dic
 def discover(payload: dict[str, Any]) -> list[dict[str, Any]]:
     from fde_api.forward.odds import provider_team_to_code
 
-    season = payload.get("season") or {}
-    season_type = _SEASON_TYPE.get(season.get("type"), "REG")
-    year = season.get("year") or datetime.now(UTC).year
+    # Season type comes from the EVENT first, and defaults to nothing.
+    #
+    # This read the top-level `season` and defaulted to REG. For a
+    # mid-August scoreboard ESPN returns top-level `season` as `{}` while
+    # every event carries {"year": 2026, "type": 1, "slug": "preseason"} —
+    # so twenty preseason games would have been captured as REG, with REG
+    # baked into canonical ids that are immutable once written.
+    #
+    # The consequences run past a mislabelled row. `schedule_game_count`
+    # measures REG games against a 272-game season, and preseason fixtures
+    # inside the REG cohort would sit in the forward test that the frozen
+    # policy window exists to scope.
+    #
+    # Defaulting to REG was the dangerous direction: an unknown season
+    # became the one that counts. There is no default now — a game whose
+    # season type cannot be read is skipped and reported, because a
+    # preseason game captured as regular season is far worse than a game
+    # not captured.
+    payload_season = payload.get("season") or {}
 
     games: list[dict[str, Any]] = []
+    unreadable: list[str] = []
     for event in payload.get("events", []):
         comp = (event.get("competitions") or [{}])[0]
         teams = {c.get("homeAway"): c.get("team", {}) for c in comp.get("competitors", [])}
         if "home" not in teams or "away" not in teams:
+            continue
+
+        ev_season = event.get("season") or payload_season
+        season_type = _SEASON_TYPE.get(ev_season.get("type"))
+        year = ev_season.get("year") or payload_season.get("year")
+        if season_type is None or year is None:
+            unreadable.append(str(event.get("shortName") or event.get("id")))
             continue
         try:
             home = provider_team_to_code(teams["home"].get("displayName", ""))
@@ -241,6 +265,12 @@ def discover(payload: dict[str, Any]) -> list[dict[str, Any]]:
             "books": sorted({q["sportsbook"] for q in quotes}),
             "quotes": quotes,
         })
+    if unreadable:
+        # Reported, never silent. A game dropped for an unreadable season
+        # is a gap in the record, and a gap nobody is told about is
+        # indistinguishable from a day with no games.
+        print(f"  SKIPPED {len(unreadable)} game(s) with an unreadable season type: "
+              f"{', '.join(unreadable[:5])}", file=sys.stderr)
     return games
 
 

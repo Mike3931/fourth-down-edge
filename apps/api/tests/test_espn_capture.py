@@ -269,3 +269,76 @@ class TestTheSpreadSignIsNeverInferredFromPosition:
             "home": {"close": {"odds": "-115"}},
             "away": {"close": {"odds": "-105"}}}}
         assert self._spreads(odds) == {}
+
+
+class TestTheSeasonTypeComesFromTheEvent:
+    """A preseason game must never be captured as regular season.
+
+    `discover` read the TOP-LEVEL `season` and defaulted to REG. For a
+    mid-August scoreboard ESPN returns top-level `season` as `{}` while
+    every event carries {"year": 2026, "type": 1, "slug": "preseason"} — so
+    a real capture on 14 August 2026 would have written twenty preseason
+    fixtures as REG, with REG baked into canonical ids that are immutable
+    once written.
+
+    The damage runs past a mislabelled row. `schedule_game_count` measures
+    REG games against a 272-game season, and preseason fixtures inside the
+    REG cohort would sit in the forward test that the frozen policy window
+    exists to scope.
+
+    Defaulting to REG was the dangerous direction: an unknown season became
+    the one that counts.
+    """
+
+    @staticmethod
+    def _payload(*, top: dict | None, event_season: dict | None) -> dict:
+        event = {
+            "id": "401", "shortName": "DEN @ ATL", "name": "Denver at Atlanta",
+            "date": "2026-08-14T23:00Z",
+            "competitions": [{
+                "competitors": [
+                    {"homeAway": "home", "team": {"displayName": "Atlanta Falcons",
+                                                  "abbreviation": "ATL"}},
+                    {"homeAway": "away", "team": {"displayName": "Denver Broncos",
+                                                  "abbreviation": "DEN"}},
+                ],
+                "status": {"type": {"name": "STATUS_SCHEDULED", "completed": False}},
+                "odds": [],
+            }],
+        }
+        if event_season is not None:
+            event["season"] = event_season
+        return {"season": top or {}, "events": [event]}
+
+    def test_a_preseason_game_is_PRE_when_only_the_event_says_so(self, capture) -> None:
+        """The exact shape ESPN returns for 14 August 2026."""
+        games = capture.discover(self._payload(
+            top={}, event_season={"year": 2026, "type": 1, "slug": "preseason"}))
+        assert len(games) == 1
+        assert games[0]["season_type"] == "PRE"
+        assert games[0]["canonical_game_id"] == "2026_PRE_0814_DEN_ATL"
+
+    def test_a_regular_season_game_is_still_REG(self, capture) -> None:
+        games = capture.discover(self._payload(
+            top={}, event_season={"year": 2026, "type": 2, "slug": "regular-season"}))
+        assert games[0]["season_type"] == "REG"
+        assert "_REG_" in games[0]["canonical_game_id"]
+
+    def test_the_top_level_season_is_used_when_the_event_has_none(self, capture) -> None:
+        """Older payloads carry it only at the top; those must still work."""
+        games = capture.discover(self._payload(
+            top={"year": 2026, "type": 1}, event_season=None))
+        assert games[0]["season_type"] == "PRE"
+
+    def test_an_unreadable_season_is_skipped_rather_than_called_REG(
+        self, capture
+    ) -> None:
+        """No default. A game not captured is recoverable; a preseason game
+        recorded as regular season is baked into an immutable id."""
+        games = capture.discover(self._payload(top={}, event_season={}))
+        assert games == []
+
+    def test_an_unknown_season_type_number_is_skipped(self, capture) -> None:
+        games = capture.discover(self._payload(
+            top={}, event_season={"year": 2026, "type": 99}))
+        assert games == []

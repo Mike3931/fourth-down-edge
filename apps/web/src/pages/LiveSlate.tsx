@@ -155,7 +155,14 @@ export default function LiveSlate() {
             is the whole difference between a broken app and an empty
             pipeline, and the reader cannot make it unaided. */}
         <p className="text-xs text-muted">
-          Games with prices captured in the last 72 hours — not the full schedule.{' '}
+          {/* Says what the filter IS. The previous wording — "prices
+              captured in the last 72 hours" — described a capture-age
+              window, and the endpoint filters on KICKOFF. The difference
+              showed up the moment a slate three days out was captured:
+              sixty fresh quotes in the table, and a screen reporting no
+              fixtures. */}
+          Games kicking off in the next 10 days, or finished in the last 3, that have
+          captured prices — not the full schedule.{' '}
           <Link to="/slate" className="text-accent underline">
             All upcoming fixtures
           </Link>
@@ -253,9 +260,13 @@ export default function LiveSlate() {
                 policy) lives on Data Health, and without a way through
                 the reader cannot tell a quiet market from a stopped
                 pipeline. Three copies of the same link is just noise. */}
+            {/* Wording: this asked "Why is nothing being captured?", which
+                was written when nothing was. With one book capturing
+                fine it accused the pipeline of a failure that was not
+                happening — the shortfall is books, not capture. */}
             {Object.values(g.markets).some((b) => !b.consensus) && (
               <Link to="/health" className="mt-2 inline-block text-xs text-accent underline">
-                Why is nothing being captured?
+                Why is there no consensus?
               </Link>
             )}
           </div>
