@@ -100,22 +100,37 @@ test.describe('the two screens Phase 3 named', () => {
     await page.getByRole('button', { name: /enter local demo session/i }).click();
   });
 
+  // These two originally asserted copy that only exists once data has
+  // loaded, so they passed locally with the engine running and failed in
+  // CI where it is not — the mirror image of the mistake this file's own
+  // header warns about, committed while quoting it. Both now assert the
+  // invariant across BOTH states, like the screens above.
+
   test('Candidates never presents itself as a wager', async ({ page }) => {
     await page.goto('/candidates');
-    // The engine has no BET state and this screen must not invent one.
-    // Exact match, so a STATUS BADGE reading "BET" is caught while the
-    // disclaimer sentence ("no BET state exists in it") is not. The first
-    // version used a word-boundary regex built through a Python string, and
-    // the escape became a literal control character: the pattern matched
-    // nothing, so the test passed while asserting nothing at all.
+
+    // Holds unconditionally: neither the loaded screen nor the
+    // engine-down screen may carry a status badge reading BET. Exact
+    // match, so the disclaimer sentence ("no BET state exists in it") is
+    // not caught while a badge would be. An earlier version used a
+    // word-boundary regex built through a Python string, and the escape
+    // became a literal control character — the pattern matched nothing
+    // and the test passed while asserting nothing at all.
     await expect(page.getByText('BET', { exact: true })).toHaveCount(0);
-    await expect(page.getByText(/not a wager/i).first()).toBeVisible();
+
+    const down = page.getByText('The analytical engine is not reachable.');
+    const disclaimed = page.getByText(/not a wager/i).first();
+    await expect(down.or(disclaimed).first()).toBeVisible();
   });
 
   test('Forward Test says its sample cannot support a claim', async ({ page }) => {
     await page.goto('/forward-test');
-    // Whatever the numbers say, the caveat must be present. It is the
-    // difference between a record and a track record.
-    await expect(page.getByText(/not evidence of profitability/i).first()).toBeVisible();
+    // Whatever the numbers say, the caveat must be present — it is the
+    // difference between a record and a track record. When the engine is
+    // down there are no numbers to caveat, and saying so is the honest
+    // alternative.
+    const down = page.getByText('The analytical engine is not reachable.');
+    const caveat = page.getByText(/not evidence of profitability/i).first();
+    await expect(down.or(caveat).first()).toBeVisible();
   });
 });
