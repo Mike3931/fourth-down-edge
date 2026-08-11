@@ -244,3 +244,57 @@ export function soonestScheduledWeek(
   }
   return best?.week ?? null;
 }
+
+/**
+ * "The model makes X the better side by N; the market is asking M."
+ *
+ * The recommendation card built this itself and got it backwards. It read:
+ *
+ *   `Opponent-adjusted team strength favors ${favoredTeam} by
+ *    ${Math.abs(pred.expectedMargin)} points vs market ${line}`
+ *
+ * where `favoredTeam` was the team the RECOMMENDATION selected, not the
+ * team the model favoured, and `Math.abs` discarded the sign that says
+ * which team that is. On the demo dataset's headline pick — LA +9, with a
+ * home-relative `expectedMargin` of -6.1 and a home win probability of
+ * 0.319 — it printed "favors Los Angeles Rams by 6.1 points". The model
+ * favours Cincinnati by 6.1.
+ *
+ * Recommending an underdog is the ordinary shape of a value bet, so the
+ * sentence was wrong precisely when the card was doing its job.
+ *
+ * `expectedMargin` is HOME-RELATIVE, like every other line in this system:
+ * positive favours the home team. `marketSpread` is the stored, also
+ * home-relative, consensus number. Returns null rather than a sentence
+ * when there is nothing to say.
+ */
+export function describeStrengthEdge(
+  expectedMargin: number,
+  marketSpread: number,
+  teams: { homeTeamId: string; awayTeamId: string },
+  minPoints = 0.1,
+): string | null {
+  if (!Number.isFinite(expectedMargin) || !Number.isFinite(marketSpread)) return null;
+  if (Math.abs(expectedMargin) <= minPoints) return null;
+
+  // A positive margin favours home. The market's handicap on that same
+  // side is `-marketSpread`: stored -3 means home is laying 3.
+  const favouredIsHome = expectedMargin > 0;
+  const favoured = favouredIsHome ? teams.homeTeamId : teams.awayTeamId;
+  const modelPoints = Math.abs(expectedMargin);
+  const marketPoints = favouredIsHome ? -marketSpread : marketSpread;
+
+  const gap = marketPoints - modelPoints;
+  const comparison =
+    Math.abs(gap) < 0.05
+      ? 'the market agrees'
+      : gap > 0
+        ? `the market asks ${gap.toFixed(1)} more`
+        : `the market asks ${Math.abs(gap).toFixed(1)} less`;
+
+  return (
+    `Opponent-adjusted team strength favours ${favoured} by ` +
+    `${modelPoints.toFixed(1)} points; the market prices them at ` +
+    `${marketPoints.toFixed(1)} — ${comparison}`
+  );
+}

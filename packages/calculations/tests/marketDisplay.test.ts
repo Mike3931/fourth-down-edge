@@ -21,6 +21,7 @@ import {
   formatLine,
   lineForSelection,
   describeBrierDelta,
+  describeStrengthEdge,
   formatDrawdownUnits,
   formatUnits,
   soonestScheduledWeek,
@@ -320,5 +321,68 @@ describe('weekLabel and soonestScheduledWeek', () => {
 
   it('ignores an unparseable kickoff rather than treating it as imminent', () => {
     expect(soonestScheduledWeek([{ week: 0, kickoff_utc: 'not a date' }, REG1], NOW)).toBe(1);
+  });
+});
+
+describe('describeStrengthEdge', () => {
+  /**
+   * The primary justification line on the primary recommendation card said
+   * this, verbatim, for the demo dataset's headline pick:
+   *
+   *   "Opponent-adjusted team strength favors Los Angeles Rams by 6.1
+   *    points vs market 9"
+   *
+   * The pick was LA +9. `expectedMargin` is HOME-relative and was -6.1, so
+   * the model favours CINCINNATI by 6.1 — `homeWinProbability` was 0.319,
+   * which says the same thing. Two errors compounded: the team named was
+   * the one being BET rather than the one favoured, and `Math.abs()` threw
+   * away the sign that identifies the favourite.
+   *
+   * The underlying analysis was sound and is worth stating: the model has
+   * Cincinnati by 6.1, the market prices them at 9, so nine points is more
+   * than the model thinks Cincinnati is worth. Recommending an underdog is
+   * the ordinary shape of a value bet, which is exactly when the old
+   * sentence was guaranteed to be backwards.
+   */
+  const TEAMS = { homeTeamId: 'LAR', awayTeamId: 'CIN' };
+
+  it('names the team the model actually favours, not the one being bet', () => {
+    // The regression, with the real numbers.
+    const line = describeStrengthEdge(-6.1, 9, TEAMS);
+    expect(line).toContain('CIN');
+    expect(line).not.toMatch(/favou?rs LAR/i);
+  });
+
+  it('names the home team when the margin is positive', () => {
+    expect(describeStrengthEdge(6.1, -9, TEAMS)).toContain('LAR');
+  });
+
+  it('states the model margin and the market number as comparable', () => {
+    const line = describeStrengthEdge(-6.1, 9, TEAMS);
+    expect(line).toContain('6.1');
+    expect(line).toContain('9');
+  });
+
+  it('says the market is asking more than the model when it is', () => {
+    // Model: CIN by 6.1. Market: CIN laying 9. The market wants 2.9 more.
+    expect(describeStrengthEdge(-6.1, 9, TEAMS)).toMatch(/2\.9/);
+  });
+
+  it('says nothing at a pick-em rather than naming an arbitrary side', () => {
+    expect(describeStrengthEdge(0, 0, TEAMS)).toBeNull();
+    expect(describeStrengthEdge(0.05, 0, TEAMS)).toBeNull();
+  });
+
+  it('refuses a non-finite margin rather than printing NaN', () => {
+    expect(describeStrengthEdge(NaN, 9, TEAMS)).toBeNull();
+    expect(describeStrengthEdge(-6.1, NaN, TEAMS)).toBeNull();
+  });
+
+  it('the two sides are symmetric', () => {
+    const a = describeStrengthEdge(-6.1, 9, TEAMS);
+    const b = describeStrengthEdge(6.1, -9, TEAMS);
+    expect(a).toContain('CIN');
+    expect(b).toContain('LAR');
+    expect(a).not.toBe(b);
   });
 });

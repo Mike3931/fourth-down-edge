@@ -14,6 +14,7 @@ import {
   breakEvenProbability,
   computeStake,
   decideRecommendation,
+  describeStrengthEdge,
   expectedValuePerDollar,
   filterToCutoff,
   isModelUsableAtCutoff,
@@ -521,15 +522,25 @@ export function evaluateGame(
 
   const home = ds.teams.find((t) => t.id === game.homeTeamId)!;
   const away = ds.teams.find((t) => t.id === game.awayTeamId)!;
-  const favoredTeam = best?.selection === 'HOME' ? home.name : best?.selection === 'AWAY' ? away.name : undefined;
+  // NOT the team the model favours - the team being BET. It was called
+  // `favoredTeam`, and the rationale line below took that name at its word.
+  const selectedTeam = best?.selection === 'HOME' ? home.name : best?.selection === 'AWAY' ? away.name : undefined;
 
   const supporting: string[] = [];
   const opposing: string[] = [];
   if (best && pred) {
-    if (Math.abs(pred.expectedMargin) > 0.1 && best.market === 'SPREAD') {
-      supporting.push(
-        `Opponent-adjusted team strength favors ${favoredTeam} by ${Math.abs(pred.expectedMargin).toFixed(1)} points vs market ${spreadSnap?.line ?? 0}`,
-      );
+    if (best.market === 'SPREAD') {
+      // `describeStrengthEdge` names the team the MODEL favours. This line
+      // used to name the SELECTED team — the one being bet
+      // — and pass `Math.abs(expectedMargin)`, discarding the sign that
+      // identifies the favourite. Recommending an underdog is the ordinary
+      // shape of a value bet, so it read backwards exactly when the card
+      // was working. See marketDisplay.ts, where it is under test.
+      const strength = describeStrengthEdge(pred.expectedMargin, spreadSnap?.line ?? 0, {
+        homeTeamId: home.abbreviation,
+        awayTeamId: away.abbreviation,
+      });
+      if (strength) supporting.push(strength);
     }
     if (best.edge > 0.015) supporting.push(`Market disagreement: conservative probability ${(best.conservativeProbability * 100).toFixed(1)}% vs break-even ${(best.breakEvenProbability * 100).toFixed(1)}%`);
     const avail = availability.find((a) => a.activeProbability < 0.9);
@@ -542,8 +553,8 @@ export function evaluateGame(
     if (existingGameExposureDollars > 0) {
       opposing.push(`Existing exposure on this game: ${(existingGameExposurePct * 100).toFixed(2)}% of bankroll (cap ${(rc.maxPerGamePct * 100).toFixed(2)}%)`);
     }
-    if (existingTeamExposureDollars > 0 && favoredTeam) {
-      opposing.push(`Existing weekly exposure to ${favoredTeam}: ${(existingTeamExposurePct * 100).toFixed(2)}% of bankroll (cap ${(rc.maxPerTeamWeeklyPct * 100).toFixed(2)}%)`);
+    if (existingTeamExposureDollars > 0 && selectedTeam) {
+      opposing.push(`Existing weekly exposure to ${selectedTeam}: ${(existingTeamExposurePct * 100).toFixed(2)}% of bankroll (cap ${(rc.maxPerTeamWeeklyPct * 100).toFixed(2)}%)`);
     }
     opposing.push('Demo thresholds are not historically validated');
   }
