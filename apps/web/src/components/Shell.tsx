@@ -190,9 +190,19 @@ export default function Shell() {
               </>
             )}
             {/* Paper mode is a real setting about real behaviour, so it is
-                stated on every screen regardless of the data source. */}
+                stated on every screen regardless of the data source.
+
+                The second label used to read "REAL TRACKING MODE", which
+                on every screen in the app asserted that wagers were being
+                recorded as real. They were not and cannot be: `placeBet`
+                refuses any mode but PAPER, both call sites pass the
+                literal, and `settings.mode` never reaches the ledger. The
+                mode is the user's declared intent; the ledger is paper,
+                and the badge now says both rather than only the first. */}
             <Pill tone={store.settings.mode === 'PAPER' ? 'accent' : 'warn'}>
-              {store.settings.mode === 'PAPER' ? 'PAPER MODE' : 'REAL TRACKING MODE'}
+              {store.settings.mode === 'PAPER'
+                ? 'PAPER MODE'
+                : 'REAL TRACKING — PAPER LEDGER'}
             </Pill>
             {onDemoScreen && (
               <>

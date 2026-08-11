@@ -93,12 +93,31 @@ export default function Settings() {
       <Card>
         <CardHeader
           title="Application mode"
-          right={<Pill tone={settings.mode === 'PAPER' ? 'accent' : 'warn'}>{settings.mode === 'PAPER' ? 'PAPER MODE' : 'REAL TRACKING MODE'}</Pill>}
+          right={<Pill tone={settings.mode === 'PAPER' ? 'accent' : 'warn'}>{settings.mode === 'PAPER' ? 'PAPER MODE' : 'REAL TRACKING — PAPER LEDGER'}</Pill>}
         />
         <div className="space-y-3 p-4 text-xs">
+          {/* What this setting DOES, which is less than it used to claim.
+              It said "Real Tracking Mode only records wagers you have
+              already placed manually elsewhere" — describing a behaviour
+              this build does not have. `placeBet` refuses any mode that is
+              not exactly PAPER (paper-mode-mandatory.test.ts), both call
+              sites pass the literal 'PAPER', and `settings.mode` never
+              reaches the ledger. It drives two badges.
+
+              So a user could enable it, see REAL TRACKING MODE in the
+              header, record a wager, and get a row indistinguishable from
+              a paper bet — with the header asserting otherwise. */}
           <p className="text-ink-muted">
-            Paper betting is the default. Real Tracking Mode only records wagers you have already placed manually
-            elsewhere — this software never places, submits, or automates wagers, and never connects to a sportsbook.
+            <strong className="text-ink">Every wager in this build is recorded as paper</strong>,
+            whichever mode is selected. The ledger refuses to store anything else, and this
+            software never places, submits, or automates wagers, and never connects to a
+            sportsbook.
+          </p>
+          <p className="text-ink-muted">
+            Real Tracking Mode records your intent to track wagers placed manually elsewhere,
+            along with the monthly loss budget below. It does not change what the ledger
+            stores and does not enable real-money tracking — that would need a ledger this
+            build does not have.
           </p>
           {settings.mode === 'PAPER' ? (
             <div className="space-y-2 rounded border border-edge bg-panel-raised/50 p-3">
@@ -117,8 +136,9 @@ export default function Settings() {
               </p>
               <label className="flex items-start gap-2 text-ink">
                 <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} className="mt-0.5 accent-[#d9a13b]" />
-                I understand that no model guarantees profit, that demo thresholds are not validated, and that I alone
-                am responsible for any real wager I record here.
+                I understand that no model guarantees profit, that demo thresholds are not validated,
+                and that I alone am responsible for any wager I place elsewhere. Nothing recorded
+                here is a real wager.
               </label>
               {modeError ? <p role="alert" className="text-bad">{modeError}</p> : null}
               <Button variant="default" onClick={enableRealTracking}>Enable real tracking</Button>

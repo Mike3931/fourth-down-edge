@@ -84,6 +84,25 @@ test.describe('screens that show no dataset at all', () => {
     await expect(page.getByText('PAPER MODE').first()).toBeVisible();
   });
 
+  test('Settings does not promise a mode the ledger refuses', async ({ page }) => {
+    // `placeBet` rejects any mode that is not exactly PAPER — pinned by
+    // packages/calculations/tests/paper-mode-mandatory.test.ts — and both
+    // UI call sites pass the literal 'PAPER'. `settings.mode` never
+    // reaches the ledger at all; it drives two badges.
+    //
+    // So "Real Tracking Mode only records wagers you have already placed
+    // manually elsewhere" described something the build does not do, and
+    // a user who enabled it saw REAL TRACKING MODE in the header while
+    // every wager was still written as paper, indistinguishably.
+    await page.goto('/settings');
+    await expect(page.getByText(/every wager .* recorded as paper/i).first()).toBeVisible();
+
+    // And the mode section must not claim the toggle changes the record.
+    await expect(
+      page.getByText('Real Tracking Mode only records wagers you have already placed'),
+    ).toHaveCount(0);
+  });
+
   test('the demonstration screens still carry their banner', async ({ page }) => {
     // The guard on the fix above: quieting the banner must not have
     // quieted it where it belongs.
