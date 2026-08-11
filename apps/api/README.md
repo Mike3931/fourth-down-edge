@@ -18,8 +18,20 @@ cd apps/api
 py -3.12 -m pip install uv
 py -3.12 -m uv sync
 .venv/Scripts/python -m alembic upgrade head
+printf 'FDE_ALLOW_UNAUTHENTICATED=1\n' > .env
 .venv/Scripts/python -m uvicorn fde_api.api.main:app --port 8000
 ```
+
+`apps/api/.env` is gitignored and holds the service's environment. It must
+exist before the engine starts: without a token the API answers 503 rather
+than serving unauthenticated by accident, and `FDE_ALLOW_UNAUTHENTICATED=1`
+is how you say you meant it. `FDE_ODDS_API_KEY` goes in the same file — see
+[../../docs/security.md](../../docs/security.md); it is read from the
+environment only, never logged, and never reaches client code.
+
+The repo's `.claude/launch.json` starts the same process (`engine`, port
+8000) with `--env-file apps/api/.env`, alongside the `web` dev server on
+5173 whose proxy points at it.
 
 Then drive it through the API — every long operation returns a job:
 

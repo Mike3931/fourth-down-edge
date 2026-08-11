@@ -20,6 +20,8 @@ import {
   describeQuote,
   formatLine,
   lineForSelection,
+  formatDrawdownUnits,
+  formatUnits,
   valuesDisagree,
 } from '../src/marketDisplay';
 
@@ -182,5 +184,42 @@ describe('valuesDisagree', () => {
   it('accepts an explicit tolerance', () => {
     expect(valuesDisagree(REAL_DELTA, 1e-3)).toBe(false);
     expect(valuesDisagree(FLOAT_NOISE, 0)).toBe(true);
+  });
+});
+
+describe('formatUnits and formatDrawdownUnits', () => {
+  // The Forward Test screen renders every unit figure through one signed
+  // formatter, and one of those figures is a DRAWDOWN. `max_drawdown_units`
+  // is computed as `max(peak - bankroll)`, so it is always positive and
+  // always means a loss — and it was printed "+3.00u" directly beside
+  // "P&L (paper) +1.20u", where the same plus sign means a gain. The
+  // reader gets the sign convention from the neighbour.
+  it('signs a P&L, because the direction is the information', () => {
+    expect(formatUnits(1.2)).toBe('+1.20u');
+    expect(formatUnits(-6.59)).toBe('-6.59u');
+    expect(formatUnits(0)).toBe('+0.00u');
+  });
+
+  it('never signs a drawdown', () => {
+    expect(formatDrawdownUnits(3)).toBe('3.00u');
+    expect(formatDrawdownUnits(0)).toBe('0.00u');
+  });
+
+  it('a drawdown of three units does not read as a gain of three', () => {
+    // The regression stated directly.
+    expect(formatDrawdownUnits(3)).not.toBe(formatUnits(3));
+  });
+
+  it('reports a negative drawdown as absent rather than as a gain', () => {
+    // Not reachable from `max(peak - bankroll)`, which is why it must not
+    // be rendered as if it were meaningful if it ever arrives.
+    expect(formatDrawdownUnits(-1)).toBe('—');
+  });
+
+  it('renders a missing figure as an em dash, never as zero', () => {
+    expect(formatUnits(null)).toBe('—');
+    expect(formatDrawdownUnits(null)).toBe('—');
+    expect(formatUnits(NaN)).toBe('—');
+    expect(formatDrawdownUnits(NaN)).toBe('—');
   });
 });

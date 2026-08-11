@@ -457,9 +457,22 @@ def _no_consensus_reasons(eligible_books: int, report: EligibilityReport) -> lis
         return reasons
     # Ordered most-likely-actionable first. Each is stated only when it
     # actually accounts for something, so the list never pads.
+    #
+    # No entry here is a disjunction. The first two used to be one line
+    # reading "older than the freshness window, or newer than the cutoff",
+    # which handed the reader the code's uncertainty as though it were the
+    # market's - and the two halves have opposite remedies. So do the next
+    # two: a provider-flagged in-play quote and a post-kickoff quote were
+    # reported together under the second one's wording.
     excluded = [
-        (report.rejected_stale, "older than the freshness window, or newer than the cutoff"),
-        (report.rejected_live, "observed after kickoff, so in-play"),
+        (report.rejected_stale, "older than the freshness window"),
+        (
+            report.rejected_after_cutoff,
+            "observed after the as-of cutoff — for a live read that means the "
+            "timestamp is in the future, which capturing more often will not fix",
+        ),
+        (report.rejected_live, "flagged in-play by the provider"),
+        (report.rejected_post_kickoff, "observed after kickoff, so in-play"),
         (report.rejected_unknown_book, "from a book that is not on the recognised list"),
         (report.rejected_invalid, "carrying an implausible price or line"),
         (report.rejected_duplicate, "superseded by a newer quote from the same book"),
@@ -729,18 +742,48 @@ def get_forward_slate(data_mode: str = "LIVE_RESEARCH", limit: int = 400) -> dic
 def _candidate_gate(s: Session, mode: DataMode) -> dict[str, Any]:
     """Whether candidates may be produced at all, and what is stopping it.
 
-    Read from the same health checks that gate the evaluation path, so the
-    screen cannot show a rosier answer than the engine enforces.
+    Built from `evaluation_health_context` — the SAME function the
+    evaluation path runs in `handlers.py` — so the screen and the engine
+    apply one rule rather than two that disagree.
+
+    They did disagree. This read `suppresses_candidates` alone, and
+    `_fail()` set that from severity, so every CRITICAL check carried it
+    whatever it was about. The evaluation path also required the check's
+    SCOPE to be one that may suppress, recording an OPERATIONAL_PLATFORM
+    failure as degradation and proceeding. With no odds key and no
+    scheduler run the engine evaluated four games and wrote three
+    DATA_INCOMPLETE rows while this reported a closed gate, which told
+    the reader nothing had been attempted. `_fail()` applies the scope
+    now, so the flag no longer says two things at once.
+
+    The docstring here used to promise the screen could not "show a rosier
+    answer than the engine enforces". The divergence went the other way,
+    and a screen that claims the engine refused to look is not the safe
+    direction of a wrong answer - it is a different wrong answer.
+
+    Operational failures are still reported, under `degraded_by`. They are
+    usually the real reason a slate is empty; they are simply not the
+    reason the engine declined, because it did not decline.
     """
-    from fde_api.forward.health import run_health_checks
+    from fde_api.forward.health import evaluation_health_context, run_health_checks
 
     report = run_health_checks(s, now=utc_now(), data_mode=mode)
-    blocking = [
-        {"check": c["id"], "explanation": c["explanation"], "remediation": c["remediation"]}
-        for c in report["checks"]
-        if c.get("suppresses_candidates") and c["status"] != "OK"
-    ]
-    return {"open": not blocking, "blocked_by": blocking}
+    ctx = evaluation_health_context(report)
+    by_id = {c["id"]: c for c in report["checks"]}
+
+    def described(check_ids: tuple[str, ...]) -> list[dict[str, Any]]:
+        return [
+            {"check": cid,
+             "explanation": by_id[cid]["explanation"],
+             "remediation": by_id[cid]["remediation"]}
+            for cid in check_ids if cid in by_id
+        ]
+
+    return {
+        "open": not ctx.suppressed,
+        "blocked_by": described(ctx.failing_check_ids),
+        "degraded_by": described(ctx.operational_check_ids),
+    }
 
 
 @app.get("/v1/forward/candidates", dependencies=[Auth])

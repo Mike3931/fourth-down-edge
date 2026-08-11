@@ -1,8 +1,28 @@
 """Data Health — a gating dependency, not a dashboard.
 
-Critical failures suppress RESEARCH CANDIDATE generation at the domain
-service, so a direct API call cannot bypass the gate by skipping the UI.
-`enforce_candidate_gate()` is called by the evaluation path itself.
+Failures in a SUPPRESSING SCOPE stop RESEARCH CANDIDATE generation inside
+the domain service, so a direct API call cannot bypass the gate by
+skipping the UI. The function that does this is `evaluation_health_context`,
+called from `forward/handlers.py`; `/v1/forward/candidates` builds its
+`gate` block from the same function.
+
+`enforce_candidate_gate()` below is a SECOND implementation of the same
+idea that NO production path calls — only tests. Stated here because this
+codebase has been bitten by a safety-shaped function nobody calls (see
+`pit/guards.py:filter_to_cutoff`, which says the same about itself), and
+because this module docstring and that function's own docstring both
+claimed it was wired into the evaluation path, and it never was.
+
+The two used to give different answers, which is how the divergence
+stayed invisible. `_fail()` set `suppresses_candidates` from SEVERITY
+alone, so `report["candidates_suppressed"]` — the thing
+`enforce_candidate_gate` reads — treated every CRITICAL check as gating
+regardless of scope, and would refuse to evaluate a sound game because a
+credential was unset. `_fail()` now applies the scope as well, so the two
+agree; `ledger.py` records having had to move OFF `candidates_suppressed`
+for exactly this reason, and `/v1/forward/candidates` later reintroduced
+the same split on the screen, announcing that the engine had declined to
+evaluate while it was evaluating.
 
 Each check reports what it is, how bad it is, when it last succeeded,
 which games it affects, whether it suppresses candidates, and what to do
@@ -168,6 +188,10 @@ CHECK_SCOPES: dict[str, HealthScope] = {
     "provenance_live_claim_without_live_provider": HealthScope.GOVERNANCE_INTEGRITY,
     "provenance_unrecorded": HealthScope.GOVERNANCE_INTEGRITY,
     "provenance_non_live_in_live_research": HealthScope.GOVERNANCE_INTEGRITY,
+    # A record dated after the clock that recorded it. Governance, not
+    # platform: nothing is broken operationally, and the record is simply
+    # impossible.
+    "observation_instant_in_future": HealthScope.GOVERNANCE_INTEGRITY,
     # --- postgame: completeness of the after-the-fact record ------------ #
     "missing_close": HealthScope.POSTGAME_EVALUATION,
     "missing_result": HealthScope.POSTGAME_EVALUATION,
@@ -222,10 +246,33 @@ def _fail(
     cid: str, sev: Severity, explanation: str, remediation: str, now: datetime,
     *, status: Status = Status.FAILED, suppress: bool | None = None, **kw: Any
 ) -> HealthCheck:
+    """SCOPE AND SEVERITY, not severity alone.
+
+    This derived `suppresses_candidates` from severity by itself, so every
+    CRITICAL check carried it whatever it was about — and the scope
+    taxonomy above, whose entire purpose is to keep a platform problem
+    from invalidating a sound analysis, had no say in the one flag that
+    everything downstream reads.
+
+    That produced two answers to one question. `evaluation_health_context`
+    applied the scope as well and let the evaluation proceed;
+    `candidates_suppressed` did not and would have refused. `ledger.py`
+    already documents having to move OFF `candidates_suppressed` for this
+    reason, and `/v1/forward/candidates` then reintroduced the same split
+    on the screen, announcing that the engine had declined to evaluate
+    while it was evaluating.
+
+    `suppress=` remains available for a check that is serious but must not
+    gate — a CRITICAL in a suppressing scope that would otherwise close
+    the gate on every game because one row somewhere is wrong.
+    """
     return HealthCheck(
         id=cid, severity=sev, status=status, explanation=explanation,
         remediation=remediation, last_checked_at=now,
-        suppresses_candidates=(sev is Severity.CRITICAL) if suppress is None else suppress,
+        suppresses_candidates=(
+            (sev is Severity.CRITICAL and may_suppress(cid))
+            if suppress is None else suppress
+        ),
         **kw,
     )
 
@@ -368,6 +415,101 @@ def _provenance_checks(
         ))
 
     return checks
+
+
+# Tables whose `observed_at` is an OBSERVATION instant — the moment this
+# engine saw something. Deliberately not every table with a datetime:
+# `kickoff_utc` is a planned event and belongs in the future, and a check
+# that swept it would fire on the entire schedule.
+_OBSERVED_AT_TABLES: tuple[tuple[str, Any], ...] = (
+    ("odds_quotes", OddsQuote),
+    ("consensus_snapshots", ConsensusSnapshot),
+    ("schedule_observations", ScheduleObservation),
+)
+
+
+def _newest_observation(
+    session: Session, column: Any, *, now: datetime, where: Any
+) -> datetime | None:
+    """The newest observation THAT HAS HAPPENED.
+
+    Every freshness check here computes `now - newest < threshold`. A row
+    dated ahead of the clock makes that difference negative, which is
+    under every threshold, so one impossible row reports the whole feed as
+    fresh. `odds_freshness` — a CRITICAL check — read OK with "newest
+    quote 2026-09-10T22:55:00+00:00" against a 2026-08-11 clock and
+    nothing actually captured for nine hours.
+
+    Freshness asks how recently something was last seen, and a row that
+    cannot have been seen yet is not an answer to it. The future rows are
+    not swallowed: `observation_instant_in_future` reports them by name.
+    """
+    return session.scalar(select(func.max(column)).where(where, column <= now))
+
+
+def _future_observation_check(session: Session, *, now: datetime) -> HealthCheck:
+    """Does any stored observation claim to have happened after now?
+
+    The point-in-time guards enforce `observed_at <= as_of_at` against a
+    CUTOFF, which is a different question and is satisfied trivially by a
+    future-dated row: such a row is excluded from every snapshot taken
+    before its own timestamp. Nothing asks whether the timestamp is
+    possible in the first place.
+
+    That makes the failure a delayed one. A quote dated ahead of the clock
+    is invisible to every read, and then wall time passes it and it becomes
+    the youngest quote in the freshness window — the one a consensus
+    prefers — for a game about to kick off. It looks correct for its whole
+    life and is wrong at the only moment it is used.
+
+    It does NOT suppress. A governance CRITICAL that closes the gate on
+    every game because one row somewhere is misdated is the false-blocker
+    shape this codebase has had to unwind twice already. The affected games
+    are named instead, so the reader can act on those and only those.
+    """
+    by_table: dict[str, int] = {}
+    games: set[str] = set()
+    furthest: datetime | None = None
+
+    for label, model in _OBSERVED_AT_TABLES:
+        rows = session.execute(
+            select(model.canonical_game_id, model.observed_at)
+            .where(model.observed_at > now)
+            .order_by(model.observed_at.desc())
+            .limit(200)
+        ).all()
+        by_table[label] = len(rows)
+        for game_id, observed_at in rows:
+            games.add(str(game_id))
+            if furthest is None or observed_at > furthest:
+                furthest = observed_at
+
+    total = sum(by_table.values())
+    if total == 0:
+        return _ok(
+            "observation_instant_in_future", Severity.CRITICAL,
+            "every stored observation is dated at or before now", now,
+            detail={"by_table": by_table},
+        )
+    ahead = furthest - now if furthest is not None else timedelta(0)
+    return _fail(
+        "observation_instant_in_future", Severity.CRITICAL,
+        f"{total} record(s) are dated after now, the furthest by "
+        f"{ahead.days}d {ahead.seconds // 3600}h, across "
+        f"{len(games)} game(s): {', '.join(sorted(games)[:5])}. They are "
+        "invisible to every read until wall time passes them, and are then "
+        "admitted as the freshest prices available",
+        "re-stamp or quarantine these rows before that date. An observation "
+        "instant is this engine's own clock, so a future one is seeded or "
+        "clock-skewed data rather than a market event. Games not listed are "
+        "unaffected and are not blocked.",
+        now, suppress=False,
+        detail={
+            "by_table": by_table,
+            "games": sorted(games)[:50],
+            "furthest_ahead": furthest.isoformat() if furthest else None,
+        },
+    )
 
 
 def _policy_window(session: Session, policy_version: str) -> str:
@@ -530,9 +672,9 @@ def run_health_checks(
                    affected_games=leaked)
     )
 
-    last_sched = session.scalar(
-        select(func.max(ScheduleObservation.observed_at)).where(
-            ScheduleObservation.data_mode == data_mode.value)
+    last_sched = _newest_observation(
+        session, ScheduleObservation.observed_at, now=now,
+        where=ScheduleObservation.data_mode == data_mode.value,
     )
     sched_stale = last_sched is None or (now - last_sched) > timedelta(days=2)
     checks.append(
@@ -545,8 +687,9 @@ def run_health_checks(
     )
 
     # ---- market --------------------------------------------------------- #
-    last_odds = session.scalar(
-        select(func.max(OddsQuote.observed_at)).where(OddsQuote.data_mode == data_mode.value)
+    last_odds = _newest_observation(
+        session, OddsQuote.observed_at, now=now,
+        where=OddsQuote.data_mode == data_mode.value,
     )
     odds_stale = last_odds is None or (now - last_odds) > timedelta(hours=6)
     checks.append(
@@ -578,9 +721,9 @@ def run_health_checks(
     )
 
     # ---- weather / injuries --------------------------------------------- #
-    last_wx = session.scalar(
-        select(func.max(WeatherForecastVintage.observed_at)).where(
-            WeatherForecastVintage.data_mode == data_mode.value)
+    last_wx = _newest_observation(
+        session, WeatherForecastVintage.observed_at, now=now,
+        where=WeatherForecastVintage.data_mode == data_mode.value,
     )
     checks.append(
         _ok("weather_freshness", Severity.INFO,
@@ -592,9 +735,9 @@ def run_health_checks(
                    status=Status.DEGRADED)
     )
 
-    last_inj = session.scalar(
-        select(func.max(InjuryObservation.observed_at)).where(
-            InjuryObservation.data_mode == data_mode.value)
+    last_inj = _newest_observation(
+        session, InjuryObservation.observed_at, now=now,
+        where=InjuryObservation.data_mode == data_mode.value,
     )
     checks.append(
         _ok("injury_freshness", Severity.WARNING,
@@ -712,6 +855,7 @@ def run_health_checks(
     checks.extend(_provenance_checks(
         session, provider_mode=provider_mode, data_mode=data_mode, now=now
     ))
+    checks.append(_future_observation_check(session, now=now))
 
     bad_origin = detect_invalid_origin(session)
     checks.append(
@@ -832,16 +976,26 @@ def evaluation_health_context(report: dict[str, Any]) -> EvaluationHealthContext
     operational: list[str] = []
     rendered: list[str] = []
     for check in report.get("checks", []):
-        if check.get("status") == "OK" or not check.get("suppresses_candidates"):
+        if check.get("status") == "OK":
             continue
         cid = check.get("id", "")
         # Scope decides, not a list of exceptions. A check whose scope is
         # undeclared raises here rather than being treated as suppressing:
         # inheriting that power by default is the failure this replaced.
-        if may_suppress(cid):
+        #
+        # `_fail` now applies the same scope rule when it sets the flag, so
+        # the two agree by construction. The scope is still re-applied here
+        # rather than trusted, because this function receives a plain dict
+        # that may have come from a serialised report written by an older
+        # build.
+        if check.get("suppresses_candidates") and may_suppress(cid):
             failing.append(cid)
             rendered.append(f"{cid}: {check.get('explanation', '')}")
-        else:
+        elif check.get("severity") == Severity.CRITICAL.value:
+            # Serious, and deliberately not gating: an operational failure,
+            # or a check that set `suppress=False` on purpose. Reported so
+            # a screen can explain an empty slate, never so it can claim
+            # the engine refused to look.
             operational.append(cid)
     return EvaluationHealthContext(
         suppressed=bool(failing),
@@ -859,11 +1013,15 @@ def enforce_candidate_gate(
     policy_version: str | None = None,
     now: datetime | None = None,
 ) -> None:
-    """Domain-level gate.
+    """A second gate that NOTHING IN PRODUCTION CALLS. Tests only.
 
-    Called by the evaluation service itself, so a direct API call cannot
-    obtain a RESEARCH CANDIDATE while health is critical — hiding them in
-    the UI would leave the API a bypass.
+    Said plainly because it used to claim the opposite, in a codebase that
+    has already been bitten by a safety-shaped function nobody calls.
+
+    The evaluation path gates on `evaluation_health_context` (see
+    `forward/handlers.py`); this reads `candidates_suppressed`. Since
+    `_fail()` started applying the scope, the two agree — but agreeing is
+    not the same as being wired in, and only one of them is.
     """
     report = run_health_checks(
         session, data_mode=data_mode, provider_mode=provider_mode,

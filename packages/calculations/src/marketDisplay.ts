@@ -132,3 +132,34 @@ export function valuesDisagree(
   if (seen.length < 2) return false;
   return Math.max(...seen) - Math.min(...seen) > tolerance;
 }
+
+/**
+ * A signed figure in bankroll units — a P&L, where the sign IS the point.
+ */
+export function formatUnits(n: number | null | undefined, digits = 2): string {
+  if (n === null || n === undefined || !Number.isFinite(n)) return '—';
+  return `${n >= 0 ? '+' : ''}${n.toFixed(digits)}u`;
+}
+
+/**
+ * A drawdown in bankroll units. Unsigned, because it is a magnitude.
+ *
+ * `max_drawdown_units` is computed as `max(peak - bankroll)`, so it is
+ * always positive and always describes a LOSS. The Forward Test screen
+ * rendered it through the signed P&L formatter, which printed a
+ * three-unit drawdown as "+3.00u" — directly beside "P&L (paper) +1.20u",
+ * where the same plus sign means a gain. Nothing on the screen said which
+ * convention applied to which tile, and the reader takes it from the
+ * neighbour.
+ *
+ * A negative input cannot come from that formula. If one arrives it is a
+ * defect upstream, and rendering it as a gain would be the worst of the
+ * available responses, so it is reported as absent.
+ */
+export function formatDrawdownUnits(
+  n: number | null | undefined,
+  digits = 2,
+): string {
+  if (n === null || n === undefined || !Number.isFinite(n) || n < 0) return '—';
+  return `${n.toFixed(digits)}u`;
+}

@@ -26,6 +26,13 @@ import { fmtAgoLive, fmtInstant } from '../lib/format';
  *   declined to look, which is a completely different statement, so the
  *   closed gate is rendered instead of the table and says what is stopping
  *   it.
+ *
+ * And it must not claim the engine refused when it did not. The gate used
+ * to close on any CRITICAL health check, including operational ones the
+ * evaluation path itself treats as degradation and proceeds past — so with
+ * no odds key this screen announced a refusal while the engine was busy
+ * writing DATA INCOMPLETE rows. Blocking and degradation are now two lists
+ * because they are two states, and only one of them is a refusal.
  */
 
 function pct(p: number | null, digits = 1): string {
@@ -115,11 +122,50 @@ export default function CandidatesLive() {
         </div>
       )}
 
+      {/* An open gate with an empty table has TWO readings, and the
+          difference is the whole point of this screen.
+
+          "Nothing cleared the threshold" is the ordinary one and is worth
+          saying plainly. But it asserts that prices were there and the
+          model was unimpressed — and with one book capturing, the engine
+          reaches DATA INCOMPLETE without ever comparing anything. Saying
+          the first while the second is true is the more damaging error of
+          the two, because it implies a working pipeline.
+
+          So the degraded checks are folded in here rather than left on
+          Data Health. They do not close the gate and are not presented as
+          if they did; they are presented as the likelier explanation. */}
       {gate.open && data.count === 0 && (
         <div className="rounded border border-border p-4 text-sm text-muted">
           <p>
-            The engine evaluated and found nothing above the threshold. This is a
-            result, not a gap: most games most weeks produce no candidate.
+            The engine evaluated and recorded no candidate. Most games most weeks
+            produce none, so this is a result rather than a gap.
+          </p>
+          {gate.degraded_by.length > 0 && (
+            <>
+              <p className="mt-2 text-warning">
+                But the platform is degraded, and that is the more likely
+                explanation — an evaluation missing its inputs reaches DATA
+                INCOMPLETE, which is also an empty table.
+              </p>
+              <ul className="mt-2 space-y-1.5">
+                {gate.degraded_by.map((d) => (
+                  <li key={d.check} className="text-sm">
+                    <code className="text-fg">{d.check}</code>
+                    <span className="text-muted"> — {d.explanation}</span>
+                    <div className="text-xs text-muted">
+                      <span className="font-medium">Fix:</span> {d.remediation}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <p className="mt-3 text-xs">
+            <Link to="/health" className="text-accent underline">
+              Data Health
+            </Link>{' '}
+            carries the full check list.
           </p>
         </div>
       )}

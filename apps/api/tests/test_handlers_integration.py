@@ -297,15 +297,25 @@ class TestDataHealth:
                         "last_checked_at", "affected_games", "suppresses_candidates"):
                 assert key in c, key
 
-    def test_missing_key_is_critical_and_suppresses(self, factory) -> None:
+    def test_missing_key_is_critical_and_does_not_itself_suppress(self, factory) -> None:
+        """It is CRITICAL, and it is OPERATIONAL_PLATFORM.
+
+        This used to assert that it suppressed, which was true only
+        because `_fail` set `suppresses_candidates` from severity alone and
+        the scope had no say. The test below it in this same class has
+        always said the opposite in words — "the key check is reported and
+        remediated as platform health, and suppression comes from the check
+        that actually describes the analytical gap" — so the two tests
+        disagreed, and the one asserting behaviour won.
+        """
         with factory() as sess:
             r = run_health_checks(sess, provider_mode=ProviderMode.KEY_MISSING,
                                   policy_version="ftp-2026-v1", now=NOW)
         key_check = next(c for c in r["checks"] if c["id"] == "odds_key_configured")
         assert key_check["severity"] == Severity.CRITICAL.value
-        assert key_check["status"] != Status.OK.value
-        assert r["candidates_suppressed"] is True
-        assert r["suppression_reasons"]
+        assert key_check["status"] != Status.OK.value, "the gap is still reported"
+        assert key_check["suppresses_candidates"] is False
+        assert "odds_key_configured" not in " ".join(r["suppression_reasons"])
 
     def test_a_missing_key_is_reported_as_platform_health(self, factory) -> None:
         """Configuration is OPERATIONAL; missing DATA is decision-input.
@@ -358,8 +368,34 @@ class TestDataHealth:
         assert ev.status == "DATA_INCOMPLETE"
         assert any("suppressed by Data Health" in r for r in ev.reasons)
 
-    def test_gate_raises_when_critical(self, factory) -> None:
+    def test_gate_raises_on_a_governance_failure(self, factory) -> None:
+        """A CRITICAL failure in a SUPPRESSING scope, induced deliberately.
+
+        This used to pass `provider_mode=KEY_MISSING` and rely on that
+        being critical enough. It was — under the old rule where severity
+        alone set the flag — but a missing credential is platform health,
+        and a test that gets the right answer from the wrong scope stops
+        being able to tell whether the scope rule still works. An altered
+        policy hash is governance, which is what this gate is for.
+        """
+        from fde_api.db.forward_models import ForwardTestPolicyRecord
+
+        with factory() as sess:
+            rec = sess.get(ForwardTestPolicyRecord, "ftp-2026-v1")
+            assert rec is not None, "the fixture is expected to have frozen a policy"
+            rec.policy_hash = "0" * 64
+            sess.commit()
+
         with factory() as sess, pytest.raises(CandidateSuppressedError, match="suppressed"):
+            enforce_candidate_gate(sess, provider_mode=ProviderMode.FIXTURE,
+                                   policy_version="ftp-2026-v1", now=NOW)
+
+    def test_the_gate_does_not_raise_on_platform_health_alone(self, factory) -> None:
+        """The other half, and the reason the test above had to change: no
+        odds key is CRITICAL and is not a reason to refuse to evaluate.
+        The evaluation reaches DATA_INCOMPLETE on its own inputs, which is
+        a statement about this game rather than about the deployment."""
+        with factory() as sess:
             enforce_candidate_gate(sess, provider_mode=ProviderMode.KEY_MISSING,
                                    policy_version="ftp-2026-v1", now=NOW)
 
@@ -463,6 +499,22 @@ class TestOutcomeDomainSeparation:
         assert "domain_state=" in row.error_summary
 
     def test_health_suppression_reports_suppressed_domain_state(self, factory) -> None:
+        """The job SUCCEEDS and the domain is SUPPRESSED — two axes.
+
+        The suppression has to come from a governance failure. It used to
+        come from `KEY_MISSING`, which stopped suppressing when
+        `suppresses_candidates` started respecting the check's scope: a
+        missing credential is platform health and does not invalidate an
+        otherwise sound evaluation.
+        """
+        from fde_api.db.forward_models import ForwardTestPolicyRecord
+
+        with factory() as sess:
+            rec = sess.get(ForwardTestPolicyRecord, "ftp-2026-v1")
+            assert rec is not None
+            rec.policy_hash = "0" * 64
+            sess.commit()
+
         s = _sched(factory, provider_mode=ProviderMode.KEY_MISSING)
         r = s.run_job("data_health_reconciliation", slot=NOW)
         assert r["status"] == "finished"

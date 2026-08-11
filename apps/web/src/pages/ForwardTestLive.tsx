@@ -1,3 +1,4 @@
+import { formatDrawdownUnits, formatUnits } from '@fde/calculations';
 import { useForwardPerformance, type ForwardCohort } from '../lib/engine';
 import EngineDown from '../components/EngineDown';
 import { fmtAgoLive } from '../lib/format';
@@ -22,10 +23,10 @@ import { fmtAgoLive } from '../lib/format';
  * The numbers are paper. Nothing was staked.
  */
 
-function units(n: number | null | undefined, digits = 2): string {
-  if (n === null || n === undefined) return '—';
-  return `${n >= 0 ? '+' : ''}${n.toFixed(digits)}u`;
-}
+// `formatUnits` signs; `formatDrawdownUnits` does not. Every unit figure
+// here used to go through one signed formatter, which printed a three-unit
+// DRAWDOWN as "+3.00u" beside a P&L whose plus sign means a gain. Both
+// live in @fde/calculations now, where the distinction is under test.
 
 function pct(p: number | null | undefined): string {
   if (p === null || p === undefined) return '—';
@@ -82,9 +83,9 @@ function Cohort({ c }: { c: ForwardCohort }) {
         <Stat label="Recorded" value={String(c.total_rows)} />
         <Stat label="Settled" value={String(c.settled)} />
         <Stat label="W / L / P" value={`${c.wins} / ${c.losses} / ${c.pushes}`} />
-        <Stat label="P&L (paper)" value={units(c.total_pnl_units)} muted={c.settled === 0} />
+        <Stat label="P&L (paper)" value={formatUnits(c.total_pnl_units)} muted={c.settled === 0} />
         <Stat label="ROI per bet" value={pct(c.roi_per_bet)} muted={c.settled === 0} />
-        <Stat label="Max drawdown" value={units(c.max_drawdown_units)} muted={c.settled === 0} />
+        <Stat label="Max drawdown" value={formatDrawdownUnits(c.max_drawdown_units)} muted={c.settled === 0} />
         <Stat label="Mean CLV (line)" value={c.mean_clv_line?.toFixed(2) ?? '—'} muted />
         <Stat label="Mean CLV (prob)" value={pct(c.mean_clv_probability)} muted />
       </div>

@@ -110,15 +110,24 @@ class TestAClosedGateIsNotAnEmptyResult:
     def test_every_blocker_is_a_suppressing_health_check(
         self, client: TestClient
     ) -> None:
-        """The gate reads the same checks the evaluation path enforces, so
-        the screen cannot show a rosier answer than the engine applies."""
+        """The gate applies the same RULE the evaluation path applies, not
+        merely the same checks.
+
+        This used to compare against `suppresses_candidates` alone, which
+        `_fail()` derives from severity and which therefore includes every
+        CRITICAL operational check. The evaluation path also requires the
+        SCOPE to be one that may suppress, so the two disagreed and this
+        test pinned the disagreement in place. See test_one_gate_not_two.py.
+        """
+        from fde_api.forward.health import may_suppress
+
         body = client.get("/v1/forward/candidates").json()
         health = client.get("/v1/forward/health").json()
         suppressing = {
             c["id"]
             for group in health["by_scope"].values()
             for c in group
-            if c["suppresses_candidates"] and c["status"] != "OK"
+            if c["suppresses_candidates"] and c["status"] != "OK" and may_suppress(c["id"])
         }
         assert {b["check"] for b in body["gate"]["blocked_by"]} == suppressing
 

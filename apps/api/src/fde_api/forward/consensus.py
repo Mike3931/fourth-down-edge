@@ -71,10 +71,33 @@ def no_vig_two_way(a: int, b: int) -> tuple[float, float]:
 
 @dataclass
 class EligibilityReport:
+    """One counter per cause, and the causes are not synonyms.
+
+    Two pairs used to share a field, and in both cases the pair members
+    mean opposite or unrelated things:
+
+      * `rejected_stale` held BOTH a quote observed too long before the
+        cutoff and a quote observed AFTER it. Too old means the price is
+        probably gone and capture should run more often; too new means
+        the observation is dated after the moment being priced, which on
+        the live path is a timestamp in the future and no amount of
+        capture will fix it. The endpoint could only report the
+        disjunction, and printed "older than the freshness window, or
+        newer than the cutoff" on the screen.
+      * `rejected_live` held both a quote the PROVIDER flagged in-play
+        and a quote observed after kickoff, under a message asserting the
+        second. Before kickoff that assertion is false.
+
+    The counters partition `considered`: every quote lands in exactly one
+    bucket, so the arithmetic on screen adds up.
+    """
+
     considered: int = 0
     eligible: int = 0
     rejected_live: int = 0
+    rejected_post_kickoff: int = 0
     rejected_stale: int = 0
+    rejected_after_cutoff: int = 0
     rejected_unknown_book: int = 0
     rejected_duplicate: int = 0
     rejected_invalid: int = 0
@@ -85,7 +108,9 @@ class EligibilityReport:
             "considered": self.considered,
             "eligible": self.eligible,
             "rejected_live": self.rejected_live,
+            "rejected_post_kickoff": self.rejected_post_kickoff,
             "rejected_stale": self.rejected_stale,
+            "rejected_after_cutoff": self.rejected_after_cutoff,
             "rejected_unknown_book": self.rejected_unknown_book,
             "rejected_duplicate": self.rejected_duplicate,
             "rejected_invalid": self.rejected_invalid,
@@ -112,13 +137,17 @@ def select_eligible_quotes(
     for q in sorted(quotes, key=lambda x: (x.observed_at, x.id), reverse=True):
         rep.considered += 1
         if q.observed_at > as_of_at:
-            rep.rejected_stale += 1  # future relative to the cutoff
+            # NOT stale. The quote is dated after the moment being priced.
+            # On the live path the cutoff is now, so this is an
+            # observation in the future - a clock, a provider field or a
+            # replay - and it is the opposite problem from an old price.
+            rep.rejected_after_cutoff += 1
             continue
         if q.is_live:
-            rep.rejected_live += 1
+            rep.rejected_live += 1  # the provider flagged it in-play
             continue
         if kickoff_utc is not None and q.observed_at > kickoff_utc:
-            rep.rejected_live += 1  # post-kickoff quote is in-play by definition
+            rep.rejected_post_kickoff += 1  # in-play by definition
             continue
         if q.sportsbook not in RECOGNIZED_BOOKS:
             rep.rejected_unknown_book += 1

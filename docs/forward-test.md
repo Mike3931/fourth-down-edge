@@ -394,15 +394,46 @@ would mean a caller invented provenance rather than observing it.
 
 ### Health checks
 
+A check gates candidates when its severity is CRITICAL **and** its scope
+is one that may suppress (`DECISION_INPUT` or `GOVERNANCE_INTEGRITY`).
+Both halves are required. Severity alone was the rule until it produced
+two answers to one question: `evaluation_health_context` — what the
+evaluation path actually runs — applied the scope as well, so a missing
+odds key was recorded as degradation and the evaluation proceeded to
+`DATA_INCOMPLETE` on its own inputs, while `candidates_suppressed` said
+the engine had refused. `/v1/forward/candidates` reported the second and
+announced a refusal that was not happening.
+
+`suppress=False` remains available for a check that is serious and must
+still not gate — see `observation_instant_in_future` below.
+
 | check | severity | gates candidates |
 | --- | --- | --- |
 | `provenance_live_claim_without_live_provider` | CRITICAL | yes |
 | `provenance_unrecorded` | WARNING | no |
 | `provenance_non_live_in_live_research` | WARNING | no |
+| `observation_instant_in_future` | CRITICAL | no (`suppress=False`) |
 
 The first is the alarming one: rows claim `LIVE` while the service is
 running on fixtures, meaning a test payload was captured as live market
 data.
+
+The fourth catches a record dated after the clock that recorded it. The
+point-in-time guards enforce `observed_at <= as_of_at` against a *cutoff*,
+which a future-dated row satisfies trivially by being excluded from every
+snapshot taken before its own timestamp — so nothing asked whether the
+timestamp was possible. Such a row is invisible to every read until wall
+time passes it and then enters the freshness window as the newest quote
+available, for a game about to kick off. It looks correct for its whole
+life and is wrong at the only moment it is used.
+
+It is CRITICAL and deliberately does not gate: closing the gate on every
+game because one row somewhere is misdated is a false blocker, and the
+affected games are named in the check instead. The same rows also made
+`odds_freshness` and `injury_freshness` read OK — `now - observed` is
+negative for a future row, which is under every threshold — so the
+freshness checks now take the newest observation that has actually
+happened.
 
 The third is deliberately **not** a gate. Burn-in exists to run the
 live-research pipeline on fixture payloads, so suppressing candidates

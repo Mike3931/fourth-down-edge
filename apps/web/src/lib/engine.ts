@@ -149,9 +149,22 @@ export interface CandidateRow {
   as_of_at: string | null;
 }
 
+export interface GateCheck {
+  check: string;
+  explanation: string;
+  remediation: string;
+}
+
 export interface CandidateGate {
   open: boolean;
-  blocked_by: { check: string; explanation: string; remediation: string }[];
+  /** Failures in a suppressing scope. These stop the engine evaluating. */
+  blocked_by: GateCheck[];
+  /**
+   * Operational failures. These do NOT stop the engine, and the engine
+   * does not treat them as reasons to refuse — but they are usually why a
+   * slate is empty, so a screen that drops them explains nothing.
+   */
+  degraded_by: GateCheck[];
 }
 
 export interface ForwardCandidates {
