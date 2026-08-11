@@ -99,7 +99,7 @@ Read endpoints take their session by dependency injection, which returns
 the connection to the pool in a `finally`. This is load-bearing, not
 style: the read endpoints previously called `get_session()` directly and
 never closed it, so each request leaked one pooled connection. With the
-default pool of 5 plus 10 overflow, the fifteenth request exhausted it —
+default pool of 5 plus 10 overflow, the fifteenth request exhausted it â€”
 subsequent calls blocked for thirty seconds and then failed with
 
 ```
@@ -108,7 +108,7 @@ sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached
 
 The service appears healthy right up to that point, and `/health` is
 itself one of the affected endpoints, so a health check will not warn you
-in advance — it will simply be among the first things to stop responding.
+in advance â€” it will simply be among the first things to stop responding.
 
 If a deployment starts hanging for thirty seconds and then returning 500s
 on read endpoints, check for a `get_session()` call in a request handler

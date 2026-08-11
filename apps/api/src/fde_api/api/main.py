@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
 if TYPE_CHECKING:
     from fde_api.forward.consensus import EligibilityReport
+    from fde_api.forward.modes import DataMode
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -701,4 +702,163 @@ def get_forward_slate(data_mode: str = "LIVE_RESEARCH", limit: int = 400) -> dic
         "count": len(games),
         "games": games,
         "research_banner": RESEARCH_BANNER,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Research candidates and the forward-test record
+# --------------------------------------------------------------------------- #
+#
+# The two screens Phase 3 named and never built. Both READ the forward
+# ledger; neither evaluates anything. An endpoint that computed a fresh
+# candidate on GET would produce a recommendation with no scheduler run
+# behind it, no policy attached, and no place in the record chain — which
+# is precisely the shape `chain.py` exists to detect.
+
+
+def _candidate_gate(s: Session, mode: DataMode) -> dict[str, Any]:
+    """Whether candidates may be produced at all, and what is stopping it.
+
+    Read from the same health checks that gate the evaluation path, so the
+    screen cannot show a rosier answer than the engine enforces.
+    """
+    from fde_api.forward.health import run_health_checks
+
+    report = run_health_checks(s, now=utc_now(), data_mode=mode)
+    blocking = [
+        {"check": c["id"], "explanation": c["explanation"], "remediation": c["remediation"]}
+        for c in report["checks"]
+        if c.get("suppresses_candidates") and c["status"] != "OK"
+    ]
+    return {"open": not blocking, "blocked_by": blocking}
+
+
+@app.get("/v1/forward/candidates", dependencies=[Auth])
+def get_forward_candidates(
+    s: Db, data_mode: str = "LIVE_RESEARCH", hours: int = 240, limit: int = 200
+) -> dict[str, Any]:
+    """Research candidates recorded for games that have not kicked off.
+
+    RESEARCH_CANDIDATE and WATCH only. There is no BET state anywhere in
+    this engine and this endpoint does not invent one: a candidate is a
+    row someone can go and read, not an instruction.
+
+    One row per (game, market, selection, horizon) — the newest. The ledger
+    is append-only, so a re-evaluation at a later horizon adds a row rather
+    than replacing one, and showing every historical evaluation of the same
+    selection would read as many separate opportunities.
+    """
+    from datetime import timedelta
+
+    from fde_api.db.forward_models import ForwardLedgerEntry, ScheduleObservation
+    from fde_api.forward.modes import DataMode
+
+    mode = DataMode(data_mode)
+    now = utc_now()
+    horizon_end = now + timedelta(hours=hours)
+
+    kickoffs: dict[str, ScheduleObservation] = {}
+    for o in s.scalars(
+        select(ScheduleObservation).where(
+            ScheduleObservation.data_mode == mode.value,
+            ScheduleObservation.kickoff_utc.isnot(None),
+        ).order_by(ScheduleObservation.observed_at)
+    ):
+        kickoffs[o.canonical_game_id] = o
+
+    newest: dict[tuple[str, str, str | None, str], ForwardLedgerEntry] = {}
+    for e in s.scalars(
+        select(ForwardLedgerEntry)
+        .where(
+            ForwardLedgerEntry.data_mode == mode.value,
+            ForwardLedgerEntry.status.in_(("RESEARCH_CANDIDATE", "WATCH")),
+        )
+        .order_by(ForwardLedgerEntry.as_of_at, ForwardLedgerEntry.id)
+    ):
+        newest[(e.canonical_game_id, e.market, e.selection, e.horizon)] = e
+
+    rows: list[dict[str, Any]] = []
+    for e in newest.values():
+        game = kickoffs.get(e.canonical_game_id)
+        if game is None or game.kickoff_utc is None:
+            continue
+        if not (now <= game.kickoff_utc <= horizon_end):
+            continue  # already started, or too far out to be actionable
+        edge = (
+            e.model_probability - e.break_even_probability
+            if e.model_probability is not None and e.break_even_probability is not None
+            else None
+        )
+        rows.append({
+            "canonical_game_id": e.canonical_game_id,
+            "away_team_id": game.away_team_id, "home_team_id": game.home_team_id,
+            "kickoff_utc": game.kickoff_utc.isoformat(),
+            "status": e.status, "market": e.market, "selection": e.selection,
+            "horizon": e.horizon,
+            "line": e.qualifying_line, "american": e.qualifying_american,
+            "price_source": e.price_source, "price_age_seconds": e.price_age_seconds,
+            "model_probability": e.model_probability,
+            "conservative_probability": e.conservative_probability,
+            "break_even_probability": e.break_even_probability,
+            "edge": edge,
+            "expected_value": e.expected_value,
+            "policy_version": e.policy_version, "model_version": e.model_version,
+            "as_of_at": e.as_of_at.isoformat() if e.as_of_at else None,
+        })
+
+    rows.sort(key=lambda r: (r["edge"] is None, -(r["edge"] or 0.0)))
+    return {
+        "generated_at_utc": now.isoformat(),
+        "data_mode": mode.value,
+        "horizon_hours": hours,
+        "gate": _candidate_gate(s, mode),
+        "count": len(rows),
+        "candidates": rows[:limit],
+        "research_banner": RESEARCH_BANNER,
+        "not_a_claim": (
+            "Research candidates recorded by the forward test. Not advice, not a "
+            "wager, and not a claim that any price is currently available. No "
+            "money is staked by this software and no BET state exists in it."
+        ),
+    }
+
+
+@app.get("/v1/forward/performance", dependencies=[Auth])
+def get_forward_performance(s: Db, data_mode: str = "LIVE_RESEARCH") -> dict[str, Any]:
+    """The forward-test record, per frozen policy.
+
+    Separate from the backtest and never merged with it: the backtest
+    scored seasons that have since been read (docs/model-governance.md
+    burns 2024 and 2025), while this scores a cohort collected
+    prospectively under a policy frozen before it started. Presenting them
+    together would let a burned number stand in for an unburned one.
+    """
+    from fde_api.db.forward_models import ForwardTestPolicyRecord
+    from fde_api.forward.ledger import cohort_summary
+    from fde_api.forward.modes import DataMode
+
+    mode = DataMode(data_mode)
+    cohorts = [
+        cohort_summary(s, policy_version=p.policy_version, data_mode=mode)
+        | {
+            "window": {"start": p.start_date, "end": p.end_date},
+            "model_version": p.model_version,
+            "calibration_version": p.calibration_version,
+            "policy_hash": p.policy_hash,
+            "frozen_at": p.created_at.isoformat() if p.created_at else None,
+        }
+        for p in s.scalars(
+            select(ForwardTestPolicyRecord).order_by(ForwardTestPolicyRecord.created_at)
+        )
+    ]
+    return {
+        "generated_at_utc": utc_now().isoformat(),
+        "data_mode": mode.value,
+        "cohorts": cohorts,
+        "research_banner": RESEARCH_BANNER,
+        "not_a_claim": (
+            "Paper forward test. Every figure is simulated against recorded prices; "
+            "no wager was placed. These numbers are not evidence of profitability, "
+            "and a cohort of this size cannot support any claim about edge."
+        ),
     }

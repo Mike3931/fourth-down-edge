@@ -24,8 +24,10 @@ const DEMO_GROUP = 'Demonstration data';
 const SETUP_GROUP = 'Your setup';
 
 const NAV = (firstGameId: string | undefined) => [
+  { to: '/candidates', label: 'Candidates', icon: '◆', live: true, group: LIVE_GROUP },
   { to: '/live', label: 'Live Slate', icon: '◉', live: true, group: LIVE_GROUP },
   { to: '/slate', label: 'Slate', icon: '▤', live: true, group: LIVE_GROUP },
+  { to: '/forward-test', label: 'Forward Test', icon: '⟳', live: true, group: LIVE_GROUP },
   { to: '/models', label: 'Model Audit', icon: '⌘', live: true, group: LIVE_GROUP },
   { to: '/health', label: 'Data Health', icon: '♥', live: true, group: LIVE_GROUP },
   { to: '/picks-demo', label: "Today's Picks", icon: '★', live: false, group: DEMO_GROUP },
@@ -40,12 +42,14 @@ const NAV = (firstGameId: string | undefined) => [
   { to: '/settings', label: 'Settings', icon: '⚙', live: false, group: SETUP_GROUP },
 ];
 
-// The four engine-backed routes. Kept as an explicit list rather than
+// The engine-backed routes. Kept as an explicit list rather than
 // derived from NAV, because NAV holds one dynamic path (`/game/:id`) and a
 // prefix match over it would quietly reclassify screens as the router
 // grows. A screen that is wrongly called live is the failure that matters,
 // so the list is stated rather than inferred.
-const LIVE_ROUTES = new Set(['/live', '/slate', '/models', '/health']);
+const LIVE_ROUTES = new Set([
+  '/candidates', '/live', '/slate', '/forward-test', '/models', '/health',
+]);
 
 // Screens that read NO dataset — neither the engine nor the demo
 // generator. Settings is the whole list: it holds paper mode, the hard

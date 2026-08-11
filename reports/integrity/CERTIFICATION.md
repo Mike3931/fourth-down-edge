@@ -310,9 +310,9 @@ criterion is a modelling decision, not a defect fix.
 
 ### Where the regenerated state actually lives
 
-`apps/api/data/*.db` is gitignored, so the reran rows — the new
+`apps/api/data/*.db` is gitignored, so the reran rows â€” the new
 `BacktestRun`s, the two `cal_none_*` artifacts, the third evaluation per
-model — exist in the working database on the machine that ran the
+model â€” exist in the working database on the machine that ran the
 certification, not in the repository. What the repository carries is the
 corrected code, this record, the comparison artifact, and the regenerated
 `apps/api/data/reports/phase2_*`, which are tracked and were rebuilt from

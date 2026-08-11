@@ -370,6 +370,14 @@ def _provenance_checks(
     return checks
 
 
+def _policy_window(session: Session, policy_version: str) -> str:
+    """The frozen window for a policy, for a human-readable health line."""
+    from fde_api.db.forward_models import ForwardTestPolicyRecord
+
+    rec = session.get(ForwardTestPolicyRecord, policy_version)
+    return f"{rec.start_date} to {rec.end_date}" if rec else "window unknown"
+
+
 def run_health_checks(
     session: Session,
     *,
@@ -620,23 +628,50 @@ def run_health_checks(
     )
 
     # ---- integrity ------------------------------------------------------ #
-    if policy_version:
-        from fde_api.forward.policy import verify_all_policies
+    # Asked of the DATABASE, not of the caller.
+    #
+    # This used to branch on the `policy_version` PARAMETER, so a caller
+    # that did not name one got "no forward-test policy in force" and the
+    # remediation "freeze a policy before capture". Neither endpoint passes
+    # it, so the Data Health screen reported that permanently — while
+    # `ftp-2026-v1` sat frozen, hash-intact, on disk and in the database.
+    # A CRITICAL check that suppresses candidates, reporting a blocker
+    # that does not exist, and telling the operator to redo something
+    # already done.
+    #
+    # Three states, distinguished, because they need different actions:
+    # nothing frozen is a real blocker; frozen-but-not-yet-started is
+    # normal before a season opens and blocks nothing; in-force gets its
+    # hashes verified.
+    from fde_api.forward.policy import active_policy, verify_all_policies
 
-        results = verify_all_policies(session)
-        broken = [r for r in results if not r["intact"]]
-        checks.append(
-            _ok("policy_hash_integrity", Severity.CRITICAL,
-                f"{len(results)} policy artifact(s) verified", now)
-            if not broken
-            else _fail("policy_hash_integrity", Severity.CRITICAL,
-                       f"{len(broken)} policy artifact(s) fail hash verification",
-                       "the immutable policy record has been altered; investigate", now)
-        )
-    else:
+    results = verify_all_policies(session)
+    broken = [r for r in results if not r["intact"]]
+    in_force = active_policy(session, at=now.date())
+
+    if broken:
         checks.append(_fail("policy_hash_integrity", Severity.CRITICAL,
-                            "no forward-test policy in force",
+                            f"{len(broken)} policy artifact(s) fail hash verification",
+                            "the immutable policy record has been altered; investigate", now))
+    elif not results:
+        checks.append(_fail("policy_hash_integrity", Severity.CRITICAL,
+                            "no forward-test policy has been frozen",
                             "freeze a policy before capture", now))
+    elif in_force is None:
+        # Frozen and intact, but today falls outside every policy window.
+        # Before a season opens this is the expected state and must not
+        # read as a fault: nothing is wrong and nothing needs doing.
+        windows = ", ".join(
+            f"{r['policy_version']} ({_policy_window(session, r['policy_version'])})"
+            for r in results
+        )
+        checks.append(_ok("policy_hash_integrity", Severity.CRITICAL,
+                          f"{len(results)} policy artifact(s) verified; none in force today: "
+                          f"{windows}", now))
+    else:
+        checks.append(_ok("policy_hash_integrity", Severity.CRITICAL,
+                          f"{len(results)} policy artifact(s) verified; "
+                          f"{in_force.policy_version} in force", now))
 
     from fde_api.db.models import ModelVersion
 

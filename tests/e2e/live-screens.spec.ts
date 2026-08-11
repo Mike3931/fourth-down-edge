@@ -18,6 +18,8 @@ import { expect, test } from '@playwright/test';
  */
 
 const LIVE_SCREENS = [
+  { path: '/candidates', heading: 'Research Candidates' },
+  { path: '/forward-test', heading: 'Forward Test' },
   { path: '/live', heading: 'Live Slate' },
   { path: '/slate', heading: 'Slate' },
   { path: '/models', heading: 'Model Audit' },
@@ -89,5 +91,31 @@ test.describe('screens that show no dataset at all', () => {
     await expect(
       page.getByText('DEMONSTRATION DATA — NOT FOR REAL-MONEY DECISIONS').first(),
     ).toBeVisible();
+  });
+});
+
+test.describe('the two screens Phase 3 named', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /enter local demo session/i }).click();
+  });
+
+  test('Candidates never presents itself as a wager', async ({ page }) => {
+    await page.goto('/candidates');
+    // The engine has no BET state and this screen must not invent one.
+    // Exact match, so a STATUS BADGE reading "BET" is caught while the
+    // disclaimer sentence ("no BET state exists in it") is not. The first
+    // version used a word-boundary regex built through a Python string, and
+    // the escape became a literal control character: the pattern matched
+    // nothing, so the test passed while asserting nothing at all.
+    await expect(page.getByText('BET', { exact: true })).toHaveCount(0);
+    await expect(page.getByText(/not a wager/i).first()).toBeVisible();
+  });
+
+  test('Forward Test says its sample cannot support a claim', async ({ page }) => {
+    await page.goto('/forward-test');
+    // Whatever the numbers say, the caveat must be present. It is the
+    // difference between a record and a track record.
+    await expect(page.getByText(/not evidence of profitability/i).first()).toBeVisible();
   });
 });

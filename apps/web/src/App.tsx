@@ -5,6 +5,8 @@ import Shell from './components/Shell';
 import SignIn from './pages/SignIn';
 import TodaysPicks from './pages/TodaysPicks';
 import LiveSlate from './pages/LiveSlate';
+import CandidatesLive from './pages/CandidatesLive';
+import ForwardTestLive from './pages/ForwardTestLive';
 import SlateLive from './pages/SlateLive';
 import DataHealthLive from './pages/DataHealthLive';
 import ModelAuditLive from './pages/ModelAuditLive';
@@ -49,6 +51,8 @@ export default function App() {
         <Route path="/picks-demo" element={<TodaysPicks />} />
         <Route path="/live" element={<LiveSlate />} />
         <Route path="/slate" element={<SlateLive />} />
+        <Route path="/candidates" element={<CandidatesLive />} />
+        <Route path="/forward-test" element={<ForwardTestLive />} />
         <Route path="/slate-demo" element={<WeeklySlate />} />
         <Route path="/game/:gameId" element={<GameLab />} />
         <Route path="/injuries" element={<InjuryCenter />} />

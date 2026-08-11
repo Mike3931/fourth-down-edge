@@ -384,12 +384,12 @@ defects, and are recorded rather than taken.
 **Two TERMINAL jobs are not effect-inspected.** `closing_capture` and
 `result_ingestion` are categorised TERMINAL in `JOB_CATEGORIES` but have
 no entry in `_EFFECT_SOURCES`, so a recovery of either returns
-`NO_PRIOR_EFFECTS_REPLAY` without inspecting anything — never reaching the
+`NO_PRIOR_EFFECTS_REPLAY` without inspecting anything â€” never reaching the
 `SCOPE_REQUIRED` branch that exists precisely so a terminal job refuses to
 guess. Replay is safe for both today because both handlers are idempotent
 by construction (an immutable `ClosingCapture` with a uniqueness
 constraint; `ingest_result` refusing a correction to an existing final),
-so the decision is right and only the stated reason was false — it has
+so the decision is right and only the stated reason was false â€” it has
 been corrected.
 
 Registering them would make a scheduled, paramless recovery of either
@@ -402,9 +402,41 @@ correctness-of-principle against availability. `feature_snapshot`
 **`missed_runs` reports slots with no run row at all**, not slots with no
 *terminal* run, which is what its docstring claimed. A slot whose only
 attempt failed or dead-lettered reads as not missed. Nothing in the
-running system calls it — it is diagnostic only — so the docstring was
+running system calls it â€” it is diagnostic only â€” so the docstring was
 corrected to match rather than the behaviour changed. Which definition is
 wanted is for whoever first needs the function.
+
+### Open decisions from the MVP build (2026-08-11)
+
+**`ftp-2026-v1` pins no calibration artifact.** The frozen policy carries
+`calibration_version: null`, while the model registry records
+`cal_none_val2024` after the out-of-fold correction. Functionally these
+agree - the corrected selection IS the identity, so "no calibration" is
+what the policy should apply. What is loose is traceability: a reader
+cannot tell from the policy whether `null` means "identity was selected"
+or "nobody decided".
+
+Correcting it is not an edit. `freeze_policy` refuses to alter a frozen
+record, by design, so pinning the artifact requires a NEW policy version,
+which starts a separate evaluation cohort. The current cohort holds four
+rows and nothing settled, so the cost of doing so is zero today and will
+not stay that way once capture starts. Worth deciding before 2026-09-01.
+
+**The forward test uses an a priori threshold, and should keep doing so.**
+`build_policy_draft` fixes the research-candidate edge threshold at 0.05,
+and its docstring says why: the 2024/2025 seasons are burned, so tuning
+against them would contaminate the forward test before it began. That is
+right, and it means the edge-threshold finding recorded above - selection
+on a validation ROI that does not carry - applies to the BACKTEST only.
+The forward cohort is not exposed to it.
+
+**Docs written from Python must pass `encoding="utf-8"`.** Several
+`write_text` calls in this session omitted it, so on Windows they wrote
+cp1252 and put a raw `0x97` byte where an em dash belonged - invalid
+UTF-8, in `model-governance.md`, `deployment.md` and `CERTIFICATION.md`.
+Repaired, and noted because the failure is silent: the files render
+normally in most editors and only break when something reads them
+strictly.
 
 ### Noted, not changed
 

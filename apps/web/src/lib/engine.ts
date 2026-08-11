@@ -121,3 +121,91 @@ export function useModelComparison() {
     retry: false,
   });
 }
+
+// --------------------------------------------------------------------------
+// Research candidates and the forward-test record
+// --------------------------------------------------------------------------
+
+export interface CandidateRow {
+  canonical_game_id: string;
+  away_team_id: string;
+  home_team_id: string;
+  kickoff_utc: string;
+  status: string;
+  market: string;
+  selection: string | null;
+  horizon: string;
+  line: number | null;
+  american: number | null;
+  price_source: string | null;
+  price_age_seconds: number | null;
+  model_probability: number | null;
+  conservative_probability: number | null;
+  break_even_probability: number | null;
+  edge: number | null;
+  expected_value: number | null;
+  policy_version: string;
+  model_version: string;
+  as_of_at: string | null;
+}
+
+export interface CandidateGate {
+  open: boolean;
+  blocked_by: { check: string; explanation: string; remediation: string }[];
+}
+
+export interface ForwardCandidates {
+  generated_at_utc: string;
+  data_mode: string;
+  horizon_hours: number;
+  gate: CandidateGate;
+  count: number;
+  candidates: CandidateRow[];
+  not_a_claim: string;
+}
+
+export interface ForwardCohort {
+  policy_version: string;
+  data_mode: string;
+  total_rows: number;
+  statuses: Record<string, number>;
+  settled: number;
+  wins: number;
+  losses: number;
+  pushes: number;
+  total_pnl_units: number;
+  roi_per_bet: number | null;
+  max_drawdown_units: number;
+  mean_clv_line: number | null;
+  mean_clv_probability: number | null;
+  sample_warning: string | null;
+  window: { start: string; end: string };
+  model_version: string;
+  calibration_version: string | null;
+  policy_hash: string;
+  frozen_at: string | null;
+}
+
+export interface ForwardPerformance {
+  generated_at_utc: string;
+  data_mode: string;
+  cohorts: ForwardCohort[];
+  not_a_claim: string;
+}
+
+export function useForwardCandidates() {
+  return useQuery({
+    queryKey: ['engine', 'forward-candidates'],
+    queryFn: () => engineGet<ForwardCandidates>('/v1/forward/candidates'),
+    refetchInterval: 60_000,
+    retry: false,
+  });
+}
+
+export function useForwardPerformance() {
+  return useQuery({
+    queryKey: ['engine', 'forward-performance'],
+    queryFn: () => engineGet<ForwardPerformance>('/v1/forward/performance'),
+    retry: false,
+  });
+}
