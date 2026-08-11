@@ -123,6 +123,24 @@ test.describe('the two screens Phase 3 named', () => {
     await expect(down.or(disclaimed).first()).toBeVisible();
   });
 
+  test('Model Audit does not call a burned season out-of-sample', async ({ page }) => {
+    // docs/model-governance.md, binding: "Neither 2024 nor 2025 may be
+    // presented as an out-of-sample test result for any model developed or
+    // selected after 2026-08-01." The footer said "Out-of-sample backtest
+    // scores" while Forward Test called the same seasons burned in its own
+    // header, so the two screens disagreed and the generous reading sat
+    // beside the numbers.
+    //
+    // Asserted as an absence, which holds whether the engine is up or
+    // down — the phrase must not exist on this screen in either state.
+    await page.goto('/models');
+    await expect(page.getByText(/out-of-sample backtest/i)).toHaveCount(0);
+
+    // And no superiority claim, which a burned period cannot support and
+    // which the project's constraints forbid outright.
+    await expect(page.getByText(/better than the market/i)).toHaveCount(0);
+  });
+
   test('Forward Test says its sample cannot support a claim', async ({ page }) => {
     await page.goto('/forward-test');
     // Whatever the numbers say, the caveat must be present — it is the

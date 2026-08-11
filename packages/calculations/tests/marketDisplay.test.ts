@@ -20,9 +20,12 @@ import {
   describeQuote,
   formatLine,
   lineForSelection,
+  describeBrierDelta,
   formatDrawdownUnits,
   formatUnits,
+  soonestScheduledWeek,
   valuesDisagree,
+  weekLabel,
 } from '../src/marketDisplay';
 
 const TEAMS = { homeTeamId: 'ARI', awayTeamId: 'CAR' };
@@ -221,5 +224,101 @@ describe('formatUnits and formatDrawdownUnits', () => {
     expect(formatDrawdownUnits(null)).toBe('—');
     expect(formatUnits(NaN)).toBe('—');
     expect(formatDrawdownUnits(NaN)).toBe('—');
+  });
+});
+
+describe('describeBrierDelta', () => {
+  // Model Audit rendered a model that beat the benchmark by more than the
+  // noise band as "better than the market", in success green. Those scores
+  // come from seasons 2024 and 2025, which docs/model-governance.md records
+  // as BURNED: "Neither 2024 nor 2025 may be presented as an out-of-sample
+  // test result." A superiority claim is exactly what a burned period
+  // cannot support, and the project's standing constraints forbid claiming
+  // predictive superiority outright.
+  //
+  // The measurement is real and worth showing. The inference is not.
+  const BAND = 0.02903; // the real band at n=285
+
+  it('calls a difference inside the band indistinguishable', () => {
+    expect(describeBrierDelta(-0.00025, BAND).label).toBe('indistinguishable from the market');
+    expect(describeBrierDelta(0.01282, BAND).label).toBe('indistinguishable from the market');
+  });
+
+  it('never says a model is better than the market', () => {
+    // The regression. -0.05 clears the band comfortably.
+    expect(describeBrierDelta(-0.05, BAND).label).not.toMatch(/better/i);
+  });
+
+  it('states the lower score as a fact about these games only', () => {
+    const { label } = describeBrierDelta(-0.05, BAND);
+    expect(label).toContain('lower');
+    expect(label).toContain('these games');
+  });
+
+  it('still reports the other direction plainly', () => {
+    // naive-homefield-v1 in 2024: +0.04468, genuinely worse.
+    const { label } = describeBrierDelta(0.04468, BAND);
+    expect(label).toContain('higher');
+    expect(label).toContain('these games');
+  });
+
+  it('does not tone a lower score as a success', () => {
+    // Green is the visual form of the same claim the words no longer make.
+    expect(describeBrierDelta(-0.05, BAND).tone).not.toBe('success');
+    expect(describeBrierDelta(0.04468, BAND).tone).toBe('warning');
+  });
+
+  it('the benchmark compared with itself is not a verdict', () => {
+    expect(describeBrierDelta(0, BAND).label).toBe('indistinguishable from the market');
+  });
+});
+
+describe('weekLabel and soonestScheduledWeek', () => {
+  // The Slate screen derived its week filter with `if (g.week)` and picked
+  // its default with `.filter((g) => g.week && ...)`. Both are falsy for
+  // week 0, which is what preseason games carry — so eleven fixtures
+  // vanished from every week option, and the screen labelled REG week 1
+  // "(next)" while those eleven kicked off four weeks sooner. They were
+  // also the only games with captured prices, so the Live Slate one click
+  // away was showing exactly the games this screen said were not next.
+  const PRE = { week: 0, kickoff_utc: '2026-08-14T23:00:00Z' };
+  const REG1 = { week: 1, kickoff_utc: '2026-09-10T00:35:00Z' };
+  const REG2 = { week: 2, kickoff_utc: '2026-09-17T00:20:00Z' };
+  const NOW = new Date('2026-08-11T23:00:00Z').getTime();
+
+  it('names week zero rather than hiding it', () => {
+    expect(weekLabel(0)).toBe('Preseason');
+    expect(weekLabel(1)).toBe('Week 1');
+    expect(weekLabel(18)).toBe('Week 18');
+  });
+
+  it('reports an absent week as absent, not as preseason', () => {
+    expect(weekLabel(null)).toBe('—');
+    expect(weekLabel(undefined)).toBe('—');
+  });
+
+  it('picks the soonest upcoming week, including week zero', () => {
+    expect(soonestScheduledWeek([REG1, PRE, REG2], NOW)).toBe(0);
+  });
+
+  it('skips a week whose games have all kicked off', () => {
+    const after = new Date('2026-08-15T00:00:00Z').getTime();
+    expect(soonestScheduledWeek([REG1, PRE, REG2], after)).toBe(1);
+  });
+
+  it('ignores games with no week at all', () => {
+    expect(
+      soonestScheduledWeek([{ week: null, kickoff_utc: '2026-08-12T00:00:00Z' }, REG1], NOW),
+    ).toBe(1);
+  });
+
+  it('returns null when nothing is upcoming', () => {
+    const later = new Date('2027-01-01T00:00:00Z').getTime();
+    expect(soonestScheduledWeek([REG1, PRE, REG2], later)).toBeNull();
+    expect(soonestScheduledWeek([], NOW)).toBeNull();
+  });
+
+  it('ignores an unparseable kickoff rather than treating it as imminent', () => {
+    expect(soonestScheduledWeek([{ week: 0, kickoff_utc: 'not a date' }, REG1], NOW)).toBe(1);
   });
 });

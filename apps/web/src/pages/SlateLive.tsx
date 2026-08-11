@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { soonestScheduledWeek, weekLabel } from '@fde/calculations';
 import { useForwardSlate, type SlateGame } from '../lib/engine';
 import EngineDown from '../components/EngineDown';
 
@@ -29,21 +30,22 @@ export default function SlateLive() {
   const [week, setWeek] = useState<string>('');
   const [weekTouched, setWeekTouched] = useState(false);
 
+  // `!= null`, not truthiness. Preseason games carry week 0, and `if
+  // (g.week)` dropped every one of them from the filter — see weekLabel
+  // in @fde/calculations, where both this and the default selection are
+  // under test.
   const weeks = useMemo(() => {
     const seen = new Set<number>();
-    for (const g of data?.games ?? []) if (g.week) seen.add(g.week);
+    for (const g of data?.games ?? []) if (g.week != null) seen.add(g.week);
     return [...seen].sort((a, b) => a - b);
   }, [data]);
 
   // The soonest week that still has a game ahead of it — the one a person
   // opening this screen is almost always asking about.
-  const nextWeek = useMemo(() => {
-    const now = Date.now();
-    const upcoming = (data?.games ?? [])
-      .filter((g) => g.week && new Date(g.kickoff_utc).getTime() >= now)
-      .sort((a, b) => new Date(a.kickoff_utc).getTime() - new Date(b.kickoff_utc).getTime());
-    return upcoming[0]?.week ?? null;
-  }, [data]);
+  const nextWeek = useMemo(
+    () => soonestScheduledWeek(data?.games ?? []),
+    [data],
+  );
 
   // Applied once, and never again after the reader picks for themselves —
   // a default that keeps reasserting itself is a screen fighting its user.
@@ -104,7 +106,7 @@ export default function SlateLive() {
             <option value="">All weeks</option>
             {weeks.map((w) => (
               <option key={w} value={String(w)}>
-                Week {w}
+                {weekLabel(w)}
                 {w === nextWeek ? ' (next)' : ''}
               </option>
             ))}
@@ -178,7 +180,8 @@ export default function SlateLive() {
                 </td>
                 <td className="py-1.5 pr-4 text-muted">
                   {g.season} {g.season_type}
-                  {g.week ? ` W${g.week}` : ''}
+                  {/* Not `g.week ? …` — zero is the preseason, not absent. */}
+                  {g.week != null && g.week > 0 ? ` W${g.week}` : ''}
                 </td>
                 <td className="py-1.5 pr-4 text-muted">{g.venue ?? '—'}</td>
                 <td className="py-1.5 pr-4 text-muted">{g.game_status}</td>

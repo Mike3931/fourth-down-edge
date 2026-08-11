@@ -510,6 +510,13 @@ def get_forward_live(
     mode = DataMode(data_mode)
     horizon = now + timedelta(hours=hours)
 
+    # `session_scope()`, not the `Db` dependency, and deliberately so.
+    # It closes (so there is no pool leak, which is what `read_session`
+    # was introduced for) but it also COMMITS, which for a read endpoint
+    # is only safe because nothing here writes. That is not assumed:
+    # `tests/test_read_endpoints_are_read_only.py` counts rows in every
+    # table before and after a call to this path, and the file exists
+    # because this endpoint used to call `build_consensus`, which upserts.
     with session_scope() as s:
         observations = list(
             s.scalars(

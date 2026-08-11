@@ -42,6 +42,14 @@ READ_ENDPOINTS = [
     "/v1/forward/health",
     "/v1/models",
     "/v1/performance/model-comparison",
+    # Added later than this file, and covered only by their own narrower
+    # check that the forward ledger did not grow. This one counts EVERY
+    # table, which is the assertion that catches a write through a path
+    # nobody thought to look at — and `/v1/forward/candidates` runs the
+    # full health report to build its gate, which touches a good deal of
+    # the schema.
+    "/v1/forward/candidates",
+    "/v1/forward/performance",
 ]
 
 

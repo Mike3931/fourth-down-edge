@@ -28,7 +28,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fde_api.canonical.team_map import canonical_team_code
-from fde_api.db.forward_models import OddsQuote, ProviderQuotaUsage
+from fde_api.db.forward_models import OddsQuote
 from fde_api.forward.cohort import ProviderMode, assert_capturable
 from fde_api.forward.modes import DataMode
 
@@ -104,7 +104,6 @@ class OddsCaptureResult:
     live_quotes_skipped: int = 0
     invalid_skipped: int = 0
     unmapped_events: list[str] = field(default_factory=list)
-    quota_remaining: int | None = None
     request_id: str | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -118,7 +117,6 @@ class OddsCaptureResult:
             "live_quotes_skipped": self.live_quotes_skipped,
             "invalid_skipped": self.invalid_skipped,
             "unmapped_events": self.unmapped_events,
-            "quota_remaining": self.quota_remaining,
             "request_id": self.request_id,
             "warnings": self.warnings,
         }
@@ -265,7 +263,6 @@ def capture_odds(
     *,
     provider: str = "the-odds-api",
     request_id: str | None = None,
-    quota_remaining: int | None = None,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
     provider_mode: ProviderMode,
     observed_at: datetime,
@@ -289,7 +286,7 @@ def capture_odds(
     already passes `ctx.now()`; the default only made an omission invisible.
     """
     assert_capturable(provider_mode)
-    res = OddsCaptureResult(provider=provider, request_id=request_id, quota_remaining=quota_remaining)
+    res = OddsCaptureResult(provider=provider, request_id=request_id)
 
     for event in payload:
         res.events_seen += 1
@@ -342,17 +339,18 @@ def capture_odds(
                     if written:
                         res.quotes_written += 1
 
-    if quota_remaining is not None:
-        session.add(
-            ProviderQuotaUsage(
-                provider=provider,
-                window_start=observed_at,
-                calls_used=1,
-                calls_remaining=quota_remaining,
-                quota_limit=None,
-                last_response_at=observed_at,
-            )
-        )
+    # Budget accounting is NOT done here. This used to accept a
+    # `quota_remaining` argument and write a ProviderQuotaUsage row with
+    # `quota_limit=None` - recording a balance while discarding the plan
+    # that gives it meaning. `quota.record_usage` does the job properly,
+    # from the response headers, which only the caller has; two writers
+    # where one is lossy is how a balance ends up in the table with no plan
+    # beside it, and a plan-less balance is the state that used to be
+    # classified against an assumed 20,000-credit account.
+    #
+    # No caller ever passed the argument, so the branch was unreachable -
+    # but it is the exact shape of the plan-less rows in the development
+    # database, and it was the only thing left that could make more.
     session.flush()
     return res
 

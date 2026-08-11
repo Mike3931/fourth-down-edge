@@ -53,13 +53,23 @@ def _seed_remaining(
 
 
 class TestClassification:
+    # Against a STATED plan. These used to omit it and lean on the
+    # absolutes, which meant every case was implicitly asserting the
+    # 20,000-credit assumption rather than the classification.
     @pytest.mark.parametrize(
         ("remaining", "expected"),
         [(None, QuotaState.OK), (50_000, QuotaState.OK), (4_000, QuotaState.CONSTRAINED),
          (1_000, QuotaState.CRITICAL), (0, QuotaState.EXHAUSTED)],
     )
     def test_states(self, remaining, expected) -> None:
-        assert classify(remaining, QuotaConfig()) == expected
+        assert classify(remaining, QuotaConfig(), PLAN) == expected
+
+    @pytest.mark.parametrize("remaining", [1, 496, 4_000, 50_000])
+    def test_a_balance_on_an_unmeasured_plan_is_unknown_not_low(
+        self, remaining
+    ) -> None:
+        """No threshold applies to a number whose denominator is unknown."""
+        assert classify(remaining, QuotaConfig()) == QuotaState.UNKNOWN_PLAN
 
 
 class TestAuthorization:
@@ -211,8 +221,18 @@ class TestThresholdsScaleToTheRealPlan:
         assert thresholds_for(0, QuotaConfig()) == (1_500, 5_000)
 
     def test_a_small_plan_is_not_permanently_critical(self) -> None:
+        """496 on a 500-credit plan is a healthy balance.
+
+        The first line used to assert CRITICAL as "the bug being fixed" —
+        the answer when the plan is unknown. It is no longer CRITICAL: an
+        unmeasured plan cannot make a balance critical, because the same
+        496 is nearly spent on a 500-credit account and untouched on a
+        20,000-credit one. See test_quota_plan_probe.py, where refusing to
+        poll on that guess turned out to prevent the plan from ever being
+        measured.
+        """
         cfg = QuotaConfig()
-        assert classify(496, cfg) == QuotaState.CRITICAL, "the bug being fixed"
+        assert classify(496, cfg) == QuotaState.UNKNOWN_PLAN
         assert classify(496, cfg, 500) == QuotaState.OK
 
     def test_a_small_plan_still_reaches_critical_near_the_end(self) -> None:

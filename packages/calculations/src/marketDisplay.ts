@@ -163,3 +163,84 @@ export function formatDrawdownUnits(
   if (n === null || n === undefined || !Number.isFinite(n) || n < 0) return '—';
   return `${n.toFixed(digits)}u`;
 }
+
+export interface BrierVerdict {
+  label: string;
+  /** `muted` for indistinguishable, `warning` for a higher score. Never
+   *  `success`: a lower Brier on a burned period is not a win. */
+  tone: 'muted' | 'warning';
+}
+
+/**
+ * What the Model Audit table may say about a Brier difference.
+ *
+ * It said "better than the market", in success green, for any model
+ * beating the benchmark by more than the noise band. Those scores are the
+ * 2024 and 2025 backtests, and docs/model-governance.md records both as
+ * BURNED — "Neither 2024 nor 2025 may be presented as an out-of-sample
+ * test result for any model developed or selected after 2026-08-01",
+ * because their results were read and compared across six models. A
+ * period that cannot support an out-of-sample claim certainly cannot
+ * support a superiority claim, and claiming predictive superiority is
+ * forbidden outright.
+ *
+ * The measurement stays. It is a real difference in a real score over a
+ * stated set of games, and the wording now says exactly that and stops.
+ * The reader can draw their own inference; the screen does not draw it
+ * for them and does not colour it as a win.
+ *
+ * `delta` is model Brier minus benchmark Brier, so NEGATIVE is the lower
+ * score. `band` is the noise threshold at this sample size.
+ */
+export function describeBrierDelta(delta: number, band: number): BrierVerdict {
+  if (!Number.isFinite(delta) || !Number.isFinite(band) || Math.abs(delta) < band) {
+    return { label: 'indistinguishable from the market', tone: 'muted' };
+  }
+  return delta < 0
+    ? { label: 'lower Brier than the market on these games', tone: 'muted' }
+    : { label: 'higher Brier than the market on these games', tone: 'warning' };
+}
+
+/**
+ * What a slate week is called on screen.
+ *
+ * Week 0 is the preseason. Nothing rendered it, because the Slate screen
+ * built its filter with `if (g.week)` and picked its default with
+ * `.filter((g) => g.week && ...)` — both falsy at zero. Eleven preseason
+ * fixtures were therefore absent from every week option, and the screen
+ * labelled regular-season week 1 "(next)" while those eleven kicked off
+ * four weeks sooner. They were also the only games with captured prices,
+ * so the Live Slate one click away was showing the games this screen said
+ * were not next.
+ */
+export function weekLabel(week: number | null | undefined): string {
+  if (week === null || week === undefined || !Number.isFinite(week)) return '—';
+  return week === 0 ? 'Preseason' : `Week ${week}`;
+}
+
+interface ScheduledGame {
+  week: number | null | undefined;
+  kickoff_utc: string;
+}
+
+/**
+ * The week of the soonest game that has not kicked off, or null.
+ *
+ * Presence of a week is tested with `!= null`, not for truthiness, which
+ * is the whole point — see `weekLabel`. An unparseable kickoff is skipped
+ * rather than compared, because `NaN >= now` is false and a game with a
+ * broken timestamp should not silently become the answer either way.
+ */
+export function soonestScheduledWeek(
+  games: readonly ScheduledGame[],
+  now: number = Date.now(),
+): number | null {
+  let best: { at: number; week: number } | null = null;
+  for (const g of games) {
+    if (g.week === null || g.week === undefined) continue;
+    const at = new Date(g.kickoff_utc).getTime();
+    if (!Number.isFinite(at) || at < now) continue;
+    if (best === null || at < best.at) best = { at, week: g.week };
+  }
+  return best?.week ?? null;
+}

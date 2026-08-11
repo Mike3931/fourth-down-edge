@@ -80,6 +80,31 @@ Quotes are stored exactly as received, with the provider timestamp and
 our local observation instant. Nothing is interpolated across gaps or
 suspended markets.
 
+### The plan size is measured, and until it is, the state says so
+
+The Odds API charges per region × market and never states the plan, but it
+states both halves of it — `x-requests-remaining` and `x-requests-used` —
+on every response. `record_usage` records the sum, and the reserve and
+warning thresholds scale to it, so a 496-credit balance is healthy on a
+500-credit plan and nearly spent on a 20,000-credit one.
+
+Before any response has been recorded the plan is genuinely unknown, and
+that is its own state: `UNKNOWN_PLAN`. It used to fall back to the
+20,000-plan absolutes, which called 496 CRITICAL and refused every poll
+outside two hours of kickoff — and since the plan can only be learned from
+a response, and a response only exists if a poll was authorised, the state
+could not correct itself. `QuotaConfig` names this failure in its own
+docstring, at these exact numbers; the scaling fix addressed it for a known
+plan and left the unknown case behind.
+
+`UNKNOWN_PLAN` now permits polling at reduced cadence against a small daily
+probe budget (`unknown_plan_probe_credits`, 60 = 20 requests), which is
+enough to learn the plan many times over and below any plausible month.
+`EXHAUSTED` still needs no plan: `remaining <= 0` is absolute. Data Health
+reports the balance as unjudgeable rather than advising a top-up, because
+"reduce cadence or top up the plan" is advice about an account whose size
+is known.
+
 **Consensus (`consensus-v1`)** is additive — it never replaces raw
 quotes. Eligibility requires: pregame, recognized sportsbook, within the
 freshness threshold, observed at or before the cutoff, valid price and

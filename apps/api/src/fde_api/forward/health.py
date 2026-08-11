@@ -578,19 +578,40 @@ def run_health_checks(
     checks.append(_ok("provider_mode", Severity.INFO, f"provider mode is {provider_mode.value}",
                       now, detail={"provider_mode": provider_mode.value}))
 
-    from fde_api.forward.quota import QuotaConfig, classify, latest_remaining, observed_plan_credits
+    from fde_api.forward.quota import (
+        QuotaConfig,
+        QuotaState,
+        classify,
+        latest_remaining,
+        observed_plan_credits,
+    )
 
     remaining = latest_remaining(session, "the-odds-api")
     # Against the plan actually observed, not the one the defaults assume.
-    qstate = classify(remaining, QuotaConfig(), observed_plan_credits(session))
+    plan = observed_plan_credits(session)
+    qstate = classify(remaining, QuotaConfig(), plan)
+    # "Reduce cadence or top up the plan" is advice about an account whose
+    # size is known. While it is not, the balance cannot be called low -
+    # 496 credits is nearly spent on a 500-credit plan and untouched on a
+    # 20,000-credit one, and the same sentence was being printed for both.
+    quota_remediation = (
+        "the plan size is unknown, so this balance cannot be judged high or "
+        "low; the next successful poll records it from the provider's own "
+        "headers and this resolves itself"
+        if qstate == QuotaState.UNKNOWN_PLAN
+        else "reduce cadence or top up the provider plan"
+    )
+    quota_detail = {"remaining": remaining, "state": qstate, "plan_credits": plan}
     checks.append(
-        _ok("provider_quota", Severity.WARNING, f"quota state {qstate} (remaining={remaining})",
-            now, detail={"remaining": remaining, "state": qstate})
+        _ok("provider_quota", Severity.WARNING,
+            f"quota state {qstate} (remaining={remaining}, plan={plan})",
+            now, detail=quota_detail)
         if qstate == "OK"
         else _fail("provider_quota", Severity.WARNING,
-                   f"quota state {qstate} (remaining={remaining})",
-                   "reduce cadence or top up the provider plan", now,
-                   status=Status.DEGRADED, detail={"remaining": remaining, "state": qstate})
+                   f"quota state {qstate} (remaining={remaining}, "
+                   f"plan={'unknown' if plan is None else plan})",
+                   quota_remediation, now,
+                   status=Status.DEGRADED, detail=quota_detail)
     )
 
     # ---- schedule ------------------------------------------------------- #

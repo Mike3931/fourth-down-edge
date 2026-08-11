@@ -1,9 +1,18 @@
-import { valuesDisagree } from '@fde/calculations';
+import { Link } from 'react-router-dom';
+import { describeBrierDelta, valuesDisagree } from '@fde/calculations';
 import { useEngineModels, useModelComparison, type ComparisonRow } from '../lib/engine';
 import EngineDown from '../components/EngineDown';
 
 /**
- * The real model registry and the real out-of-sample scores.
+ * The real model registry and the real BACKTEST scores.
+ *
+ * Not out-of-sample. Seasons 2024 and 2025 were read and compared across
+ * six models, and docs/model-governance.md records both as burned from
+ * that moment: they may not be presented as an out-of-sample test result
+ * for anything selected after 2026-08-01. This screen used to call them
+ * out-of-sample in its footer while Forward Test called them burned in
+ * its header - the same seasons, two descriptions, and the generous one
+ * next to the numbers.
  *
  * Every model is scored against the MARKET BENCHMARK rather than in
  * isolation, because a Brier score alone reads as "good" to almost anyone.
@@ -20,15 +29,14 @@ function noiseBand(n: number): number {
   return (1.96 * 0.25) / Math.sqrt(Math.max(n, 1));
 }
 
+// The wording lives in @fde/calculations, where it is under test. It used
+// to read "better than the market" in success green for any model past the
+// band — a superiority claim, in the affirmative colour, over seasons 2024
+// and 2025, which docs/model-governance.md records as burned and forbids
+// presenting as out-of-sample. See describeBrierDelta.
 function Verdict({ delta, band }: { delta: number; band: number }) {
-  if (Math.abs(delta) < band) {
-    return <span className="text-muted">indistinguishable from the market</span>;
-  }
-  return delta < 0 ? (
-    <span className="text-success">better than the market</span>
-  ) : (
-    <span className="text-danger">worse than the market</span>
-  );
+  const { label, tone } = describeBrierDelta(delta, band);
+  return <span className={tone === 'warning' ? 'text-warning' : 'text-muted'}>{label}</span>;
 }
 
 export default function ModelAuditLive() {
@@ -246,10 +254,28 @@ export default function ModelAuditLive() {
         );
       })}
 
+      {/* This said "Out-of-sample backtest scores", which
+          docs/model-governance.md forbids in as many words: "Neither 2024
+          nor 2025 may be presented as an out-of-sample test result for any
+          model developed or selected after 2026-08-01." Both seasons were
+          read and compared across six models, which is what burned them.
+
+          The Forward Test screen has always said so — it explains its own
+          existence by it — so the two screens were describing the same
+          seasons differently, and the flattering description was on the
+          one showing the numbers. */}
       <footer className="rounded border border-border p-4 text-xs text-muted">
-        Out-of-sample backtest scores. Not a forward-test result and not a claim about
-        profitability. A model that cannot be distinguished from the market does not clear the
-        vig, which at -110 requires winning 52.4% to break even.
+        Backtest scores over seasons 2024 and 2025. Those seasons have been read and
+        compared across all six models, so they are <strong>burned</strong>: honest when
+        produced, and no longer able to support an out-of-sample claim for anything
+        selected after 2026-08-01. Not a forward-test result and not a claim about
+        profitability. A model that cannot be distinguished from the market does not clear
+        the vig, which at -110 requires winning 52.4% to break even. The only cohort that
+        can support a forward claim is on{' '}
+        <Link to="/forward-test" className="text-accent underline">
+          Forward Test
+        </Link>
+        .
       </footer>
     </div>
   );

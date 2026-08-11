@@ -117,6 +117,21 @@ Consequences, binding from this tag forward:
    fine. Iterating against these seasons and reporting the improvement as
    out-of-sample is not.
 
+Where consequence 1 is enforced: the Model Audit screen described these
+same scores as "Out-of-sample backtest scores" in its footer, and rendered
+any model beating the benchmark by more than the noise band as "better
+than the market" in success green — a superiority claim over a burned
+period, which is a stronger claim than the one this section forbids. Both
+are gone. `describeBrierDelta` in `@fde/calculations` now states the
+measurement ("lower Brier than the market on these games") without the
+inference, under test, and `tests/e2e/live-screens.spec.ts` asserts the
+absence of both phrases whether the engine is up or down.
+
+Worth recording because of how it survived: the Forward Test screen has
+always described these seasons as burned — it explains its own separate
+existence by it — so the two screens disagreed about the same data, and
+the generous description was the one sitting beside the numbers.
+
 What was inspected: log loss, Brier, CRPS (margin and total), margin and
 total MAE, calibration intercept/slope, reliability bins, and the
 simulated-betting ledger for test seasons 2024 and 2025 at the PREGAME

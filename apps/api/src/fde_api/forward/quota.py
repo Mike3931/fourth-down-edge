@@ -33,6 +33,11 @@ class QuotaState:
     CONSTRAINED = "CONSTRAINED"  # below warning threshold: reduce cadence
     CRITICAL = "CRITICAL"  # reserve only: closing captures alone
     EXHAUSTED = "EXHAUSTED"  # stop polling
+    # A balance is known but the plan it belongs to is not, so no threshold
+    # can be applied to it. Distinct from CRITICAL because the remedy is
+    # opposite: CRITICAL means stop spending, this means spend once, on
+    # purpose, because the response is the only thing that ends the state.
+    UNKNOWN_PLAN = "UNKNOWN_PLAN"
 
 
 @dataclass(frozen=True)
@@ -67,6 +72,16 @@ class QuotaConfig:
     warn_fraction: float = 0.25
     # A month of daily ceilings should not exceed the month's credits.
     days_per_window: int = 30
+
+    # What may be spent per day while the plan size is still unknown.
+    #
+    # The plan is learned from `x-requests-remaining` + `x-requests-used` on
+    # a provider response, and a response only exists if a poll was
+    # authorised — so refusing to poll on assumed thresholds is a deadlock.
+    # Twenty requests is enough to learn the plan many times over and is
+    # below any plausible month's budget, so a probe that never resolves
+    # cannot quietly drain an account.
+    unknown_plan_probe_credits: int = 60
 
 
 def thresholds_for(plan_credits: int | None, cfg: QuotaConfig) -> tuple[int, int]:
@@ -208,13 +223,24 @@ def classify(
 ) -> str:
     """Classify the credit balance against the plan actually in force.
 
-    `plan_credits` defaults to None, which keeps the configured absolutes -
-    so every existing caller behaves exactly as before.
+    An unknown plan reports UNKNOWN_PLAN rather than falling back to the
+    absolutes. The fallback was not neutral: it measured every balance
+    against a 20,000-credit plan, so a real 496 on a 500-credit account
+    read CRITICAL - the exact case `QuotaConfig` above says the scaling
+    exists to prevent, arrived at by a different route. And because the
+    plan is only ever learned from a response, and `authorize_poll`
+    refused the request that would carry it, the state could not correct
+    itself except in the narrow windows where a poll is protected.
+
+    EXHAUSTED still needs no plan: `remaining <= 0` says nothing is left
+    whatever the plan was.
     """
     if remaining is None:
         return QuotaState.OK  # unknown until the provider tells us
     if remaining <= 0:
         return QuotaState.EXHAUSTED
+    if plan_credits is None or plan_credits <= 0:
+        return QuotaState.UNKNOWN_PLAN
     reserve, warn = thresholds_for(plan_credits, cfg)
     if remaining <= reserve:
         return QuotaState.CRITICAL
@@ -254,6 +280,28 @@ def authorize_poll(
         return QuotaDecision(
             True, state, "closing capture is protected and cannot be recovered later",
             1.0, remaining, used_today,
+        )
+
+    if state == QuotaState.UNKNOWN_PLAN:
+        # Spend, deliberately and in small amounts. The plan is carried on
+        # the response headers, so the only way out of this state is
+        # through a request - and refusing here on thresholds derived from
+        # a plan nobody has measured is a deadlock, not a reserve.
+        #
+        # Its own budget rather than `daily_ceiling`, which is 1,000
+        # credits when the plan is unknown and would not be a ceiling at
+        # all on a small account.
+        if used_today + cfg.credits_per_request > cfg.unknown_plan_probe_credits:
+            return QuotaDecision(
+                False, state,
+                f"plan size unknown and the daily probe budget of "
+                f"{cfg.unknown_plan_probe_credits} credits is spent ({used_today} used)",
+                0.0, remaining, used_today,
+            )
+        return QuotaDecision(
+            True, state,
+            "plan size unknown; polling at reduced cadence so one response records it",
+            4.0, remaining, used_today,
         )
 
     if used_today + cfg.credits_per_request > daily_ceiling:
