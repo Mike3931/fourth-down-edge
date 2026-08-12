@@ -1,6 +1,24 @@
 # ADR-001: Mock-first analytical layer behind a typed API contract
 
-**Status:** Accepted · 2026-07-31
+**Status:** Accepted 2026-07-31 · **partially superseded 2026-08-12**
+
+> The premise below — "this build environment cannot host a Python service"
+> — no longer holds. `apps/api` exists, and the six engine-backed screens
+> call it directly rather than through `MockFdeApi`.
+>
+> Two consequences below did not survive contact. Swapping in the engine was
+> **not** "a one-line binding change plus deleting the mock": the engine
+> screens are separate pages on separate routes, precisely because engine
+> output and demo output are different kinds of number and must never
+> substitute for one another. And the mock was not deleted — the demo
+> screens still use it, and are labelled as such on every page.
+>
+> Decisions 1, 3 and 4 stand. Decision 2's OpenAPI half does not: the engine
+> generates its own contract at `/openapi.json`, and `docs/api/openapi.yaml`
+> describes seven paths it does not serve.
+>
+> An ADR is a record of a decision at a moment, so the original text is left
+> intact below rather than edited into agreement with what happened.
 
 ## Context
 

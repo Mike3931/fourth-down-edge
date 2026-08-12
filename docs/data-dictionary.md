@@ -7,7 +7,7 @@ all source-derived tables:
 | --- | --- |
 | `event_at` | When the real-world event occurred |
 | `source_updated_at` | When the upstream source last updated the information |
-| `observed_at` | When this application first observed the information |
+| `observed_at` | When this application first observed the information. Never in the future: it is this application's own clock, so a value ahead of it is seeded or clock-skewed data. Enforced by the `observation_instant_in_future` health check, and it matters because the point-in-time rule below (`observed_at <= as_of_at`) is satisfied *trivially* by such a row — it is excluded from every snapshot taken before its own timestamp, and then silently admitted as the freshest record available |
 | `ingested_at` | When this application persisted it |
 | `as_of_at` | Prediction cutoff — a prediction may only use records with `observed_at <= as_of_at` |
 | `valid_from` / `valid_to` | Validity interval for slowly changing mappings |
