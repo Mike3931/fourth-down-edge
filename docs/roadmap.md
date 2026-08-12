@@ -1,8 +1,20 @@
 # Modeling roadmap — toward the Python analytical engine
 
-## Phase A — service scaffold (first next step)
+> **Status, 2026-08-12: this document predates the engine and is kept as the
+> plan it was.** `apps/api` exists and runs. Phase A is done; Phase B is done
+> for schedule, odds, weather and injuries; Phase C has models 1–4 and 8
+> registered `research_only`; Phase D's walk-forward machinery, metrics and
+> forward-test policy are built. Phase E is where the live work is.
+>
+> Read the phases below as the reasoning, not as a to-do list. What is
+> actually built, and what it is and is not allowed to claim, is in
+> `docs/forward-test.md`, `docs/model-governance.md` and
+> `reports/integrity/RUNBOOK.md`. Nothing here has been approved for
+> real-money use and no approval path is implemented.
 
-- `apps/api`: FastAPI + Pydantic v2 + SQLAlchemy 2 + Alembic, implementing `docs/api/openapi.yaml`.
+## Phase A — service scaffold (built)
+
+- `apps/api`: FastAPI + Pydantic v2 + SQLAlchemy 2 + Alembic, serving its own generated contract at `/openapi.json` (the hand-written `docs/api/openapi.yaml` is a superseded design sketch).
 - Port `@fde/calculations` math to a `fde_calculations` Python package with the **same test vectors**
   (share JSON fixtures so TS and Python implementations are provably identical).
 - Wire Supabase Postgres; Alembic migrations generated from the existing SQL as baseline.

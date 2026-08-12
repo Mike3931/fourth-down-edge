@@ -62,12 +62,36 @@ def _slate(session, at: datetime) -> dict[str, Any]:
             ScheduleObservation.kickoff_utc <= at + window,
         ).distinct()
     ))
+    next_kickoff = session.scalar(
+        select(func.min(ScheduleObservation.kickoff_utc)).where(
+            ScheduleObservation.kickoff_utc >= at)
+    )
+    # Two very different reasons for "no game within 12h", and only one of
+    # them is something to go and fix:
+    #
+    #   the slate does not REACH this instant  -> a coverage gap. Either
+    #       nothing is ingested at all, or ingestion stops short of the
+    #       date being asked about.
+    #   the slate covers it and nothing is on  -> a Tuesday. Normal, and
+    #       not a reason to go looking for a broken ingest.
+    #
+    # Both used to emit one blocker ending "A game that was never ingested
+    # cannot be evaluated", which is a non-sequitur in the second case and
+    # sends the reader hunting for a failure that has not happened.
+    #
+    # A target BEFORE the earliest kickoff is not a gap - the season simply
+    # has not reached it, and there is a next kickoff to name. A target
+    # AFTER the last one is: ingestion stops short of the date being asked
+    # about, and no amount of waiting produces a game.
+    covers_target = bool(hi and at <= hi + window)
     return {
         "distinct_games": games or 0,
         "earliest_kickoff": lo,
         "latest_kickoff": hi,
         "season_types": types,
         "games_near_target": same_day,
+        "next_kickoff_at_or_after_target": next_kickoff,
+        "slate_covers_target": covers_target,
         "target_in_slate": bool(same_day),
     }
 
@@ -174,12 +198,21 @@ def assess(session, at: datetime) -> dict[str, Any]:
     budget = _budget(session)
 
     blockers: list[str] = []
-    if not slate["target_in_slate"]:
+    notes: list[str] = []
+    if not slate["slate_covers_target"]:
         blockers.append(
-            f"NO GAME IN SLATE within 12h of {_fmt(at)}. The slate holds "
+            f"SLATE DOES NOT REACH {_fmt(at)}. It holds "
             f"{slate['distinct_games']} game(s), types {slate['season_types']}, "
             f"{_fmt(slate['earliest_kickoff'])} to {_fmt(slate['latest_kickoff'])}. "
             "A game that was never ingested cannot be evaluated."
+        )
+    elif not slate["target_in_slate"]:
+        # Not a blocker. The slate reaches this instant and nothing happens
+        # to be on, which is most days of the week.
+        notes.append(
+            f"No game kicks off within 12h of {_fmt(at)}. The slate covers "
+            f"this date; the next kickoff at or after it is "
+            f"{_fmt(slate['next_kickoff_at_or_after_target'])}. Nothing to fix."
         )
     if not policy["window_open"]:
         windows = ", ".join(f"{p['version']} [{p['start']}..{p['end']}]"
@@ -217,20 +250,36 @@ def assess(session, at: datetime) -> dict[str, Any]:
             "cadence cannot run. This is a subscription decision, not a bug."
         )
 
+    # The verdict reads the capability list, not the blocker COUNT.
+    #
+    # Counting made severity a tally: three unrelated blockers outranked
+    # two, so "no game kicks off in the next twelve hours" weighed the same
+    # as "no provider key". It printed `VERDICT: BLOCKED` directly above
+    # `CAN RUN NOW: + schedule, weather and injury capture`, which is the
+    # report contradicting itself two lines apart.
+    #
+    # `capable` always contains the health and chain audit, which needs
+    # nothing at all. BLOCKED therefore means that entry is the only one
+    # left; anything beyond it is real work and makes the state PARTIAL.
+    real_work = [c for c in capable if "reconciliation" not in c]
     if not blockers:
         verdict = VERDICT_READY
-    elif len(blockers) >= 3:
-        verdict = VERDICT_BLOCKED
-    else:
+    elif real_work:
         verdict = VERDICT_PARTIAL
+    else:
+        verdict = VERDICT_BLOCKED
 
     return {
         "artifact": "operational-readiness",
-        "artifact_schema_version": "operational-readiness-v1",
+        # v2: the verdict is derived from remaining capability rather than
+        # from a blocker count, and a quiet day is a note rather than a
+        # blocker. Same shape, different meaning, so the version moves.
+        "artifact_schema_version": "operational-readiness-v2",
         "assessed_at_utc": datetime.now(UTC).isoformat(),
         "target_instant_utc": at.isoformat(),
         "verdict": verdict,
         "blockers": blockers,
+        "notes": notes,
         "can_run_now": capable,
         "slate": {**slate,
                   "earliest_kickoff": _fmt(slate["earliest_kickoff"]),
@@ -276,6 +325,14 @@ def main() -> int:
         print("  BLOCKING:")
         for b in report["blockers"]:
             print(f"    - {b}\n")
+    if report["notes"]:
+        # Reported, and separated from BLOCKING, because "nothing is on
+        # tonight" is worth knowing and is not something to go and fix.
+        print("  WORTH KNOWING:")
+        for n in report["notes"]:
+            # ASCII, like the "-" and "+" markers above. A cmd.exe console
+            # on its default code page mangles anything else.
+            print(f"    ~ {n}\n")
     print("  CAN RUN NOW:")
     for c in report["can_run_now"]:
         print(f"    + {c}")
@@ -289,7 +346,15 @@ def main() -> int:
           f"{'configured' if report['provider']['configured'] else 'NOT SET'}")
     b = report["budget"]
     cap = b.get("capacity", {})
-    print(f"  budget   : plan {b['observed_plan_credits'] or 'unknown'} credit(s); "
+    # "plan unknown credit(s)" is not a sentence. An unmeasured plan and a
+    # measured one need different words, not the same template with a
+    # placeholder dropped into the number slot.
+    plan_credits = b["observed_plan_credits"]
+    plan_text = (
+        f"plan {plan_credits} credit(s)" if plan_credits
+        else "plan size not yet recorded (no provider response)"
+    )
+    print(f"  budget   : {plan_text}; "
           f"cadence needs {b['monthly_requirement_credits']}/month, "
           f"season {b['regular_season_credits']}")
     if cap.get("plan_credits"):

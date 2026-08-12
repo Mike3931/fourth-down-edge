@@ -2,10 +2,26 @@
 
 **Read this before using the application for anything.**
 
-1. **Every number is demonstration data.** The slate, odds, injuries, weather, predictions,
-   backtest, and performance metrics are generated deterministically from a seeded PRNG and labeled
-   "DEMONSTRATION DATA — NOT FOR REAL-MONEY DECISIONS" on every screen. None of it describes real
-   NFL games or a real model.
+1. **Some numbers are demonstration data and some are real captured data, and the app says which
+   on every screen.** This item used to read "Every number is demonstration data", which stopped
+   being true when the analytical engine started capturing (see item 6) and would now lead a reader
+   to dismiss real book prices as generated — a claim about provenance, which is the thing this
+   project is most careful about everywhere else.
+
+   The split, as the navigation groups it:
+
+   * **Live engine data** — Live Slate, Slate, Research Candidates, Forward Test, Model Audit,
+     Data Health. Real fixtures, real captured book prices, real backtest scores, badged
+     `REAL CAPTURED DATA` or `LIVE FROM ENGINE`. When the engine is unreachable these screens say
+     so and render nothing; demo numbers are never substituted.
+   * **Demonstration data** — Today's Picks, Game Lab, Injury Center, Market Monitor, Bet
+     Portfolio, Performance Lab, Weekly Slate. Generated deterministically from a seeded PRNG and
+     labeled `DEMONSTRATION DATA — NOT FOR REAL-MONEY DECISIONS`. Player names are fictional and
+     no number describes a real NFL game.
+   * **Neither** — Settings, which reads no dataset.
+
+   What has not changed: no number anywhere is a betting recommendation, and the engine has no
+   `BET` state at all. See items 2 and 3.
 2. **No validated predictive model exists yet.** The "ensemble" is a demo scaffold; Bayesian,
    gradient-boosting, and Monte Carlo components are registered as PLACEHOLDER with weight 0. No
    claim of profitability is made anywhere, and none should be inferred.
@@ -14,8 +30,19 @@
 4. **Player names are fictional.** Real team names appear as plain text only.
 5. **Mock consensus market.** One mocked consensus book; median/best-price across books and closing-
    line capture activate with a real odds provider.
-6. **The analytical service is not built.** v1 computes demo predictions in the browser behind the
-   typed API seam. Proprietary model logic must move to the Python service (see docs/roadmap.md).
+6. **The analytical service IS built, and the browser path still exists beside it.** This item used
+   to read "The analytical service is not built."
+
+   `apps/api` is a FastAPI service with a canonical data model, point-in-time guards, six registered
+   models, walk-forward backtesting, a frozen forward-test policy and an idempotent scheduler. It
+   backs the six live screens in item 1. Every model artifact is registered `research_only` and no
+   approval path is implemented.
+
+   What has not moved: the DEMO screens still compute their predictions in the browser, from the
+   seeded generator, behind the same typed API seam. Those are two different code paths producing
+   two different kinds of number, which is why they are labelled separately and never merged on one
+   screen — see `apps/web/src/pages/ForwardTestLive.tsx`, which explains at length why its cohort is
+   kept apart from Model Audit's.
 7. **Local Demo Mode persistence** is localStorage: single-device, cleared with browser data. The
    Supabase path exists but requires a configured project.
 8. **E2E tests require a browser install** (`npx playwright install chromium`). Run with
@@ -29,7 +56,7 @@
 11. **The frozen demo clock** (2026-09-10T16:00:00Z) keeps freshness states deterministic; real
     deployments use wall-clock time. It also doubles as the live prediction cutoff enforced by
     `evaluateGame` — see item 17.
-12. **Bundle size**: the build is split into app (~233 kB), vendor (~251 kB), and charts (~416 kB)
+12. **Bundle size**: the build is split into app (~286 kB), vendor (~251 kB), and charts (~416 kB)
     chunks. Charts remain the largest dependency; route-level lazy loading would trim first paint
     further if that ever matters.
 13. **Schedule conflict detection is structurally inert in v1.** The recommendation engine's
