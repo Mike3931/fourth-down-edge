@@ -479,8 +479,20 @@ def _no_consensus_reasons(eligible_books: int, report: EligibilityReport) -> lis
     ]
     parts = [f"{n} {why}" for n, why in excluded if n]
     if parts:
+        # "{considered} quote(s) were considered and excluded" counted the
+        # ELIGIBLE ones as excluded. The two agreed only while nothing was
+        # eligible, which was true for as long as capture was stale — and
+        # the first successful capture put fresh quotes beside old ones and
+        # produced "4 quote(s) were considered and excluded: 2 older than
+        # the freshness window". Four excluded, two accounted for, and the
+        # missing two were the fresh ones.
+        #
+        # The counters partition `considered`, so the excluded total is
+        # exactly what is left after the eligible, and it always equals the
+        # sum of the causes named after the colon.
+        n_excluded = report.considered - report.eligible
         reasons.append(
-            f"{report.considered} quote(s) were considered and excluded: " + "; ".join(parts)
+            f"{n_excluded} of {report.considered} quote(s) were excluded: " + "; ".join(parts)
         )
     return reasons
 

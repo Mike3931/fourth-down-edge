@@ -74,6 +74,62 @@ system exists to refuse.
 
 ## What you CAN run tonight
 
+### Capture real market prices, with no provider key
+
+```bash
+python apps/api/scripts/espn_live_capture.py --dry-run --dates 20260814-20260818
+python apps/api/scripts/espn_live_capture.py --dates 20260814-20260818
+```
+
+This is the command that has produced every real quote in the database,
+and it was missing from this runbook. ESPN's public scoreboard needs no
+credential and carries both the fixture and sportsbook lines, so it works
+today while `FDE_ODDS_API_KEY` is unset.
+
+Every row it writes carries `provider="espn"`, so it can never be confused
+in the record with The Odds API. bet365 is not contacted, scraped or
+inspected, and nothing it writes implies a price is currently available to
+transact.
+
+It will not manufacture a consensus. ESPN typically exposes one book, a
+consensus needs three, and the honest output of a one-book slate is
+DATA INCOMPLETE — which is what the Live Slate shows, with the reason
+stated. Re-running is idempotent: an unchanged price is a duplicate and is
+skipped, so the quote history records movement rather than polling.
+
+Omitting `--dates` gives ESPN's default view, which in mid-August is the
+finished Hall of Fame game and nothing else. Pass the window you want.
+
+Latest run (2026-08-12 11:54Z): 10 preseason games, 50 quotes written, 10
+unchanged and skipped, one book throughout.
+
+To keep capturing, in a terminal you can stop:
+
+```powershell
+while ($true) {
+  uv run --project apps/api python apps/api/scripts/espn_live_capture.py --dates 20260814-20260818
+  Start-Sleep -Seconds 900
+}
+```
+
+Deliberately not a scheduled task or a service. Nothing persistent is
+created, capture stops when the window closes, and the quote history
+records only what was genuinely observed while it ran.
+
+**What one book means, stated once so it is not rediscovered as a bug.**
+ESPN exposes a single book. `build_consensus` requires three, so it
+returns nothing and the market is DATA INCOMPLETE — correctly. No
+consensus means no price to compare a model probability against, which
+means **no research candidate can be produced from this data at all**, and
+the forward-test cohort stays where it is. `odds_key_configured` stays
+CRITICAL for the same reason.
+
+None of that is a fault to fix. It is the platform declining to invent
+agreement among books it never consulted, which is the behaviour the whole
+consensus layer exists to guarantee. Capturing anyway is still worth it:
+the quotes are a real, timestamped record of one book's line moving toward
+kickoff, and that record cannot be reconstructed later.
+
 ### The full lifecycle, end to end
 
 ```bash
