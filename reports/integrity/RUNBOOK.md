@@ -97,11 +97,22 @@ DATA INCOMPLETE — which is what the Live Slate shows, with the reason
 stated. Re-running is idempotent: an unchanged price is a duplicate and is
 skipped, so the quote history records movement rather than polling.
 
+`--dates` is **UTC**, like every other date in this system. ESPN's own
+scoreboard dates are US Eastern, so the query is widened by a day on each
+side and the result filtered back to the UTC window asked for. Without
+that, `--dates 20260807` returned nothing for a game whose kickoff and
+canonical id both say the 7th — and this exact five-day window returned
+**10 games instead of 13**, silently missing ARI @ LV, LAC @ HOU and
+TEN @ SF, all kicking off at or just after midnight UTC and therefore
+filed by ESPN under the previous Eastern evening. In the regular season
+that is every Sunday-night, Monday-night and late-Sunday game.
+
 Omitting `--dates` gives ESPN's default view, which in mid-August is the
 finished Hall of Fame game and nothing else. Pass the window you want.
 
-Latest run (2026-08-12 11:54Z): 10 preseason games, 50 quotes written, 10
-unchanged and skipped, one book throughout.
+Latest run (2026-08-12 12:2xZ): 13 preseason games, 134 ESPN quotes in the
+database, one book throughout. Re-running writes nothing when no price has
+moved — a second run minutes later wrote 0 and skipped 60 as duplicates.
 
 To keep capturing, in a terminal you can stop:
 

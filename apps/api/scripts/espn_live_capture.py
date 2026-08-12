@@ -38,7 +38,7 @@ import argparse
 import hashlib
 import json
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -90,8 +90,79 @@ def _parse_american(text: Any) -> int | None:
         return None
 
 
+# `--dates` IS UTC, like every other date in this system, and ESPN's is not.
+#
+# ESPN files a game under its US EASTERN date. The Hall of Fame game kicks
+# off at 2026-08-07T00:00:00Z and its canonical id is
+# `2026_PRE_0807_CAR_ARI` — both say the 7th — while ESPN files it under the
+# 6th, because midnight UTC is eight in the evening the day before in
+# Eastern. So `--dates 20260807` returned "0 game(s)" for a game the screen
+# was showing at that very date, with nothing said about why.
+#
+# Preseason hid it: the requested range had slack at both ends. The regular
+# season would not. Every Sunday-night and late-window kickoff carries a UTC
+# date one day ahead of its Eastern one, so a week requested by its UTC
+# dates drops exactly the games people care most about.
+#
+# The provider query is therefore widened by a day on each side, to cover
+# the offset in both directions, and the result is filtered back to the UTC
+# window that was asked for. Widening alone would silently capture
+# neighbours.
+
+
+def _parse_day(token: str) -> date:
+    if len(token) != 8 or not token.isdigit():
+        raise ValueError(f"expected YYYYMMDD, got {token!r}")
+    return date(int(token[:4]), int(token[4:6]), int(token[6:]))
+
+
+def _parse_dates(dates: str) -> tuple[date, date]:
+    parts = dates.split("-")
+    if len(parts) == 1:
+        first = last = _parse_day(parts[0])
+    elif len(parts) == 2:
+        first, last = _parse_day(parts[0]), _parse_day(parts[1])
+    else:
+        raise ValueError(f"expected YYYYMMDD or YYYYMMDD-YYYYMMDD, got {dates!r}")
+    if last < first:
+        raise ValueError(f"range ends before it starts: {dates!r}")
+    return first, last
+
+
+def utc_window(dates: str) -> tuple[datetime, datetime]:
+    """The half-open UTC interval `dates` names: [start, end)."""
+    first, last = _parse_dates(dates)
+    start = datetime(first.year, first.month, first.day, tzinfo=UTC)
+    end = datetime(last.year, last.month, last.day, tzinfo=UTC) + timedelta(days=1)
+    return start, end
+
+
+def espn_query_range(dates: str | None) -> str | None:
+    """The provider range to ask for: one Eastern day either side.
+
+    Eastern is UTC-4 or UTC-5, so a UTC day can spill into the Eastern day
+    before it and the one after. A single day of slack covers both.
+    """
+    if dates is None:
+        return None
+    first, last = _parse_dates(dates)
+    lo, hi = first - timedelta(days=1), last + timedelta(days=1)
+    return f"{lo:%Y%m%d}-{hi:%Y%m%d}"
+
+
+def within_utc_window(
+    games: list[dict[str, Any]], dates: str | None
+) -> list[dict[str, Any]]:
+    """Drop the neighbours the widened query brought back."""
+    if dates is None:
+        return games
+    start, end = utc_window(dates)
+    return [g for g in games if start <= g["kickoff_utc"] < end]
+
+
 def fetch(dates: str | None = None) -> dict[str, Any]:
-    url = SCOREBOARD + (f"?dates={dates}" if dates else "")
+    query = espn_query_range(dates)
+    url = SCOREBOARD + (f"?dates={query}" if query else "")
     r = httpx.get(url, timeout=45, follow_redirects=True)
     r.raise_for_status()
     return r.json()
@@ -422,13 +493,25 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--dates", default=None, help="YYYYMMDD")
+    parser.add_argument(
+        "--dates", default=None,
+        help="UTC day or range: YYYYMMDD or YYYYMMDD-YYYYMMDD. UTC, not the "
+             "provider's US Eastern date — a game whose kickoff and canonical "
+             "id both say the 7th is asked for as 20260807. Omit for the "
+             "provider's own default view.")
     parser.add_argument("--data-mode", default="LIVE_RESEARCH",
                         choices=["DEMO", "LIVE_RESEARCH"])
     args = parser.parse_args()
 
-    payload = fetch(args.dates)
-    games = discover(payload)
+    # A malformed --dates is refused rather than dropped, because falling
+    # back to the provider's default view would hand back a different slate
+    # than the one asked for and say nothing about the substitution.
+    try:
+        payload = fetch(args.dates)
+        games = within_utc_window(discover(payload), args.dates)
+    except ValueError as e:
+        print(f"--dates: {e}", file=sys.stderr)
+        return 2
 
     print(f"\n=== ESPN PUBLIC SCOREBOARD  ({len(games)} game(s)) ===")
     print("    real market data, provider=espn - NOT The Odds API, not bet365\n")

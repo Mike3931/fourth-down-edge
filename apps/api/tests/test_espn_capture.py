@@ -342,3 +342,71 @@ class TestTheSeasonTypeComesFromTheEvent:
         games = capture.discover(self._payload(
             top={}, event_season={"year": 2026, "type": 99}))
         assert games == []
+
+
+class TestTheDateRangeIsUTCLikeEverythingElse:
+    """`--dates` went straight to ESPN, whose scoreboard dates are US
+    Eastern. Every other date in this system is UTC.
+
+    The Hall of Fame game kicks off at 2026-08-07T00:00:00Z and its
+    canonical id is `2026_PRE_0807_CAR_ARI`. Both say the 7th. ESPN files
+    it under the 6th, because 00:00Z is 20:00 the previous evening in
+    Eastern — so `--dates 20260807` returned "0 game(s)" and no
+    explanation, for a game the screen was showing at that exact date.
+
+    Harmless in the preseason window, where the requested range has slack.
+    Not harmless in the regular season: every Sunday-night and late-window
+    kickoff has a UTC date one day ahead of its Eastern one, so a week
+    requested by its UTC dates silently drops them.
+
+    The flag is UTC now. The ESPN query widens by a day on each side to
+    cover the offset in both directions, and the games come back filtered
+    to the UTC window that was actually asked for.
+    """
+
+    def test_a_single_utc_date_widens_the_provider_query(self, capture) -> None:
+        assert capture.espn_query_range("20260807") == "20260806-20260808"
+
+    def test_a_range_widens_at_both_ends(self, capture) -> None:
+        assert capture.espn_query_range("20260814-20260818") == "20260813-20260819"
+
+    def test_no_dates_means_the_providers_own_default(self, capture) -> None:
+        assert capture.espn_query_range(None) is None
+
+    def test_the_window_is_the_whole_utc_day(self, capture) -> None:
+        start, end = capture.utc_window("20260807")
+        assert start == datetime(2026, 8, 7, 0, 0, tzinfo=UTC)
+        assert end == datetime(2026, 8, 8, 0, 0, tzinfo=UTC)
+
+    def test_a_range_covers_every_day_in_it(self, capture) -> None:
+        start, end = capture.utc_window("20260814-20260816")
+        assert start == datetime(2026, 8, 14, 0, 0, tzinfo=UTC)
+        assert end == datetime(2026, 8, 17, 0, 0, tzinfo=UTC)
+
+    def test_the_hall_of_fame_kickoff_is_inside_the_seventh(self, capture) -> None:
+        """The case that produced the empty result: midnight UTC on the
+        7th belongs to the 7th, whatever Eastern calls it."""
+        start, end = capture.utc_window("20260807")
+        assert start <= datetime(2026, 8, 7, 0, 0, tzinfo=UTC) < end
+
+    def test_games_outside_the_requested_window_are_dropped(self, capture) -> None:
+        """The widened query brings back neighbours; they must not be
+        captured just because the provider volunteered them."""
+        games = [
+            {"kickoff_utc": datetime(2026, 8, 6, 23, 0, tzinfo=UTC), "canonical_game_id": "before"},
+            {"kickoff_utc": datetime(2026, 8, 7, 0, 0, tzinfo=UTC), "canonical_game_id": "inside"},
+            {"kickoff_utc": datetime(2026, 8, 8, 0, 0, tzinfo=UTC), "canonical_game_id": "after"},
+        ]
+        kept = [g["canonical_game_id"] for g in capture.within_utc_window(games, "20260807")]
+        assert kept == ["inside"]
+
+    def test_no_dates_filters_nothing(self, capture) -> None:
+        games = [{"kickoff_utc": datetime(2026, 1, 1, tzinfo=UTC), "canonical_game_id": "x"}]
+        assert capture.within_utc_window(games, None) == games
+
+    def test_a_malformed_date_is_refused_rather_than_ignored(self, capture) -> None:
+        """Silently falling back to the provider's default view would hand
+        back a different slate than the one asked for."""
+        for bad in ("2026-08-07", "20260832", "notadate", "20260807-"):
+            with pytest.raises(ValueError):
+                capture.utc_window(bad)
