@@ -320,9 +320,34 @@ class TestALaterPriceCannotEnterAnEarlierEvaluation:
 
 
 class TestSimultaneousPricesOrderDeterministically:
-    """Killed by: simultaneous_price_ordering_becomes_arbitrary."""
+    """Killed by: simultaneous_ordering_becomes_arbitrary.
 
-    def test_two_prices_at_one_instant_resolve_by_id(self, db: Session) -> None:
+    The docstring used to name `simultaneous_price_ordering_becomes_arbitrary`,
+    which is not one of the nine mutations `pit_mutations.py` defines. A
+    "Killed by:" line is a provenance claim, and that one could never have
+    been checked.
+
+    Worse, the test below killed the real mutation ONLY SOMETIMES.
+    `ManualBookPriceEntry.id` is a random hex string, so `max(a.id, b.id)`
+    is a LEXICOGRAPHIC comparison unrelated to insertion order. Under the
+    mutation the query returns rows in insertion order and `max` takes the
+    first, so the test passed whenever the first-inserted row happened to
+    own the lexicographically higher id — measured at 3 survivals in 10
+    runs. The committed mutation artifact recorded this test as a killer
+    because that run landed on the other side of the coin.
+
+    A mutation detector that flips a coin is worse than one that is absent,
+    because the artifact reports it as evidence. The ids are therefore
+    pinned rather than drawn: the row written FIRST is given the LOWER id,
+    which is the adversarial arrangement. Under the mutation the query
+    returns insertion order and `max` takes the first, so it answers with
+    the lower id every run; the tie-break answers with the higher. The two
+    can no longer coincide by luck.
+    """
+
+    def test_two_prices_at_one_instant_resolve_by_id(
+        self, db: Session, monkeypatch
+    ) -> None:
         """Two DIFFERENT submissions at the same instant.
 
         Different submitters, so these are two legitimate slots rather than
@@ -332,12 +357,24 @@ class TestSimultaneousPricesOrderDeterministically:
         tie-break: two valid rows sharing a timestamp must resolve the same
         way on every read and every backend.
         """
+        import uuid as _uuid
+
         from fde_api.forward.prices import current_price
 
+        # `id` is `px_{uuid4().hex[:20]}`, so only the top 80 bits reach the
+        # id. Shifting puts the distinguishing digits where they land.
+        ids = iter([
+            _uuid.UUID(int=0x11111111111111111111 << 48),
+            _uuid.UUID(int=0x22222222222222222222 << 48),
+        ])
+        monkeypatch.setattr("fde_api.forward.prices.uuid.uuid4", lambda: next(ids))
+
         instant = CUTOFF - timedelta(hours=2)
-        a = _price(db, observed_at=instant, american=-110, user_id="operator-a")
-        b = _price(db, observed_at=instant, american=-105, user_id="operator-b")
+        low = _price(db, observed_at=instant, american=-110, user_id="operator-a")
+        high = _price(db, observed_at=instant, american=-105, user_id="operator-b")
         db.commit()
+
+        assert low.id < high.id, "the fixture must write the lower id first"
 
         picked = {
             current_price(
@@ -347,8 +384,8 @@ class TestSimultaneousPricesOrderDeterministically:
             for _ in range(5)
         }
         assert len(picked) == 1, f"a simultaneous pair resolved inconsistently: {picked}"
-        assert picked == {max(a.id, b.id)}, (
-            "the tie did not resolve to the highest id"
+        assert picked == {high.id}, (
+            "the tie resolved to insertion order, not to the highest id"
         )
 
 
