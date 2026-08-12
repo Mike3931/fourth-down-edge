@@ -4,13 +4,13 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useQueryClient } from '@tanstack/react-query';
 import { Button, Card, CardHeader, ErrorState, LoadingState, Mono, Pill, StaleBanner, Td, Th } from '@fde/ui';
-import { ageMinutes } from '@fde/calculations';
+import { ageMinutes, describeConsensus } from '@fde/calculations';
 import { latestSnapshotForDisplay } from '@fde/api-client';
 import type { ManualBookPrice, MarketType, SelectionSide } from '@fde/shared-types';
 import { api, useDataset, useRecommendations } from '../lib/api';
 import { useStore } from '../lib/store';
 import { fmtAgo, fmtLine, fmtMarketLine, fmtOdds, fmtUtc } from '../lib/format';
-import { gameLabel } from '../lib/joins';
+import { gameLabel, gameTeams } from '../lib/joins';
 
 const priceSchema = z.object({
   gameId: z.string().min(1, 'Select a game'),
@@ -113,7 +113,7 @@ export default function MarketMonitor() {
             <thead>
               <tr>
                 <Th>Game</Th>
-                <Th>Open spread</Th><Th>Curr spread</Th><Th>Move</Th>
+                <Th>Open spread</Th><Th>Curr spread</Th><Th>Move (home)</Th>
                 <Th>Open total</Th><Th>Curr total</Th><Th>Move</Th>
                 <Th>Curr ML (A/H)</Th>
                 <Th>Snapshot @ (UTC)</Th><Th>Age</Th>
@@ -129,13 +129,20 @@ export default function MarketMonitor() {
                 const curMl = latestSnapshotForDisplay(ds.oddsSnapshots, g.id, 'MONEYLINE');
                 const rec = recs?.find((r) => r.gameId === g.id);
                 const age = cur ? ageMinutes(cur.observedAt, ds.demoNow) : Infinity;
+                const teamsFor = gameTeams(ds, g.id);
+                // Spread lines are stored HOME-relative, and these rows are
+                // labelled away-first ("CIN @ LAR"), so a bare "+9" beside
+                // that label reads as CIN's number when it is LAR's - the
+                // exact ambiguity `describeConsensus` was written for on the
+                // Live Slate. The move stays a bare delta and its column
+                // says whose.
                 const spreadMove = cur?.line !== undefined && open?.line !== undefined ? cur.line - open.line : 0;
                 const totalMove = curT?.line !== undefined && openT?.line !== undefined ? curT.line - openT.line : 0;
                 return (
                   <tr key={g.id} className="hover:bg-panel-raised/60">
                     <Td className="font-medium">{gameLabel(ds, g.id)}</Td>
-                    <Td><Mono>{fmtLine(open?.line)}</Mono></Td>
-                    <Td><Mono>{fmtLine(cur?.line)}</Mono></Td>
+                    <Td><Mono>{describeConsensus('SPREAD', open?.line ?? null, teamsFor)}</Mono></Td>
+                    <Td><Mono>{describeConsensus('SPREAD', cur?.line ?? null, teamsFor)}</Mono></Td>
                     <Td><Mono className={Math.abs(spreadMove) >= 1 ? 'text-warn' : 'text-ink-faint'}>{spreadMove === 0 ? '—' : fmtLine(Math.round(spreadMove * 10) / 10)}</Mono></Td>
                     <Td><Mono>{openT?.line ?? '—'}</Mono></Td>
                     <Td><Mono>{curT?.line ?? '—'}</Mono></Td>

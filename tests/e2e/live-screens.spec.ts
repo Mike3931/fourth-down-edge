@@ -113,6 +113,24 @@ test.describe('screens that show no dataset at all', () => {
   });
 });
 
+test.describe('a stored line always says whose it is', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /enter local demo session/i }).click();
+  });
+
+  test('the odds board names the team on every spread', async ({ page }) => {
+    // Spreads are stored HOME-relative and these rows are labelled
+    // away-first ("CIN @ LAR"), so a bare "+9" in a column headed "Open
+    // spread" reads as the away team's number when it is the home team's.
+    // Same defect the Live Slate consensus card was fixed for; this screen
+    // still had it.
+    await page.goto('/market');
+    const firstSpread = page.locator('tbody tr').first().locator('td').nth(1);
+    await expect(firstSpread).toHaveText(/^[A-Z]{2,3} [+-]/);
+  });
+});
+
 test.describe('the two screens Phase 3 named', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');

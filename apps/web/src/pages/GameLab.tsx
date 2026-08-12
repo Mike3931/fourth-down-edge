@@ -4,7 +4,7 @@ import {
   Card, CardHeader, ErrorState, FreshBadge, LoadingState, Mono, Pill, SectionLabel, Stat, Td, Th,
 } from '@fde/ui';
 import {
-  centralInterval, marginDistribution, spreadOutcomeProbabilities,
+  centralInterval, describeConsensus, marginDistribution, spreadOutcomeProbabilities,
   totalDistribution, totalOutcomeProbabilities,
 } from '@fde/calculations';
 import type { FactorAssessment } from '@fde/shared-types';
@@ -164,7 +164,18 @@ export default function GameLab() {
               {stadium?.surface} · {roofLabel(game.roofStatus)}
             </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              <Pill tone="neutral">spread <Mono>{fmtLine(spread?.line)}</Mono></Pill>
+              {/* Named, not bare. The heading reads "<away> at <home>"
+                  and the stored line is home-relative, so a bare number
+                  under it reads as the away team's. */}
+              <Pill tone="neutral">
+                spread{' '}
+                <Mono>
+                  {describeConsensus('SPREAD', spread?.line ?? null, {
+                    homeTeamId: home.abbreviation,
+                    awayTeamId: away.abbreviation,
+                  })}
+                </Mono>
+              </Pill>
               <Pill tone="neutral">total <Mono>{total?.line ?? '—'}</Mono></Pill>
               <Pill tone="neutral">
                 ML <Mono>{ml ? `${fmtOdds(ml.awayAmerican, store.settings.oddsFormat)} / ${fmtOdds(ml.homeAmerican, store.settings.oddsFormat)}` : '—'}</Mono>

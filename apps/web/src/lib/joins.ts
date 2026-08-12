@@ -71,3 +71,24 @@ export function roofLabel(roof: string): string {
     default: return roof;
   }
 }
+
+/**
+ * The two team codes of a game, in the shape the display helpers in
+ * `@fde/calculations` take.
+ *
+ * Spread lines are stored HOME-RELATIVE everywhere in this system, so any
+ * screen rendering one has to know which team the number belongs to.
+ * `gameLabel` above is away-first ("CIN @ LAR"), which makes a bare number
+ * beside it read as the away team's.
+ */
+export function gameTeams(
+  ds: DemoDataset,
+  gameId: string,
+): { homeTeamId: string; awayTeamId: string } {
+  const g = gameById(ds, gameId);
+  if (!g) return { homeTeamId: '', awayTeamId: '' };
+  return {
+    homeTeamId: teamById(ds, g.homeTeamId).abbreviation,
+    awayTeamId: teamById(ds, g.awayTeamId).abbreviation,
+  };
+}

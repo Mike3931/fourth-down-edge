@@ -5,11 +5,12 @@ import {
   useReactTable, type SortingState,
 } from '@tanstack/react-table';
 import { Card, CardHeader, ErrorState, LoadingState, Mono, RecBadge, cn } from '@fde/ui';
+import { describeConsensus } from '@fde/calculations';
 import type { Recommendation, RecommendationStatus } from '@fde/shared-types';
 import { useDataset, useRecommendations } from '../lib/api';
 import { useStore } from '../lib/store';
 import { latestSnapshotForDisplay, type DemoDataset } from '@fde/api-client';
-import { fmtKickoff, fmtLine, fmtOdds, fmtPct, fmtSigned, fmtUtc } from '../lib/format';
+import { fmtKickoff, fmtOdds, fmtPct, fmtSigned, fmtUtc } from '../lib/format';
 import { modelVersionLabel, stadiumById, teamById } from '../lib/joins';
 
 interface SlateRow {
@@ -136,8 +137,32 @@ export default function WeeklySlate() {
       col.accessor('away', { header: 'Away' }),
       col.accessor('home', { header: 'Home' }),
       col.accessor('stadium', { header: 'Stadium', cell: (c) => <span className="text-ink-muted">{c.getValue()}</span> }),
-      col.accessor('consensusSpread', { header: 'Cons spread', cell: (c) => <Mono>{fmtLine(c.getValue())}</Mono> }),
-      col.accessor('modelSpread', { header: 'Model spread', cell: (c) => <Mono className="text-model">{fmtLine(Math.round(c.getValue() * 10) / 10)}</Mono> }),
+      // Both spreads are HOME-relative - `modelSpread` is `-expectedMargin`
+      // - and the Game column is away-first, so a bare number in either
+      // reads as the away team's. Named instead, like every other stored
+      // line in the app.
+      col.accessor('consensusSpread', {
+        header: 'Cons spread',
+        cell: (c) => (
+          <Mono>
+            {describeConsensus('SPREAD', c.getValue() ?? null, {
+              homeTeamId: c.row.original.home,
+              awayTeamId: c.row.original.away,
+            })}
+          </Mono>
+        ),
+      }),
+      col.accessor('modelSpread', {
+        header: 'Model spread',
+        cell: (c) => (
+          <Mono className="text-model">
+            {describeConsensus('SPREAD', Math.round(c.getValue() * 10) / 10, {
+              homeTeamId: c.row.original.home,
+              awayTeamId: c.row.original.away,
+            })}
+          </Mono>
+        ),
+      }),
       col.accessor('spreadDiff', {
         header: 'Δ spread',
         cell: (c) => <Mono className={Math.abs(c.getValue()) >= 1.5 ? 'text-accent' : 'text-ink-faint'}>{fmtSigned(c.getValue())}</Mono>,
