@@ -119,6 +119,18 @@ test.describe('a stored line always says whose it is', () => {
     await page.getByRole('button', { name: /enter local demo session/i }).click();
   });
 
+  test('CLV is never labelled in bare points', async ({ page }) => {
+    // `closingLineValuePct` is PROBABILITY points. Both screens printed it
+    // as "+0.45 pts", which in this domain reads as LINE points — a much
+    // larger claim from the same number — while Performance Lab's own
+    // chart caption said "probability points" about that same 0.45.
+    for (const path of ['/performance', '/portfolio']) {
+      await page.goto(path);
+      await expect(page.getByText(/CLV[^\n]*\b\d+\.\d+ pts\b/)).toHaveCount(0);
+      await expect(page.getByText(/CLV \((probability points|prob pts)\)/).first()).toBeVisible();
+    }
+  });
+
   test('the odds board names the team on every spread', async ({ page }) => {
     // Spreads are stored HOME-relative and these rows are labelled
     // away-first ("CIN @ LAR"), so a bare "+9" in a column headed "Open

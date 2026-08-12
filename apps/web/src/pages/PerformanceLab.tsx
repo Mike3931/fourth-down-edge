@@ -136,7 +136,13 @@ export default function PerformanceLab() {
           <Stat label="Brier score" value={metrics.brier.toFixed(4)} sub="lower is better; 0.25 = coin flip" />
           <Stat label="Calibration error (ECE)" value={fmtPct(metrics.ece, 2)} />
           <Stat label="Calibration slope / intercept" value={`${metrics.slope.toFixed(2)} / ${metrics.intercept.toFixed(2)}`} sub="ideal 1.00 / 0.00" />
-          <Stat label="Mean CLV" value={`${metrics.meanClv >= 0 ? '+' : ''}${metrics.meanClv.toFixed(2)} pts`} tone={metrics.meanClv > 0 ? 'positive' : 'default'} />
+          {/* The unit belongs in the label. `clvPct` is `closingLineValuePct`
+              — PROBABILITY points, already scaled by 100 — and "pts" in
+              this domain reads as LINE points, which is a different and
+              much larger claim. The chart caption below has always said
+              "probability points", so the screen disagreed with itself
+              about the same 0.45. */}
+          <Stat label="Mean CLV (probability points)" value={`${metrics.meanClv >= 0 ? '+' : ''}${metrics.meanClv.toFixed(2)}`} tone={metrics.meanClv > 0 ? 'positive' : 'default'} />
           <Stat label="ROI after vig" value={Number.isNaN(metrics.roi) ? '—' : fmtPct(metrics.roi, 2)} sub="staked records only" />
           <Stat label="Max drawdown" value={fmtPct(metrics.mdd, 2)} tone="warning" />
           <Stat label="Win rate" value={Number.isNaN(metrics.winRate) ? '—' : fmtPct(metrics.winRate)} sub="secondary metric by design; pushes excluded" />
@@ -146,7 +152,7 @@ export default function PerformanceLab() {
           <Stat label="Wagers" value={metrics.nWagers} />
           <Stat label="Avg stake" value={`$${metrics.avgStake.toFixed(0)}`} />
           <Stat label="80% interval coverage" value={Number.isNaN(metrics.coverage) ? '—' : fmtPct(metrics.coverage, 0)} sub="target 80%" />
-          <Stat label="Model vs market" value={`${metrics.meanClv >= 0 ? '+' : ''}${metrics.meanClv.toFixed(2)} pts CLV`} sub="closing market as benchmark" tone="model" />
+          <Stat label="Model vs market" value={`${metrics.meanClv >= 0 ? '+' : ''}${metrics.meanClv.toFixed(2)}`} sub="CLV in probability points; closing market as benchmark" tone="model" />
         </section>
       </Card>
 
@@ -224,7 +230,7 @@ function SliceTable({ slices }: { slices: Array<{ name: string; rs: Array<{ p: n
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse">
-        <thead><tr><Th>Slice</Th><Th>N</Th><Th>Log loss</Th><Th>Brier</Th><Th>Mean CLV</Th><Th>Avg edge</Th></tr></thead>
+        <thead><tr><Th>Slice</Th><Th>N</Th><Th>Log loss</Th><Th>Brier</Th><Th>Mean CLV (prob pts)</Th><Th>Avg edge</Th></tr></thead>
         <tbody>
           {slices.map((s) => {
             const pairs = s.rs.map((r) => ({ p: r.p, outcome: r.outcome }));

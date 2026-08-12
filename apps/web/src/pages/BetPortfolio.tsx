@@ -88,7 +88,10 @@ export default function BetPortfolio() {
         <Stat label="Weekly exposure" value={fmtPct(store.weeklyExposurePct)} sub={`cap ${fmtPct(store.settings.riskControls.maxWeeklyOpenStakePct)}`} />
         <Stat label="Max weekly loss" value={fmtMoney(store.openStake)} sub="if every open bet loses" tone="warning" />
         <Stat label="Realized P/L" value={fmtSignedMoney(realized)} tone={realized >= 0 ? 'positive' : 'danger'} sub="paper, demo data" />
-        <Stat label="Avg CLV" value={`${avgClv >= 0 ? '+' : ''}${avgClv.toFixed(1)} pts`} sub={`${clvBets.length} bets · drawdown ${fmtPct(maxDrawdown(bankrollCurve))}`} />
+        {/* Probability points, not line points — the field is
+            `closingLineValuePct`. "pts" read as spread points, which is a
+            far larger claim from the same number. */}
+        <Stat label="Avg CLV (probability points)" value={`${avgClv >= 0 ? '+' : ''}${avgClv.toFixed(1)}`} sub={`${clvBets.length} bets · drawdown ${fmtPct(maxDrawdown(bankrollCurve))}`} />
       </section>
 
       <Card>
@@ -120,7 +123,7 @@ export default function BetPortfolio() {
               <tr>
                 <Th>Placed @ (UTC)</Th><Th>Game</Th><Th>Market</Th><Th>Selection</Th><Th>Line</Th>
                 <Th>Price</Th><Th>Stake</Th><Th>Mode</Th><Th>Result</Th><Th>P/L</Th>
-                <Th>Close</Th><Th>CLV</Th><Th>Model</Th><Th>Links</Th>
+                <Th>Close</Th><Th>CLV (prob pts)</Th><Th>Model</Th><Th>Links</Th>
                 <Th className="sticky right-0 z-20 border-l border-edge bg-panel-raised">Actions</Th>
               </tr>
             </thead>
