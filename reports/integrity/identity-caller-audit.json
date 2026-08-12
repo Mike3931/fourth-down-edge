@@ -2,6 +2,9 @@
   "artifact": "identity-caller-audit",
   "artifact_schema_version": "identity-caller-audit-v1",
   "callers": {
+    "src/fde_api/api/main.py": {
+      "discarded": []
+    },
     "src/fde_api/forward/consensus.py": {
       "discarded": [],
       "handling": "total dispatch via dispatch()"
@@ -27,6 +30,9 @@
     "tests/test_chain_direct.py": {
       "discarded": []
     },
+    "tests/test_consensus_spread_sign.py": {
+      "discarded": []
+    },
     "tests/test_domain_identity.py": {
       "discarded": []
     },
@@ -38,9 +44,12 @@
     },
     "tests/test_pit_chain_guards.py": {
       "discarded": []
+    },
+    "tests/test_read_endpoints_are_read_only.py": {
+      "discarded": []
     }
   },
-  "files_examined": 11,
+  "files_examined": 14,
   "findings": [],
   "note": "handled()/dispatch() take all three branches as required keyword arguments, so omitting one is a TypeError at the call site rather than a silence at run time.",
   "services": [

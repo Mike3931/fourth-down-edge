@@ -410,3 +410,76 @@ class TestTheDateRangeIsUTCLikeEverythingElse:
         for bad in ("2026-08-07", "20260832", "notadate", "20260807-"):
             with pytest.raises(ValueError):
                 capture.utc_window(bad)
+
+
+class TestTheSpreadAndTheMoneylineAgreeAboutTheFavourite:
+    """A cross-market invariant, not a property of one function.
+
+    The spread sign and the moneyline both say who is favoured. They come
+    from different parts of the provider payload and are parsed by
+    different code, so they can disagree — and an inverted spread beside a
+    correct moneyline is invisible in the record, because both numbers are
+    individually plausible.
+
+    Checked against all fourteen captured games on 2026-08-12 and they
+    agreed every time, which is the fix in `_spread_from_flags` holding on
+    real data. That check existed only as a throwaway script; this is it,
+    kept.
+
+    Stated as: a negative HOME spread and a home moneyline shorter than the
+    away one must occur together.
+    """
+
+    @staticmethod
+    def _odds(*, home_favourite: bool, spread: float, home_ml: int, away_ml: int) -> dict:
+        return {
+            "provider": {"name": "DraftKings"},
+            "spread": spread,
+            "moneyline": {
+                "home": {"close": {"odds": f"{home_ml:+d}"}},
+                "away": {"close": {"odds": f"{away_ml:+d}"}},
+            },
+            "total": {},
+            "homeTeamOdds": {"favorite": home_favourite, "underdog": not home_favourite},
+            "awayTeamOdds": {"favorite": not home_favourite, "underdog": home_favourite},
+            # Prices but no per-side line, so the SIGN comes from the
+            # favourite flags — the path that used to invert it. A spread
+            # with no price is not a quote and is not emitted at all.
+            "pointSpread": {"home": {"close": {"odds": "-110"}},
+                            "away": {"close": {"odds": "-110"}}},
+        }
+
+    def _favourites(self, odds: dict) -> tuple[bool, bool]:
+        """(spread says home is favoured, moneyline says home is favoured)."""
+        module = _module()
+        quotes = module._quotes_from_odds(odds, home="ARI", away="CAR")
+        by = {(q["market"], q["selection"]): q for q in quotes}
+        home_line = by[("SPREAD", "HOME")]["line"]
+        home_ml = by[("MONEYLINE", "HOME")]["american"]
+        away_ml = by[("MONEYLINE", "AWAY")]["american"]
+        return home_line < 0, home_ml < away_ml
+
+    def test_a_home_favourite_agrees_across_both_markets(self) -> None:
+        # The real DAL @ SEA numbers: SEA -3.5, SEA -180 / DAL +150.
+        by_spread, by_ml = self._favourites(
+            self._odds(home_favourite=True, spread=3.5, home_ml=-180, away_ml=150)
+        )
+        assert by_spread is True and by_ml is True
+
+    def test_an_away_favourite_agrees_across_both_markets(self) -> None:
+        # The real DEN @ ATL numbers: ATL +5.5, ATL +205 / DEN -250.
+        by_spread, by_ml = self._favourites(
+            self._odds(home_favourite=False, spread=5.5, home_ml=205, away_ml=-250)
+        )
+        assert by_spread is False and by_ml is False
+
+    @pytest.mark.parametrize("home_favourite", [True, False])
+    def test_they_never_disagree(self, home_favourite: bool) -> None:
+        """The invariant itself. An inverted spread sign shows up here as a
+        disagreement even though each number alone looks fine."""
+        home_ml, away_ml = (-160, 135) if home_favourite else (135, -160)
+        by_spread, by_ml = self._favourites(
+            self._odds(home_favourite=home_favourite, spread=3.0,
+                       home_ml=home_ml, away_ml=away_ml)
+        )
+        assert by_spread == by_ml
