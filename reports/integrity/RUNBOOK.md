@@ -201,6 +201,30 @@ later mistakes a rehearsal for forward-test evidence.
 reconciliation first, which is what turns an interrupted previous run into
 a recorded, explainable gap rather than a silent one.
 
+**It has never actually run here.** `scheduled_job_runs` is empty and
+`scheduler_running` has been CRITICAL since the check existed, because the
+scheduler refuses outside the policy window and that window opens on
+2026-09-01. So the first real run is also the first test of a long run,
+on the day it starts mattering.
+
+`tests/test_scheduler_long_run.py` covers what that day would otherwise
+discover: two hundred consecutive slots, one tick each, asserting the
+properties that hold at three slots whether or not the code is right and
+stop holding at two hundred if it is not — run rows growing linearly with
+slots rather than faster, a full replay of the history adding nothing,
+idempotency keys staying inside `VARCHAR(160)` and never colliding, the
+retry chain per failing slot staying bounded, and no CRITICAL lineage
+violation across fifty consecutively failing slots.
+
+It also pins the credit accounting at length, which is where this codebase
+has already been bitten once: `credits_used_since` SUMS `calls_used`, so a
+cumulative counter written into that column reports 1+2+…+n instead of n.
+At two hundred polls that is 20,100 against 200.
+
+What the test cannot cover is a process staying up for six months. That is
+an operational question — a service, a supervisor, or a person watching
+`scheduler_heartbeat`, which goes DEGRADED after two hours of silence.
+
 ### Going live at Week 1
 
 Set the key either way. Never pass it to this tooling as an argument, and
