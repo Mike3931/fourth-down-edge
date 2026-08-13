@@ -10,7 +10,17 @@ log still existing.
 Reproducible by construction: it runs both chains in separate in-memory
 databases, extracts semantic content, and hashes the result. Nothing in the
 artifact is a random database id, so regenerating it on another machine
-produces the same file.
+produces the same PARITY RESULT — the two chain hashes, the difference
+counts, the decision codes and the record counts.
+
+Not the same FILE, which is a weaker claim than the one this used to make.
+Three fields legitimately move with the run rather than with the result:
+`generated_at_utc`, `source_commit`, and `artifact_sha256`, which is
+derived from the body. `content_hash` excludes the timestamp but includes
+the commit, so the fingerprint changes whenever the repository does, even
+when parity is untouched. That is a defensible record of "this evidence
+came from that code" and a poor answer to "did the substance change" —
+compare `direct_hash` and `scheduler_hash` for the latter.
 
 Run:  python scripts/write_parity_evidence.py
 """
