@@ -230,3 +230,31 @@ class TestItDoesNotCloseTheGate:
     def test_it_states_that_it_is_not_a_blocker(self, session: Session) -> None:
         _quote(session, NOW + timedelta(days=30))
         assert _find(session)["remediation"]
+
+
+class TestTheCheckReportsTheCohortItWasAskedAbout:
+    """Scoped to `data_mode`, like every freshness check beside it.
+
+    It scanned every row regardless of cohort, which made it report DEMO
+    fixture rows inside a LIVE_RESEARCH health report — and meant
+    quarantining a fixture row into DEMO, the isolation every live query
+    already applies, did not clear the check it was raised for.
+    """
+
+    def test_a_demo_row_is_not_reported_in_a_live_research_report(
+        self, session: Session
+    ) -> None:
+        session.add(OddsQuote(
+            data_mode="DEMO", canonical_game_id="2026_01_SF_LA",
+            provider="the-odds-api", provider_mode="UNKNOWN_LEGACY",
+            sportsbook="draftkings", market="SPREAD", selection="HOME",
+            line=-2.5, american=-110, decimal_odds=1.909, is_live=False,
+            observed_at=NOW + timedelta(days=30), raw_hash="quarantined",
+        ))
+        session.commit()
+        assert _find(session)["status"] == Status.OK.value
+
+    def test_a_live_research_row_still_is(self, session: Session) -> None:
+        """The guard: scoping must not have turned the check off."""
+        _quote(session, NOW + timedelta(days=30))
+        assert _find(session)["status"] != Status.OK.value

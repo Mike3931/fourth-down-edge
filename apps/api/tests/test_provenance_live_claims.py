@@ -114,3 +114,76 @@ class TestTheRegistryIsExplicit:
     )
     def test_can_be_live(self, provider, mode, expected) -> None:
         assert _can_be_live(provider, mode) is expected
+
+
+class TestProvenanceIsCountedInTheCohortBeingReported:
+    """The counts ignored `data_mode` and the messages did not.
+
+    `provenance_non_live_in_live_research` names the cohort in its own id
+    and said "live-research mode contains 60 record(s)" while counting
+    every cohort in the database. After 27 fixture rows were quarantined
+    into DEMO — the isolation every live-research query already applies —
+    LIVE_RESEARCH held 33 and the check still said 60.
+
+    A count that does not match the sentence around it is the kind of thing
+    a reader trusts and cannot check.
+    """
+
+    @staticmethod
+    def _checks(session, mode):
+        from fde_api.forward.health import run_health_checks
+
+        return {c["id"]: c for c in run_health_checks(session, data_mode=mode)["checks"]}
+
+    def test_a_quarantined_row_leaves_the_live_research_count(self, session) -> None:
+        from fde_api.db.forward_models import OddsQuote
+        from fde_api.forward.modes import DataMode
+
+        for i, mode in enumerate(["LIVE_RESEARCH", "LIVE_RESEARCH", "DEMO"]):
+            session.add(OddsQuote(
+                data_mode=mode, canonical_game_id="G", provider="the-odds-api",
+                provider_mode="UNKNOWN_LEGACY", sportsbook="draftkings",
+                market="SPREAD", selection="HOME", line=-3.0, american=-110,
+                decimal_odds=1.909, is_live=False,
+                observed_at=NOW - timedelta(hours=1), raw_hash=f"h{i}",
+            ))
+        session.commit()
+
+        check = self._checks(session, DataMode.LIVE_RESEARCH)["provenance_unrecorded"]
+        assert check["detail"]["count"] == 2, check["explanation"]
+
+    def test_the_live_research_message_counts_live_research(self, session) -> None:
+        from fde_api.db.forward_models import OddsQuote
+        from fde_api.forward.modes import DataMode
+
+        for i, mode in enumerate(["LIVE_RESEARCH", "DEMO", "DEMO"]):
+            session.add(OddsQuote(
+                data_mode=mode, canonical_game_id="G", provider="the-odds-api",
+                provider_mode="UNKNOWN_LEGACY", sportsbook="draftkings",
+                market="TOTAL", selection="OVER", line=44.5, american=-110,
+                decimal_odds=1.909, is_live=False,
+                observed_at=NOW - timedelta(hours=1), raw_hash=f"t{i}",
+            ))
+        session.commit()
+
+        check = self._checks(session, DataMode.LIVE_RESEARCH)[
+            "provenance_non_live_in_live_research"]
+        assert "1 record(s)" in check["explanation"], check["explanation"]
+
+    def test_a_cohort_with_nothing_unrecorded_passes(self, session) -> None:
+        """Quarantining everything must actually clear the check, which is
+        the whole point of having a cohort to quarantine into."""
+        from fde_api.db.forward_models import OddsQuote
+        from fde_api.forward.health import Status
+        from fde_api.forward.modes import DataMode
+
+        session.add(OddsQuote(
+            data_mode="DEMO", canonical_game_id="G", provider="the-odds-api",
+            provider_mode="UNKNOWN_LEGACY", sportsbook="draftkings",
+            market="SPREAD", selection="AWAY", line=3.0, american=-110,
+            decimal_odds=1.909, is_live=False,
+            observed_at=NOW - timedelta(hours=1), raw_hash="quarantined-only",
+        ))
+        session.commit()
+        checks = self._checks(session, DataMode.LIVE_RESEARCH)
+        assert checks["provenance_unrecorded"]["status"] == Status.OK.value

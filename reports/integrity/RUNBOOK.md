@@ -33,6 +33,47 @@ python apps/api/scripts/operational_readiness.py --at 2026-09-10T00:20:00Z
 
 ---
 
+## What "ready to pilot" means here, and where it stands
+
+A pilot is the forward test running for real: capture on a cadence,
+evaluation into a frozen cohort, and a record afterwards that can be
+audited. Four things have to be true, and only one of them is still open.
+
+| | state |
+|---|---|
+| **1. The slate is ingested and every game resolves to a governed venue** | **done** — 286 games, `unmapped_venues` OK |
+| **2. Every non-market input captures** | **done** — schedule, weather (11 NWS vintages), result ingestion all exercised against real data |
+| **3. A policy is frozen, hashed, and pins every version it applies** | **done** — `ftp-2026-v2`, calibration `cal_none_val2024` pinned, window opens 2026-09-01 |
+| **4. Market data supports a consensus** | **BLOCKED — needs `FDE_ODDS_API_KEY`** |
+
+Point 4 is not work. ESPN gives one book, a consensus needs three, so
+every market reads DATA INCOMPLETE and **no research candidate can be
+produced at all**. That is the consensus layer refusing to invent
+agreement among books it never consulted, and no amount of engineering
+changes it. A multi-book provider is a purchase.
+
+Everything else that is red today clears by doing the thing, not by
+fixing anything:
+
+* `scheduler_running` — clears on the first run, which cannot happen
+  before 2026-09-01 because the scheduler refuses outside the policy
+  window. Its long-run behaviour is covered by
+  `tests/test_scheduler_long_run.py` in the meantime.
+* `odds_key_configured`, `odds_freshness`, `consensus_availability` —
+  all four wait on the key.
+* `provider_quota` — reads `UNKNOWN_PLAN` until one real provider
+  response records the plan from its own headers.
+* `prediction_vintage_coverage` — clears once the scheduler runs
+  `prediction_vintage`.
+* `injury_freshness` — no injury source is wired; entries are manual.
+* `provenance_unrecorded` / `provenance_non_live_in_live_research` — 33
+  historical rows that predate provenance capture, in `LIVE_RESEARCH`.
+  Excluding or re-capturing them is a decision, not a defect.
+
+**Nothing in a suppressing scope is failing, today or projected to Week 1.**
+So the gate is open and the engine evaluates; what it finds is DATA
+INCOMPLETE, for the reason above.
+
 ## Where things actually stand
 
 | | now (2026-08-12) | Week 1 (2026-09-10) |

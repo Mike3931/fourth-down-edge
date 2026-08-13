@@ -437,6 +437,32 @@ which starts a separate evaluation cohort. The current cohort holds four
 rows and nothing settled, so the cost of doing so is zero today and will
 not stay that way once capture starts. Worth deciding before 2026-09-01.
 
+**DECIDED 2026-08-13: `ftp-2026-v2` is frozen with
+`calibration_version: cal_none_val2024`.** Hash `5f988ec15da9`, same window
+(2026-09-01 to 2027-02-28), same model `market-residual-v1`, same a priori
+edge threshold of 0.05. Nothing else changes: the identity calibration was
+already what `null` meant, so this fixes traceability and not behaviour.
+
+Taken now because the cost was zero and would not have stayed so. The
+`ftp-2026-v1` cohort held four rows — three DATA_INCOMPLETE and one PASS,
+nothing settled, no research candidate — so no evidence was abandoned by
+starting a second cohort. After 2026-09-01 the window is open and every
+row written into it would have had to be reasoned about.
+
+`ftp-2026-v1` is not deleted and cannot be: it is immutable and its
+four rows stay readable in their own cohort.
+
+**Both policies now claim 2026-09-01 to 2027-02-28**, which is inherent to
+superseding a frozen record rather than a mistake. `active_policy`
+resolves it by `created_at DESC` — the most recently frozen policy
+covering the date wins, which is right because a later policy is the later
+decision. It resolved it SILENTLY, though: Data Health reported
+"ftp-2026-v2 in force" and gave the reader no way to know a second frozen
+policy claimed the same games or that recency was what settled it. The
+check now names the superseded version and the rule, and stays OK, because
+superseding is the documented way to change a rule and reporting it is not
+alarming. Pinned by `tests/test_overlapping_policy_windows.py`.
+
 **The forward test uses an a priori threshold, and should keep doing so.**
 `build_policy_draft` fixes the research-candidate edge threshold at 0.05,
 and its docstring says why: the 2024/2025 seasons are burned, so tuning

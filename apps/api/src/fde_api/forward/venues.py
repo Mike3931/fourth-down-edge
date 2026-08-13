@@ -97,6 +97,18 @@ NEUTRAL_VENUES: tuple[VenueSpec, ...] = (
     VenueSpec("INT_STADE_FRANCE", "Stade de France", 48.9245, 2.3601, "Europe/Paris", "OUTDOOR", "grass", 100, "FR"),
     VenueSpec("INT_MCG", "Melbourne Cricket Ground", -37.8200, 144.9834, "Australia/Melbourne", "OUTDOOR", "grass", 100, "AU"),
     VenueSpec("INT_CROKE", "Croke Park", 53.3607, -6.2512, "Europe/Dublin", "OUTDOOR", "grass", 60, "IE"),
+    # Canton, Ohio. Not overseas, and not any club's home — the Hall of Fame
+    # game is played here every August and the governed table did not have
+    # it at all, so the first real fixture of the 2026 season resolved to
+    # nothing. `INTERNATIONAL_COUNTRIES` subtracts US, so listing a US
+    # neutral site here does not make it an international game.
+    #
+    # UNVERIFIED: the coordinates and elevation are from general knowledge
+    # rather than the governed source the others came from. That is what
+    # the flag is for, and Data Health reports it rather than the record
+    # implying a provenance it does not have.
+    VenueSpec("US_CANTON", "Tom Benson Hall of Fame Stadium", 40.8199, -81.4046,
+              "America/New_York", "OUTDOOR", "turf", 1060, "US", verified=False),
 )
 
 
@@ -107,6 +119,55 @@ def _normalize_name(name: str) -> str:
 NEUTRAL_BY_NAME = {_normalize_name(v.name): v for v in NEUTRAL_VENUES}
 
 VENUES_BY_ID = {v.id: v for v in (*VENUES, *NEUTRAL_VENUES)}
+
+# Provider name variance. ESPN writes the sponsor name with a trailing
+# "Stadium" that the governed table omits; that is not a different
+# building. Kept as an explicit table rather than fuzzy matching, because a
+# near-miss that resolves is worse than one that refuses: it forecasts the
+# wrong stadium's weather for a game and nothing downstream can tell.
+PROVIDER_NAME_ALIASES: dict[str, str] = {
+    "geha field at arrowhead stadium": "geha field at arrowhead",
+}
+
+
+def resolve_by_name(
+    name: str | None, *, registry: tuple[VenueSpec, ...] | None = None
+) -> VenueSpec | None:
+    """A venue by name, or None when the name cannot decide it.
+
+    Needed because not every provider supplies a stadium id. nflverse does;
+    ESPN gives `venue.fullName` and nothing else, so every domestic ESPN
+    game resolved to None — which stopped `weather_capture` before it
+    reached the NWS at all, since it needs a Venue for the coordinates.
+
+    NAME IS NOT A KEY. `LAX01` and `LAX97` are both "SoFi Stadium", being
+    the Rams' and the Chargers' nflverse ids for one building. A collision
+    therefore resolves only when the colliding specs agree on everything
+    resolution is used for — coordinates, timezone, roof, surface,
+    elevation, country. When they agree the choice is nominal and the
+    lowest id is taken so the answer is stable. When they disagree this
+    returns None and the game is reported unresolved, because picking one
+    would forecast one stadium's weather for a game played at another.
+    """
+    key = _normalize_name(name or "")
+    if not key:
+        return None
+    key = PROVIDER_NAME_ALIASES.get(key, key)
+    matches = [
+        v for v in (registry if registry is not None else (*VENUES, *NEUTRAL_VENUES))
+        if _normalize_name(v.name) == key
+    ]
+    if not matches:
+        return None
+    if len(matches) == 1:
+        return matches[0]
+
+    def substance(v: VenueSpec) -> tuple:
+        return (v.lat, v.lon, v.tz, v.roof_type, v.surface, v.elevation_ft, v.country)
+
+    if len({substance(v) for v in matches}) > 1:
+        return None
+    return min(matches, key=lambda v: v.id)
 
 US_COUNTRIES = {"US"}
 INTERNATIONAL_COUNTRIES = {v.country for v in NEUTRAL_VENUES} - US_COUNTRIES
@@ -176,7 +237,14 @@ def resolve_venue(*, stadium_id: str | None, stadium_name: str | None, neutral_s
         # Declared neutral but the venue is unknown: refuse to fall back to
         # the home club's stadium, which would be actively misleading.
         return None
-    return VENUES_BY_ID.get(stadium_id or "")
+    by_id = VENUES_BY_ID.get(stadium_id or "")
+    if by_id is not None:
+        return by_id
+    # Last: the domestic name. Only reached when no id was supplied, so it
+    # can never override one that was — nflverse's id stays authoritative
+    # and every existing caller is unaffected. This exists for ESPN, which
+    # gives a name and no id, and left fourteen games unresolved.
+    return resolve_by_name(stadium_name)
 
 
 def is_international(venue: VenueSpec | None) -> bool:

@@ -130,12 +130,30 @@ class TestArtifactHygiene:
         strays = sorted(p.name for p in repo_policies.glob("*test*.json")) if repo_policies.exists() else []
         assert strays == [], f"test artifacts leaked into the repository: {strays}"
 
-    def test_only_the_governing_policy_is_committed(self) -> None:
+    def test_only_frozen_policies_are_committed(self) -> None:
+        """Exactly the frozen policies, and a SUPERSEDED one still counts.
+
+        `ftp-2026-v2` pins `calibration_version: cal_none_val2024`, which
+        `ftp-2026-v1` left null. Pinning it was not an edit — `freeze_policy`
+        refuses to alter a frozen record — so it took a new version, and both
+        now claim 2026-09-01 to 2027-02-28 with `active_policy` resolving to
+        the most recently frozen.
+
+        `ftp-2026-v1`'s artifact stays. Four ledger rows were written under
+        it, and deleting the record of the rules they were written under
+        would leave those rows ungoverned. Superseded is not obsolete.
+
+        Still a hygiene assertion: an exact list, so an accidentally
+        committed artifact fails here rather than shipping.
+        """
         repo_policies = pathlib.Path(__file__).resolve().parents[1] / "data" / "policies"
         if not repo_policies.exists():
             pytest.skip("no policy directory in this checkout")
         names = sorted(p.name for p in repo_policies.glob("*.json"))
-        assert names == ["ftp-2026-v1_2128907c078d.json"], names
+        assert names == [
+            "ftp-2026-v1_2128907c078d.json",
+            "ftp-2026-v2_5f988ec15da9.json",
+        ], names
 
     def test_fixture_writes_go_to_tmp(self, psession: Session, tmp_path) -> None:
         from fde_api.config import settings
@@ -143,8 +161,18 @@ class TestArtifactHygiene:
         assert pathlib.Path(settings.data_dir) == tmp_path
 
 
+# The superseding 2026 policy, which pins `calibration_version:
+# cal_none_val2024`. Pinned for the same reason as the one above.
+SUPERSEDING_HASH = "5f988ec15da91713d28e85d3bd8eff5e3a2835d2e46706dc1e3650fecf778b86"
+
+
 class TestGoverningPolicyHashPreserved:
-    """The live policy must keep the hash the forward test is governed by."""
+    """Every frozen policy must keep its hash, superseded ones included.
+
+    A superseded policy is still the immutable record of the rules some
+    rows were written under, so its hash drifting is exactly as bad as the
+    governing one drifting.
+    """
 
     def test_live_policy_hash_unchanged(self) -> None:
         from fde_api.config import settings
@@ -158,3 +186,23 @@ class TestGoverningPolicyHashPreserved:
 
         payload = json.loads(artifact.read_text(encoding="utf-8"))
         assert ForwardTestPolicy.model_validate(payload).policy_hash() == GOVERNING_HASH
+
+    def test_superseding_policy_hash_unchanged(self) -> None:
+        """`ftp-2026-v2` is what `active_policy` returns inside the window,
+        so its hash drifting would move the rules the forward test is
+        actually governed by."""
+        import json
+
+        from fde_api.config import settings
+        from fde_api.forward.policy import ForwardTestPolicy
+
+        artifact = (pathlib.Path(settings.data_dir) / "policies"
+                    / "ftp-2026-v2_5f988ec15da9.json")
+        if not artifact.exists():
+            pytest.skip("superseding policy artifact not present in this environment")
+        payload = json.loads(artifact.read_text(encoding="utf-8"))
+        policy = ForwardTestPolicy.model_validate(payload)
+        assert policy.policy_hash() == SUPERSEDING_HASH
+        assert policy.calibration_version == "cal_none_val2024", (
+            "the whole reason this version exists"
+        )

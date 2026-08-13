@@ -32,7 +32,7 @@ about it. A check that cannot answer those questions is not a check.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
@@ -317,13 +317,23 @@ def _provenance_checks(
     """
     checks: list[HealthCheck] = []
 
+    # Scoped to the cohort being reported, like the freshness checks.
+    #
+    # These counted every cohort while the messages named one. After 27
+    # fixture rows were quarantined into DEMO — the isolation every
+    # live-research query already applies — LIVE_RESEARCH held 33 and
+    # `provenance_non_live_in_live_research` still said "live-research mode
+    # contains 60 record(s)". Quarantining could not clear the check it was
+    # raised for, which makes the cohort useless as a remedy.
     combined: dict[str, int] = {}
     for column, model in (
         (OddsQuote.provider_mode, OddsQuote),
         (ConsensusSnapshot.provider_mode, ConsensusSnapshot),
     ):
         rows = session.execute(
-            select(column, func.count(model.id)).group_by(column)
+            select(column, func.count(model.id))
+            .where(model.data_mode == data_mode.value)
+            .group_by(column)
         ).all()
         for mode, count in rows:
             combined[mode] = combined.get(mode, 0) + count
@@ -339,7 +349,8 @@ def _provenance_checks(
         str(provider): int(count)
         for provider, count in session.execute(
             select(OddsQuote.provider, func.count(OddsQuote.id))
-            .where(OddsQuote.provider_mode == ProviderMode.LIVE.value)
+            .where(OddsQuote.provider_mode == ProviderMode.LIVE.value,
+                   OddsQuote.data_mode == data_mode.value)
             .group_by(OddsQuote.provider)
         ).all()
     }
@@ -447,7 +458,9 @@ def _newest_observation(
     return session.scalar(select(func.max(column)).where(where, column <= now))
 
 
-def _future_observation_check(session: Session, *, now: datetime) -> HealthCheck:
+def _future_observation_check(
+    session: Session, *, now: datetime, data_mode: DataMode
+) -> HealthCheck:
     """Does any stored observation claim to have happened after now?
 
     The point-in-time guards enforce `observed_at <= as_of_at` against a
@@ -474,7 +487,7 @@ def _future_observation_check(session: Session, *, now: datetime) -> HealthCheck
     for label, model in _OBSERVED_AT_TABLES:
         rows = session.execute(
             select(model.canonical_game_id, model.observed_at)
-            .where(model.observed_at > now)
+            .where(model.observed_at > now, model.data_mode == data_mode.value)
             .order_by(model.observed_at.desc())
             .limit(200)
         ).all()
@@ -510,6 +523,14 @@ def _future_observation_check(session: Session, *, now: datetime) -> HealthCheck
             "furthest_ahead": furthest.isoformat() if furthest else None,
         },
     )
+
+
+def _policy_covers(session: Session, policy_version: str, on: date) -> bool:
+    """Whether a frozen policy's window contains a date."""
+    from fde_api.db.forward_models import ForwardTestPolicyRecord
+
+    rec = session.get(ForwardTestPolicyRecord, policy_version)
+    return bool(rec and rec.start_date <= on.isoformat() <= rec.end_date)
 
 
 def _policy_window(session: Session, policy_version: str) -> str:
@@ -833,9 +854,32 @@ def run_health_checks(
                           f"{len(results)} policy artifact(s) verified; none in force today: "
                           f"{windows}", now))
     else:
+        # Name the policies that ALSO claim this date.
+        #
+        # Pinning a rule onto a frozen policy is impossible by design, so a
+        # change takes a new version — and the new version carries the same
+        # window as the one it replaces. `active_policy` resolves that by
+        # `created_at DESC`, which is the right rule: a later policy is the
+        # later decision. But reporting only the winner presented a
+        # resolved ambiguity as though there had never been one, and a
+        # reader could not tell that a second frozen policy claimed the
+        # same games.
+        others = [
+            r["policy_version"] for r in results
+            if r["policy_version"] != in_force.policy_version
+            and _policy_covers(session, r["policy_version"], now.date())
+        ]
+        detail = (
+            f"{in_force.policy_version} in force"
+            if not others
+            else (f"{in_force.policy_version} in force, superseding "
+                  f"{', '.join(sorted(others))} on the same window "
+                  "(most recently frozen wins)")
+        )
         checks.append(_ok("policy_hash_integrity", Severity.CRITICAL,
-                          f"{len(results)} policy artifact(s) verified; "
-                          f"{in_force.policy_version} in force", now))
+                          f"{len(results)} policy artifact(s) verified; {detail}",
+                          now, detail={"in_force": in_force.policy_version,
+                                       "superseded_on_this_date": sorted(others)}))
 
     from fde_api.db.models import ModelVersion
 
@@ -876,7 +920,7 @@ def run_health_checks(
     checks.extend(_provenance_checks(
         session, provider_mode=provider_mode, data_mode=data_mode, now=now
     ))
-    checks.append(_future_observation_check(session, now=now))
+    checks.append(_future_observation_check(session, now=now, data_mode=data_mode))
 
     bad_origin = detect_invalid_origin(session)
     checks.append(
