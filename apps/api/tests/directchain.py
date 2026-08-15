@@ -169,7 +169,7 @@ def run_direct_chain(
             for cutoff in m.consensus_cutoffs:
                 build_consensus(s, canonical_game_id=GAME, market=market,
                                 as_of_at=cutoff, kickoff_utc=m.kickoff_utc,
-                                data_mode=MODE)
+                                cohort=COHORT, data_mode=MODE)
         s.flush()
         log.record("consensus_snapshot", list(m.consensus_cutoffs))
 
@@ -183,7 +183,7 @@ def run_direct_chain(
         ):
             assessments.append(assess_player(
                 s, canonical_game_id=GAME, team_id=o.team_id, player_id=o.player_id,
-                as_of_at=m.availability_cutoff, data_mode=MODE,
+                as_of_at=m.availability_cutoff, cohort=COHORT, data_mode=MODE,
             ))
         s.flush()
         log.record("availability_assessment", assessments)
@@ -196,7 +196,7 @@ def run_direct_chain(
         for horizon in m.prediction_horizons:
             pred, _inputs = generate_vintage(
                 s, game=game, horizon=horizon, policy=policy, moments=m.moments,
-                data_mode=MODE, now=m.prediction_slot,
+                cohort=COHORT, data_mode=MODE, now=m.prediction_slot,
                 expected_home_qb=m.home_qb_id, expected_away_qb=m.away_qb_id,
             )
             if pred is not None:
@@ -261,7 +261,7 @@ def run_direct_chain(
                         s, prediction=latest, canonical_game_id=GAME,
                         evaluation=evaluation, policy=policy, horizon=latest.horizon,
                         as_of_at=m.price_evaluation_slot,
-                        data_completeness=latest.data_completeness, data_mode=MODE,
+                        data_completeness=latest.data_completeness, cohort=COHORT, data_mode=MODE,
                     ))
         s.flush()
         log.record("research_evaluation", entries)

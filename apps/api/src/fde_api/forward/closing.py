@@ -68,6 +68,7 @@ def select_closing_snapshot(
     market: str,
     kickoff_utc: datetime,
     max_age_before_kickoff_minutes: int,
+    cohort: Cohort,
     data_mode: DataMode,
 ) -> ConsensusSnapshot | None:
     """The snapshot the rule selects: last eligible at or before kickoff.
@@ -82,6 +83,10 @@ def select_closing_snapshot(
             ConsensusSnapshot.canonical_game_id == canonical_game_id,
             ConsensusSnapshot.market == market,
             ConsensusSnapshot.data_mode == data_mode.value,
+            # `capture_close` already knew the cohort; the selector did
+            # not, so a burn-in snapshot was eligible to become an
+            # official close.
+            ConsensusSnapshot.cohort == cohort.value,
             ConsensusSnapshot.observed_at <= kickoff_utc,
             ConsensusSnapshot.observed_at >= window_start,
         )
@@ -166,6 +171,7 @@ def capture_close(
         market=market,
         kickoff_utc=kickoff_utc,
         max_age_before_kickoff_minutes=max_age_before_kickoff_minutes,
+        cohort=cohort,
         data_mode=data_mode,
     )
     prior = authoritative_capture(

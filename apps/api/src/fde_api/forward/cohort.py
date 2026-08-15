@@ -33,6 +33,22 @@ class Cohort(StrEnum):
     OFFICIAL_FORWARD_TEST = "official_forward_test"
 
 
+# Rows written before their table had a cohort column. Deliberately NOT a
+# `Cohort` member: the enum says what new code may write, and this is a
+# state new code must never produce. It exists so a backfill can be honest
+# rather than guess `burn_in` and manufacture a provenance the rows do not
+# have — the same reasoning as ProviderMode.UNKNOWN_LEGACY below.
+LEGACY_COHORT = "unknown_legacy"
+
+# What a cohort column may contain: the four cohorts plus the legacy
+# marker. Wider than `Cohort` on purpose — history contains a value the
+# write path forbids.
+COHORT_COLUMN_VOCABULARY: tuple[str, ...] = (
+    *(c.value for c in Cohort),
+    LEGACY_COHORT,
+)
+
+
 class ProviderMode(StrEnum):
     """How a provider-sourced record was obtained."""
 

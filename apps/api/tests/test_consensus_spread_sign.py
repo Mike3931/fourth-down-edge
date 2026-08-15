@@ -27,6 +27,7 @@ from sqlalchemy.orm import sessionmaker
 
 from fde_api.db.forward_models import OddsQuote, ScheduleObservation
 from fde_api.db.models import Base
+from fde_api.forward.cohort import Cohort
 from fde_api.forward.consensus import build_consensus
 from fde_api.forward.modes import DataMode
 
@@ -67,7 +68,7 @@ def _seed(session, per_book: list[tuple[str, float]], price: int = -110) -> None
 def _consensus(session):
     snap, _ = build_consensus(
         session, canonical_game_id=GAME, market="SPREAD", as_of_at=NOW,
-        kickoff_utc=KICK, data_mode=DataMode.LIVE_RESEARCH)
+        kickoff_utc=KICK, cohort=Cohort.BURN_IN, data_mode=DataMode.LIVE_RESEARCH)
     return snap
 
 
@@ -168,7 +169,7 @@ class TestTheTotalIsAlsoOneLinePerBook:
     def _total(self, session):
         snap, _ = build_consensus(
             session, canonical_game_id=GAME, market="TOTAL", as_of_at=NOW,
-            kickoff_utc=KICK, data_mode=DataMode.LIVE_RESEARCH)
+            kickoff_utc=KICK, cohort=Cohort.BURN_IN, data_mode=DataMode.LIVE_RESEARCH)
         return snap
 
     def test_evenly_published_totals_are_unchanged(self, session) -> None:

@@ -263,7 +263,7 @@ class TestChainReconciliation:
             assert rows, "no ledger rows to conflict"
             target = rows[0]
             clone = ForwardLedgerEntry(
-                data_mode=target.data_mode, canonical_game_id=target.canonical_game_id,
+                data_mode=target.data_mode, cohort="burn_in", canonical_game_id=target.canonical_game_id,
                 policy_version=target.policy_version, model_version=target.model_version,
                 horizon=target.horizon, market=target.market, selection=target.selection,
                 status=target.status, reasons=target.reasons,

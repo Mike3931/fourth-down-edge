@@ -21,6 +21,7 @@ from collections.abc import Iterator
 from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
 
 if TYPE_CHECKING:
+    from fde_api.forward.cohort import Cohort
     from fde_api.forward.consensus import EligibilityReport
     from fde_api.forward.modes import DataMode
 
@@ -434,7 +435,34 @@ def get_model_comparison(s: Db) -> schemas.ModelComparisonResponse:
 # rendering an empty slot as a number is how a screen starts lying.
 
 
-def _no_consensus_reasons(eligible_books: int, report: EligibilityReport) -> list[str]:
+def _running_cohort(s: Session, *, data_mode: DataMode) -> Cohort | None:
+    """Which cohort this data mode is currently being captured into.
+
+    The API has no configured cohort — it is a scheduler argument — so it
+    is read from the newest snapshot the scheduler actually wrote. When
+    nothing has been captured there is genuinely no answer, and None says
+    so rather than guessing a default.
+    """
+    from fde_api.db.forward_models import ConsensusSnapshot
+    from fde_api.forward.cohort import Cohort
+
+    row = s.scalars(
+        select(ConsensusSnapshot)
+        .where(ConsensusSnapshot.data_mode == data_mode.value)
+        .order_by(ConsensusSnapshot.observed_at.desc(), ConsensusSnapshot.id.desc())
+        .limit(1)
+    ).first()
+    if row is None:
+        return None
+    try:
+        return Cohort(row.cohort)
+    except ValueError:  # `unknown_legacy`: recorded, but not a cohort
+        return None
+
+
+def _no_consensus_reasons(
+    eligible_books: int, report: EligibilityReport, *, cohort: Cohort | None = None
+) -> list[str]:
     """Why no consensus exists, said so a person can act on it.
 
     The screen showed "0 eligible book(s), minimum is 3" directly above a
@@ -448,10 +476,25 @@ def _no_consensus_reasons(eligible_books: int, report: EligibilityReport) -> lis
     that were already there, and it never implies a consensus that does
     not exist: the first line still states the binding constraint.
     """
-    reasons = [
-        f"no consensus captured yet; {eligible_books} eligible "
-        f"book(s) in the current window, minimum is 3"
-    ]
+    # The minimum is the COHORT'S, not a constant. Burn-in admits one
+    # book, so a hardcoded "minimum is 3" would have the screen refusing
+    # a market the engine would have built - the same shape of defect as
+    # the two disagreeing health gates, one layer further out. When the
+    # cohort is unknown the sentence omits the number rather than
+    # asserting one.
+    from fde_api.forward.consensus import book_minimum
+
+    if cohort is None:
+        reasons = [
+            f"no consensus captured yet; {eligible_books} eligible "
+            f"book(s) in the current window"
+        ]
+    else:
+        reasons = [
+            f"no consensus captured yet; {eligible_books} eligible "
+            f"book(s) in the current window, minimum is "
+            f"{book_minimum(cohort)} for cohort {cohort.value}"
+        ]
     if report.considered == 0:
         reasons.append("no quotes have been captured for this market at all")
         return reasons
@@ -556,6 +599,10 @@ def get_forward_live(
             for obs in observations if obs.game_status == "FINAL"
         }
 
+        # Once for the slate, not once per market: it is a property of
+        # what the scheduler is running, not of any one game.
+        running_cohort = _running_cohort(s, data_mode=mode)
+
         games: list[dict[str, Any]] = []
         for gid, o in sorted(latest.items(), key=lambda kv: kv[1].kickoff_utc):
             quotes = list(
@@ -577,12 +624,21 @@ def get_forward_live(
                 # to whenever someone happened to have the tab open - and
                 # they would have entered the forward-test record as if
                 # they were captures.
+                snap_q = select(ConsensusSnapshot).where(
+                    ConsensusSnapshot.canonical_game_id == gid,
+                    ConsensusSnapshot.market == market,
+                    ConsensusSnapshot.data_mode == mode.value,
+                )
+                # Scoped to the cohort the scheduler is running, so a
+                # burn-in snapshot cannot appear on a slate reporting the
+                # official cohort simply by being newer. When no cohort
+                # can be determined there is nothing to scope to and the
+                # read is left as it was.
+                if running_cohort is not None:
+                    snap_q = snap_q.where(
+                        ConsensusSnapshot.cohort == running_cohort.value)
                 snap = s.scalars(
-                    select(ConsensusSnapshot).where(
-                        ConsensusSnapshot.canonical_game_id == gid,
-                        ConsensusSnapshot.market == market,
-                        ConsensusSnapshot.data_mode == mode.value,
-                    ).order_by(ConsensusSnapshot.observed_at.desc()).limit(1)
+                    snap_q.order_by(ConsensusSnapshot.observed_at.desc()).limit(1)
                 ).first()
 
                 market_quotes = [q for q in quotes if q.market == market]
@@ -601,6 +657,12 @@ def get_forward_live(
                         "over_price_american": snap.over_price_american,
                         "under_price_american": snap.under_price_american,
                         "eligible_books": snap.eligible_books,
+                        # The rule as well as the count. Burn-in permits a
+                        # single book, and "1 book" on a screen reads as a
+                        # market consensus unless the page can say that one
+                        # book was what the cohort allowed.
+                        "min_books_applied": snap.min_books_applied,
+                        "cohort": snap.cohort,
                         "observed_at": snap.observed_at.isoformat(),
                         "method_version": snap.method_version,
                     },
@@ -609,7 +671,8 @@ def get_forward_live(
                     # constraint, not the count of quotes.
                     "reasons": (
                         [] if snap is not None
-                        else _no_consensus_reasons(len(books), report)
+                        else _no_consensus_reasons(
+                            len(books), report, cohort=running_cohort)
                     ),
                     "eligible_books_now": len(books),
                     "eligible": report.eligible,
@@ -875,17 +938,31 @@ def get_forward_candidates(
             "edge": edge,
             "expected_value": e.expected_value,
             "policy_version": e.policy_version, "model_version": e.model_version,
+            # Which experiment produced this candidate. `data_mode` cannot
+            # answer it: burn-in and the official forward test both write
+            # LIVE_RESEARCH, so without this a one-book burn-in candidate
+            # and an official one are indistinguishable on the screen.
+            "cohort": e.cohort,
             "as_of_at": e.as_of_at.isoformat() if e.as_of_at else None,
         })
 
     rows.sort(key=lambda r: (r["edge"] is None, -(r["edge"] or 0.0)))
+    shown = rows[:limit]
+    # Reported, never merged. `assert_single_cohort` exists because a
+    # metric spanning two experiments is not a metric, and a LIST spanning
+    # two is the same problem one step earlier - the reader draws the
+    # aggregate themselves. This does not filter: hiding rows would be its
+    # own kind of lie. It states that the list is mixed.
+    cohorts_present = sorted({r["cohort"] for r in shown})
     return {
         "generated_at_utc": now.isoformat(),
         "data_mode": mode.value,
         "horizon_hours": hours,
         "gate": _candidate_gate(s, mode),
         "count": len(rows),
-        "candidates": rows[:limit],
+        "cohorts_present": cohorts_present,
+        "mixed_cohorts": len(cohorts_present) > 1,
+        "candidates": shown,
         "research_banner": RESEARCH_BANNER,
         "not_a_claim": (
             "Research candidates recorded by the forward test. Not advice, not a "

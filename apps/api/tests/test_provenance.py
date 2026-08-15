@@ -18,6 +18,7 @@ from fde_api.db.forward_models import ConsensusSnapshot, OddsQuote, ScheduleObse
 from fde_api.db.models import Base
 from fde_api.forward.cohort import (
     CAPTURABLE_PROVIDER_MODES,
+    Cohort,
     CohortViolationError,
     ProviderMode,
     assert_capturable,
@@ -145,7 +146,7 @@ class TestConsensusInheritsProvenance:
         session.commit()
         build_all_consensus_for_game(
             session, canonical_game_id=GAME, kickoff_utc=KICK,
-            as_of_at=NOW + timedelta(minutes=1), data_mode=DataMode.LIVE_RESEARCH,
+            as_of_at=NOW + timedelta(minutes=1), cohort=Cohort.BURN_IN, data_mode=DataMode.LIVE_RESEARCH,
         )
         session.commit()
 
@@ -169,7 +170,7 @@ class TestConsensusInheritsProvenance:
         session.commit()
         build_all_consensus_for_game(
             session, canonical_game_id=GAME, kickoff_utc=KICK,
-            as_of_at=NOW + timedelta(minutes=1), data_mode=DataMode.LIVE_RESEARCH,
+            as_of_at=NOW + timedelta(minutes=1), cohort=Cohort.BURN_IN, data_mode=DataMode.LIVE_RESEARCH,
         )
         session.commit()
         modes = set(session.scalars(select(ConsensusSnapshot.provider_mode)))

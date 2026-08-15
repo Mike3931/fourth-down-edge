@@ -146,6 +146,13 @@ export interface CandidateRow {
   expected_value: number | null;
   policy_version: string;
   model_version: string;
+  /**
+   * Which experiment produced this candidate. Burn-in and the official
+   * forward test both write LIVE_RESEARCH, so `data_mode` cannot tell
+   * them apart — and a burn-in candidate may rest on a single book by
+   * design.
+   */
+  cohort: string;
   as_of_at: string | null;
 }
 
@@ -173,6 +180,14 @@ export interface ForwardCandidates {
   horizon_hours: number;
   gate: CandidateGate;
   count: number;
+  /** Distinct cohorts among the returned rows, sorted. */
+  cohorts_present: string[];
+  /**
+   * True when the list spans more than one experiment. Reported, never
+   * filtered: dropping rows to make the list look single-cohort would
+   * show fewer candidates than exist and say nothing about it.
+   */
+  mixed_cohorts: boolean;
   candidates: CandidateRow[];
   not_a_claim: string;
 }

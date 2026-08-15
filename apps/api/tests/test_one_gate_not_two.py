@@ -76,7 +76,7 @@ def _seed() -> None:
             content_hash="h1", observed_at=NOW - timedelta(days=1),
         ))
         s.add(ForwardLedgerEntry(
-            data_mode="LIVE_RESEARCH", canonical_game_id=GAME,
+            data_mode="LIVE_RESEARCH", cohort="burn_in", canonical_game_id=GAME,
             policy_version="ftp-2026-v1", model_version="market-residual-v1",
             horizon="PREGAME", market="SPREAD", selection="HOME",
             status="RESEARCH_CANDIDATE", qualifying_line=-3.0,

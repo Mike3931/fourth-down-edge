@@ -80,15 +80,20 @@ def _quote(db: Session, *, observed_at: datetime, mode: str = "LIVE_RESEARCH",
 
 
 def _snapshot(db: Session, *, observed_at: datetime, mode: str = "LIVE_RESEARCH",
-              market: str = "SPREAD") -> ConsensusSnapshot:
+              market: str = "SPREAD",
+              cohort: str = "burn_in") -> ConsensusSnapshot:
+    """The cohort is now a column of its own, and it is what the identity
+    hashes. The old helper passed `mode` into the `cohort` field, which is
+    exactly the defect `d8f41c6a3b92` removed."""
     c = ConsensusSnapshot(
-        data_mode=mode, canonical_game_id=GAME, market=market,
+        data_mode=mode, cohort=cohort, min_books_applied=3,
+        canonical_game_id=GAME, market=market,
         method_version=CONSENSUS_METHOD_VERSION, provider_mode="UNKNOWN_LEGACY",
         median_line=-2.5, eligible_books=3,
         quote_ids={"quote_ids": [], "books": []}, observed_at=observed_at,
         logical_identity_hash=CONSENSUS.logical_hash({
             "canonical_game_id": GAME, "market": market, "cutoff": observed_at,
-            "cohort": mode, "method_version": CONSENSUS_METHOD_VERSION,
+            "cohort": cohort, "method_version": CONSENSUS_METHOD_VERSION,
         }),
     )
     db.add(c)
@@ -124,27 +129,52 @@ class TestOnlyTheImpossibleRowsMove:
         assert {c["table"] for c in changes} == {"odds_quotes", "consensus_snapshots"}
 
 
-class TestTheConsensusIdentityIsRecomputed:
-    def test_the_new_hash_is_the_one_the_demo_cohort_implies(
-        self, db: Session
-    ) -> None:
-        """Not merely different — equal to what `build_consensus` would
-        have stored had it written the row into DEMO in the first place."""
+class TestTheConsensusIdentityIsNoLongerTouched:
+    """This class used to be `TestTheConsensusIdentityIsRecomputed`, and
+    it was right at the time.
+
+    While CONSENSUS was fed `data_mode.value` as its `cohort`, moving a
+    row from LIVE_RESEARCH to DEMO really did change its identity, and
+    leaving the old hash behind would have left a hash of fields the row
+    no longer had. Since `d8f41c6a3b92` the identity carries the row's
+    own `cohort` column, which this script does not move — so the hash
+    stays true and recomputing it would be the script inventing an
+    identity change that did not happen.
+    """
+
+    def test_the_plan_proposes_no_new_hash(self, db: Session) -> None:
         _snapshot(db, observed_at=FUTURE)
         changes, _ = ops.plan(db, now=NOW)
         snap = next(c for c in changes if c["table"] == "consensus_snapshots")
-        assert snap["new_logical_hash"] == CONSENSUS.logical_hash({
+        assert snap["new_logical_hash"] is None
+
+    def test_the_stored_hash_is_still_the_one_the_row_implies(
+        self, db: Session
+    ) -> None:
+        """The reason no recompute is needed: the identity is a function
+        of the cohort, and the cohort is not what moves."""
+        row = _snapshot(db, observed_at=FUTURE)
+        ops.plan(db, now=NOW)
+        assert row.logical_identity_hash == CONSENSUS.logical_hash({
             "canonical_game_id": GAME, "market": "SPREAD", "cutoff": FUTURE,
-            "cohort": "DEMO", "method_version": CONSENSUS_METHOD_VERSION,
+            "cohort": row.cohort, "method_version": CONSENSUS_METHOD_VERSION,
         })
 
-    def test_it_actually_differs_from_the_live_one(self, db: Session) -> None:
-        """If cohort were not in the logical identity this whole step would
-        be unnecessary, so the test says which of those worlds we are in."""
+    def test_the_data_mode_is_not_the_cohort(self, db: Session) -> None:
+        """The distinction the whole change rests on. A row in
+        LIVE_RESEARCH whose cohort is `burn_in` hashes to a different
+        slot than one whose cohort is `LIVE_RESEARCH` — which is what
+        this identity used to be given."""
         row = _snapshot(db, observed_at=FUTURE)
-        changes, _ = ops.plan(db, now=NOW)
-        snap = next(c for c in changes if c["table"] == "consensus_snapshots")
-        assert snap["new_logical_hash"] != row.logical_identity_hash
+        by_cohort = CONSENSUS.logical_hash({
+            "canonical_game_id": GAME, "market": "SPREAD", "cutoff": FUTURE,
+            "cohort": row.cohort, "method_version": CONSENSUS_METHOD_VERSION,
+        })
+        by_mode = CONSENSUS.logical_hash({
+            "canonical_game_id": GAME, "market": "SPREAD", "cutoff": FUTURE,
+            "cohort": row.data_mode, "method_version": CONSENSUS_METHOD_VERSION,
+        })
+        assert by_cohort != by_mode
 
     def test_a_quote_needs_no_hash_because_it_carries_none(
         self, db: Session

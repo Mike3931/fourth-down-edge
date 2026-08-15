@@ -154,6 +154,16 @@ class ConsensusSnapshot(Base, DomainIdentityMixin):
     __tablename__ = "consensus_snapshots"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     data_mode: Mapped[str] = mapped_column(String(16), index=True)
+    # Which experiment this belongs to. `data_mode` cannot answer that:
+    # BURN_IN and OFFICIAL_FORWARD_TEST both write LIVE_RESEARCH, so a
+    # logical identity built from the mode gives the two cohorts one slot.
+    # No default, deliberately — a write that omits the cohort must fail
+    # rather than inherit one.
+    cohort: Mapped[str] = mapped_column(String(24), index=True)
+    # The book minimum that admitted this snapshot. `eligible_books` says
+    # how many showed up; this says how many were required, which is the
+    # part a reader cannot reconstruct later — burn-in permits one.
+    min_books_applied: Mapped[int] = mapped_column(Integer)
     canonical_game_id: Mapped[str] = mapped_column(String(32), index=True)
     market: Mapped[str] = mapped_column(String(16))
     method_version: Mapped[str] = mapped_column(String(32))
@@ -190,6 +200,11 @@ class ConsensusSnapshot(Base, DomainIdentityMixin):
             "logical_identity_version",
             "logical_identity_hash",
             name="uq_consensus_snapshots_logical_identity",
+        ),
+        CheckConstraint(
+            "cohort IN ('fixture', 'demo', 'burn_in', 'official_forward_test', "
+            "'unknown_legacy')",
+            name="ck_consensus_snapshots_cohort_vocabulary",
         ),
 
         Index("ix_consensus_game_market_observed", "canonical_game_id", "market", "observed_at"),
@@ -353,6 +368,7 @@ class AvailabilityAssessment(Base, DomainIdentityMixin):
     __tablename__ = "availability_assessments"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     data_mode: Mapped[str] = mapped_column(String(16), index=True)
+    cohort: Mapped[str] = mapped_column(String(24), index=True)
     canonical_game_id: Mapped[str] = mapped_column(String(32), index=True)
     team_id: Mapped[str] = mapped_column(String(8))
     player_id: Mapped[str] = mapped_column(String(16))
@@ -383,6 +399,11 @@ class AvailabilityAssessment(Base, DomainIdentityMixin):
             "logical_identity_version",
             "logical_identity_hash",
             name="uq_availability_assessments_logical_identity",
+        ),
+        CheckConstraint(
+            "cohort IN ('fixture', 'demo', 'burn_in', 'official_forward_test', "
+            "'unknown_legacy')",
+            name="ck_availability_assessments_cohort_vocabulary",
         ),
     )
 
@@ -436,6 +457,7 @@ class ForwardLedgerEntry(Base, DomainIdentityMixin):
     __tablename__ = "forward_ledger"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     data_mode: Mapped[str] = mapped_column(String(16), index=True)
+    cohort: Mapped[str] = mapped_column(String(24), index=True)
     canonical_game_id: Mapped[str] = mapped_column(String(32), index=True)
     forward_prediction_id: Mapped[str | None] = mapped_column(String(120))
     policy_version: Mapped[str] = mapped_column(String(48), index=True)
@@ -484,6 +506,11 @@ class ForwardLedgerEntry(Base, DomainIdentityMixin):
             "logical_identity_version",
             "logical_identity_hash",
             name="uq_forward_ledger_logical_identity",
+        ),
+        CheckConstraint(
+            "cohort IN ('fixture', 'demo', 'burn_in', 'official_forward_test', "
+            "'unknown_legacy')",
+            name="ck_forward_ledger_cohort_vocabulary",
         ),
     )
 

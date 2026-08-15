@@ -110,7 +110,7 @@ class TestEffectInspection:
         from fde_api.db.forward_models import ForwardLedgerEntry
 
         session.add(ForwardLedgerEntry(
-            data_mode="LIVE_RESEARCH", canonical_game_id="g2", policy_version="p1",
+            data_mode="LIVE_RESEARCH", cohort="burn_in", canonical_game_id="g2", policy_version="p1",
             model_version="m1", horizon="PREGAME", market="SPREAD", status="RESEARCH_CANDIDATE",
             reasons={}, as_of_at=T0, created_at=T0, result="WIN"))
         session.flush()
@@ -122,7 +122,7 @@ class TestEffectInspection:
         from fde_api.db.forward_models import ForwardLedgerEntry
 
         session.add(ForwardLedgerEntry(
-            data_mode="LIVE_RESEARCH", canonical_game_id="g3", policy_version="p1",
+            data_mode="LIVE_RESEARCH", cohort="burn_in", canonical_game_id="g3", policy_version="p1",
             model_version="m1", horizon="PREGAME", market="SPREAD", status="RESEARCH_CANDIDATE",
             reasons={}, as_of_at=T0, created_at=T0, result="LOSS"))
         session.flush()

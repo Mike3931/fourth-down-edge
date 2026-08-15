@@ -20,6 +20,7 @@ from fde_api.db.forward_models import (
     ScheduleObservation,
 )
 from fde_api.db.models import Base
+from fde_api.forward.cohort import Cohort
 from fde_api.forward.consensus import (
     RECOGNIZED_BOOKS,
     build_consensus,
@@ -401,7 +402,7 @@ class TestConsensus:
             ("draftkings", -2.5, -110, -110), ("fanduel", -2.5, -108, -112),
             ("betmgm", -3.0, -110, -110), ("caesars", -2.5, -112, -108)])
         snap, rep = build_consensus(
-            fsession, canonical_game_id=gid, market="SPREAD",
+            fsession, cohort=Cohort.BURN_IN, canonical_game_id=gid, market="SPREAD",
             as_of_at=obs + timedelta(minutes=1), kickoff_utc=KICK)
         assert snap is not None
         assert snap.median_line == -2.5 and snap.eligible_books == 4
@@ -413,7 +414,7 @@ class TestConsensus:
             ("draftkings", -2.5, -110, -110), ("fanduel", -2.5, -110, -110),
             ("betmgm", -2.5, -110, -110), ("totally_unknown_book", -9.0, -110, -110)])
         snap, rep = build_consensus(
-            fsession, canonical_game_id=gid, market="SPREAD",
+            fsession, cohort=Cohort.BURN_IN, canonical_game_id=gid, market="SPREAD",
             as_of_at=obs + timedelta(minutes=1), kickoff_utc=KICK)
         assert snap.eligible_books == 3 and rep.rejected_unknown_book == 2
         assert "totally_unknown_book" not in snap.quote_ids["books"]
@@ -422,7 +423,7 @@ class TestConsensus:
         obs = KICK - timedelta(hours=2)
         gid = self._capture(fsession, obs, [("draftkings", -2.5, -110, -110)])
         snap, rep = build_consensus(
-            fsession, canonical_game_id=gid, market="SPREAD",
+            fsession, cohort=Cohort.BURN_IN, canonical_game_id=gid, market="SPREAD",
             as_of_at=obs + timedelta(minutes=1), kickoff_utc=KICK, min_books=3)
         assert snap is None and rep.reasons
 
@@ -432,7 +433,7 @@ class TestConsensus:
             ("draftkings", -2.5, -110, -110), ("fanduel", -2.5, -110, -110),
             ("betmgm", -2.5, -110, -110)])
         snap, rep = build_consensus(
-            fsession, canonical_game_id=gid, market="SPREAD",
+            fsession, cohort=Cohort.BURN_IN, canonical_game_id=gid, market="SPREAD",
             as_of_at=KICK - timedelta(hours=1), kickoff_utc=KICK, max_age_minutes=60)
         assert snap is None and rep.rejected_stale > 0
 
@@ -442,7 +443,7 @@ class TestConsensus:
             ("draftkings", -2.5, -110, -110), ("fanduel", -2.5, -110, -110),
             ("betmgm", -2.5, -110, -110)])
         snap, _ = build_consensus(
-            fsession, canonical_game_id=gid, market="SPREAD",
+            fsession, cohort=Cohort.BURN_IN, canonical_game_id=gid, market="SPREAD",
             as_of_at=KICK - timedelta(days=2), kickoff_utc=KICK)
         assert snap is None
 
@@ -452,7 +453,7 @@ class TestConsensus:
             ("draftkings", -2.5, -110, -110), ("fanduel", -2.5, -110, -110),
             ("betmgm", -2.5, -110, -110)])
         before = len(fsession.scalars(select(OddsQuote)).all())
-        build_consensus(fsession, canonical_game_id=gid, market="SPREAD",
+        build_consensus(fsession, cohort=Cohort.BURN_IN, canonical_game_id=gid, market="SPREAD",
                         as_of_at=obs + timedelta(minutes=1), kickoff_utc=KICK)
         assert len(fsession.scalars(select(OddsQuote)).all()) == before
 
@@ -463,10 +464,10 @@ class TestConsensus:
             _capture(fsession, _event(obs.isoformat(), [
                 ("draftkings", line, -110, -110), ("fanduel", line, -110, -110),
                 ("betmgm", line, -110, -110)]), observed_at=obs)
-            build_consensus(fsession, canonical_game_id=gid, market="SPREAD",
+            build_consensus(fsession, cohort=Cohort.BURN_IN, canonical_game_id=gid, market="SPREAD",
                             as_of_at=obs, kickoff_utc=KICK)
         close = closing_consensus(fsession, canonical_game_id=gid, market="SPREAD",
-                                  kickoff_utc=KICK, max_age_before_kickoff_minutes=30)
+                                  kickoff_utc=KICK, max_age_before_kickoff_minutes=30, cohort=Cohort.BURN_IN)
         assert close is not None and close.median_line == -4.0  # last within window
 
     def test_a_snapshot_the_close_references_is_still_an_ordinary_consensus(
@@ -490,14 +491,14 @@ class TestConsensus:
         _capture(fsession, _event(obs.isoformat(), [
             ("draftkings", -6.0, -110, -110), ("fanduel", -6.0, -110, -110),
             ("betmgm", -6.0, -110, -110)]), observed_at=obs)
-        snap, _ = build_consensus(fsession, canonical_game_id=gid, market="SPREAD",
+        snap, _ = build_consensus(fsession, cohort=Cohort.BURN_IN, canonical_game_id=gid, market="SPREAD",
                                   as_of_at=obs, kickoff_utc=KICK)
         assert snap is not None
         assert snap.is_closing_capture is False, (
             "build_consensus still marks snapshots as closes"
         )
         found = latest_consensus_at(fsession, canonical_game_id=gid, market="SPREAD",
-                                    as_of_at=KICK)
+                                    as_of_at=KICK, cohort=Cohort.BURN_IN)
         assert found is not None and found.id == snap.id
 
     def test_eligibility_counts_are_reported(self, fsession: Session) -> None:
@@ -609,7 +610,7 @@ class TestInjuries:
                   practice_status="LIMITED")
         a = assess_player(
             fsession, canonical_game_id="2026_02_KC_BUF", team_id="BUF",
-            player_id="00-0077777", as_of_at=KICK, position="WR")
+            player_id="00-0077777", as_of_at=KICK, position="WR", cohort=Cohort.BURN_IN)
         assert a.active_prob_low < a.active_prob_high  # a range, not a point estimate
         assert a.confidence_tier in ("LOW", "MEDIUM", "HIGH", "NONE")
         assert a.reason
@@ -638,7 +639,7 @@ class TestVintages:
         game = current_schedule_state(fsession, "2026_02_KC_BUF")
         pred, inputs = generate_vintage(
             fsession, game=game, horizon="PREGAME", policy=p,
-            moments=(3.0, 13.0, 44.0, 10.0), now=KICK - timedelta(days=30))
+            moments=(3.0, 13.0, 44.0, 10.0), now=KICK - timedelta(days=30), cohort=Cohort.BURN_IN)
         assert pred is None and "has not arrived" in inputs.warnings[0]
 
     def test_vintage_is_immutable(self, fsession: Session) -> None:
@@ -647,10 +648,10 @@ class TestVintages:
         game = current_schedule_state(fsession, "2026_02_KC_BUF")
         after = horizon_cutoff(KICK, "OPENING") + timedelta(minutes=1)
         generate_vintage(fsession, game=game, horizon="OPENING", policy=p,
-                         moments=(3.0, 13.0, 44.0, 10.0), now=after)
+                         moments=(3.0, 13.0, 44.0, 10.0), now=after, cohort=Cohort.BURN_IN)
         with pytest.raises(VintageImmutabilityError, match="immutable"):
             generate_vintage(fsession, game=game, horizon="OPENING", policy=p,
-                             moments=(9.0, 13.0, 44.0, 10.0), now=after)
+                             moments=(9.0, 13.0, 44.0, 10.0), now=after, cohort=Cohort.BURN_IN)
 
     def test_identical_regeneration_is_idempotent(self, fsession: Session) -> None:
         p = _policy(fsession)
@@ -658,9 +659,9 @@ class TestVintages:
         game = current_schedule_state(fsession, "2026_02_KC_BUF")
         after = horizon_cutoff(KICK, "OPENING") + timedelta(minutes=1)
         a, _ = generate_vintage(fsession, game=game, horizon="OPENING", policy=p,
-                                moments=(3.0, 13.0, 44.0, 10.0), now=after)
+                                moments=(3.0, 13.0, 44.0, 10.0), now=after, cohort=Cohort.BURN_IN)
         b, _ = generate_vintage(fsession, game=game, horizon="OPENING", policy=p,
-                                moments=(3.0, 13.0, 44.0, 10.0), now=after)
+                                moments=(3.0, 13.0, 44.0, 10.0), now=after, cohort=Cohort.BURN_IN)
         assert a.id == b.id and a.artifact_hash == b.artifact_hash
 
     def test_vintage_records_lineage_and_warnings(self, fsession: Session) -> None:
@@ -669,7 +670,7 @@ class TestVintages:
         game = current_schedule_state(fsession, "2026_02_KC_BUF")
         after = horizon_cutoff(KICK, "OPENING") + timedelta(minutes=1)
         pred, _ = generate_vintage(fsession, game=game, horizon="OPENING", policy=p,
-                                   moments=(3.0, 13.0, 44.0, 10.0), now=after)
+                                   moments=(3.0, 13.0, 44.0, 10.0), now=after, cohort=Cohort.BURN_IN)
         assert "schedule_observation_id" in pred.lineage
         assert pred.warnings["warnings"]  # missing inputs are declared, not hidden
         assert pred.data_completeness < 1.0
@@ -680,11 +681,11 @@ class TestVintages:
         game = current_schedule_state(fsession, "2026_02_KC_BUF")
         opening, _ = generate_vintage(
             fsession, game=game, horizon="OPENING", policy=p, moments=(3.0, 13.0, 44.0, 10.0),
-            now=horizon_cutoff(KICK, "OPENING") + timedelta(minutes=1))
+            now=horizon_cutoff(KICK, "OPENING") + timedelta(minutes=1), cohort=Cohort.BURN_IN)
         opening_hash = opening.artifact_hash
         generate_vintage(
             fsession, game=game, horizon="PREGAME", policy=p, moments=(5.0, 13.0, 44.0, 10.0),
-            now=horizon_cutoff(KICK, "PREGAME") + timedelta(minutes=1))
+            now=horizon_cutoff(KICK, "PREGAME") + timedelta(minutes=1), cohort=Cohort.BURN_IN)
         fsession.refresh(opening)
         assert opening.artifact_hash == opening_hash
 
@@ -739,7 +740,7 @@ class TestLedgerAndCandidates:
         record_evaluation(
             fsession, prediction=None, canonical_game_id="2026_02_KC_BUF", evaluation=ev,
             policy=p, horizon="PREGAME", as_of_at=KICK - timedelta(hours=2),
-            data_completeness=1.0)
+            data_completeness=1.0, cohort=Cohort.BURN_IN)
         rows = fsession.scalars(select(ForwardLedgerEntry)).all()
         assert len(rows) == 1 and rows[0].status == "PASS"
 
@@ -765,7 +766,7 @@ class TestLedgerAndCandidates:
             policy=p, data_completeness=1.0)
         record_evaluation(
             fsession, prediction=None, canonical_game_id="2026_02_KC_BUF", evaluation=ev,
-            policy=p, horizon="PREGAME", as_of_at=KICK, data_completeness=1.0)
+            policy=p, horizon="PREGAME", as_of_at=KICK, data_completeness=1.0, cohort=Cohort.BURN_IN)
         assert fsession.scalars(select(BacktestRecommendation)).all() == []
         assert len(fsession.scalars(select(ForwardLedgerEntry)).all()) == 1
 
@@ -796,8 +797,8 @@ class TestModeSeparation:
             ("betmgm", -2.5, -110, -110)]), observed_at=obs, data_mode=DataMode.LIVE_RESEARCH)
         build_consensus(fsession, canonical_game_id=gid, market="SPREAD",
                         as_of_at=obs + timedelta(minutes=1), kickoff_utc=KICK,
-                        data_mode=DataMode.LIVE_RESEARCH)
+                        cohort=Cohort.BURN_IN, data_mode=DataMode.LIVE_RESEARCH)
         assert latest_consensus_at(fsession, canonical_game_id=gid, market="SPREAD",
-                                   as_of_at=KICK, data_mode=DataMode.DEMO) is None
+                                   as_of_at=KICK, cohort=Cohort.DEMO, data_mode=DataMode.DEMO) is None
         assert latest_consensus_at(fsession, canonical_game_id=gid, market="SPREAD",
-                                   as_of_at=KICK, data_mode=DataMode.LIVE_RESEARCH) is not None
+                                   as_of_at=KICK, cohort=Cohort.BURN_IN, data_mode=DataMode.LIVE_RESEARCH) is not None

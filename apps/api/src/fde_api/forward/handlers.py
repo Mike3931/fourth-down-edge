@@ -328,7 +328,11 @@ def consensus_build(ctx: JobContext) -> JobResult:
     for g in games:
         out = build_all_consensus_for_game(
             ctx.session, canonical_game_id=g.canonical_game_id,
-            kickoff_utc=g.kickoff_utc, as_of_at=ctx.now(), data_mode=ctx.data_mode,
+            kickoff_utc=g.kickoff_utc, as_of_at=ctx.now(),
+            # `ctx.cohort` has been available here all along; the write
+            # took `data_mode` instead, which cannot tell burn-in from
+            # official. The book minimum follows the cohort too.
+            cohort=ctx.cohort, data_mode=ctx.data_mode,
         )
         lineage[g.canonical_game_id] = {m: v["snapshot_id"] for m, v in out.items()}
         for market, v in out.items():
@@ -479,7 +483,8 @@ def availability_computation(ctx: JobContext) -> JobResult:
         ):
             assess_player(
                 ctx.session, canonical_game_id=g.canonical_game_id, team_id=o.team_id,
-                player_id=o.player_id, as_of_at=ctx.now(), data_mode=ctx.data_mode,
+                player_id=o.player_id, as_of_at=ctx.now(),
+                cohort=ctx.cohort, data_mode=ctx.data_mode,
             )
             created += 1
     return HandlerResult(
@@ -538,7 +543,8 @@ def prediction_vintage(ctx: JobContext) -> JobResult:
             try:
                 pred, inputs = generate_vintage(
                     ctx.session, game=g, horizon=horizon, policy=policy,
-                    moments=moments, data_mode=ctx.data_mode, now=ctx.now(),
+                    moments=moments, cohort=ctx.cohort,
+                    data_mode=ctx.data_mode, now=ctx.now(),
                     expected_home_qb=ctx.params.get("home_qb"),
                     expected_away_qb=ctx.params.get("away_qb"),
                 )
@@ -780,6 +786,7 @@ def price_evaluation(ctx: JobContext) -> JobResult:
                     horizon=pred.horizon,
                     as_of_at=as_of,
                     data_completeness=pred.data_completeness,
+                    cohort=ctx.cohort,
                     data_mode=ctx.data_mode,
                 )
                 created += 1

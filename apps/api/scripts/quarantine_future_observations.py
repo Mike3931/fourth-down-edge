@@ -26,17 +26,22 @@ WHY MOVING THE COHORT IS THE FIX AND RE-STAMPING IS NOT
     to DEMO, where every live-research query already excludes them by the
     `data_mode` filter it applies anyway. Nothing is deleted.
 
-WHY THE CONSENSUS ROWS NEED MORE THAN AN UPDATE
+WHY THE IDENTITY IS NO LONGER RECOMPUTED
 
-    `cohort` is part of the CONSENSUS logical identity, so a snapshot that
-    changes cohort changes identity and its stored `logical_identity_hash`
-    would otherwise be a hash of fields it no longer has. It is recomputed.
-    The content hash does not include the cohort and is left alone.
+    It used to be. `cohort` is part of the CONSENSUS logical identity, and
+    while the identity was fed `data_mode.value`, moving a row from
+    LIVE_RESEARCH to DEMO genuinely changed its identity — so the stored
+    hash was recomputed here.
 
-    A move that would collide with an existing DEMO row at the same
-    identity is refused rather than merged: two records at one slot is the
-    condition `domain_identity` exists to detect, and creating one to tidy
-    up another would be absurd.
+    Since `d8f41c6a3b92` the identity carries the row's real `cohort`,
+    which is a separate column and is NOT what this script moves. A data
+    mode is where a record is filed; a cohort is which experiment it
+    belongs to. Moving the first no longer touches the second, so there is
+    no identity to recompute and this script does not invent one.
+
+    The collision check stays, and now means what it says: a slot is
+    (game, market, cutoff, method) within the destination mode. A move
+    that would put two records there is refused rather than merged.
 
 Run:
   python scripts/quarantine_future_observations.py --dry-run
@@ -58,8 +63,6 @@ def plan(session, *, now: datetime) -> tuple[list[dict[str, Any]], list[str]]:
     from sqlalchemy import select
 
     from fde_api.db.forward_models import ConsensusSnapshot, OddsQuote
-    from fde_api.forward.consensus import CONSENSUS_METHOD_VERSION
-    from fde_api.forward.domain_identity import CONSENSUS
 
     changes: list[dict[str, Any]] = []
     refusals: list[str] = []
@@ -98,13 +101,10 @@ def plan(session, *, now: datetime) -> tuple[list[dict[str, Any]], list[str]]:
             "table": "consensus_snapshots", "id": c.id,
             "game": c.canonical_game_id, "market": c.market,
             "selection": "-", "observed_at": c.observed_at,
-            "new_logical_hash": CONSENSUS.logical_hash({
-                "canonical_game_id": c.canonical_game_id,
-                "market": c.market,
-                "cutoff": c.observed_at,
-                "cohort": QUARANTINE,
-                "method_version": c.method_version or CONSENSUS_METHOD_VERSION,
-            }),
+            # Always None now — see the module docstring. Kept in the plan
+            # so a reader comparing this to an older run can see that the
+            # recompute was removed rather than silently skipped.
+            "new_logical_hash": None,
         })
     return changes, refusals
 
@@ -145,9 +145,11 @@ def main() -> int:
             row = session.get(model, c["id"])
             if row is None:
                 continue
+            # The data mode, and nothing else. The stored identity hash is
+            # deliberately left alone: it is a function of the row's
+            # `cohort`, which this script does not move. There used to be a
+            # rewrite here, correct while the identity was fed `data_mode`.
             row.data_mode = QUARANTINE
-            if c["new_logical_hash"] is not None:
-                row.logical_identity_hash = c["new_logical_hash"]
         session.commit()
         print(f"\n  moved {len(changes)} row(s) to {QUARANTINE}\n")
     return 0

@@ -45,6 +45,7 @@ KICK = datetime(2026, 9, 13, 17, 0, tzinfo=UTC)
 CUTOFF = KICK - timedelta(days=1)
 GAME = "2026_02_KC_BUF"
 MODE = DataMode.DEMO
+COHORT = Cohort.DEMO
 
 
 @pytest.fixture()
@@ -100,7 +101,7 @@ class TestAQuoteAfterTheCutoffIsInvisible:
 
         snap, report = build_consensus(
             db, canonical_game_id=GAME, market="TOTAL", as_of_at=CUTOFF,
-            kickoff_utc=KICK, data_mode=MODE,
+            kickoff_utc=KICK, cohort=COHORT, data_mode=MODE,
         )
         assert snap is not None, report.reasons
         assert snap.median_line == pytest.approx(47.5), (

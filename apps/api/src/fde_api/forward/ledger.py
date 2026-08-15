@@ -261,6 +261,7 @@ def record_evaluation_result(
     horizon: str,
     as_of_at: datetime,
     data_completeness: float | None,
+    cohort: Cohort,
     exclusion_reason: str | None = None,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
 ) -> IdentityResult:
@@ -280,6 +281,7 @@ def record_evaluation_result(
 
     entry = ForwardLedgerEntry(
         data_mode=data_mode.value,
+        cohort=cohort.value,
         canonical_game_id=canonical_game_id,
         forward_prediction_id=prediction.id if prediction else None,
         policy_version=policy.policy_version,
@@ -346,7 +348,7 @@ def record_evaluation_result(
         ),
         policy_version=policy.policy_version,
         model_version=policy.model_version,
-        cohort=data_mode.value,
+        cohort=cohort.value,
         cutoff=as_of_at.isoformat(),
         health_suppressed="HEALTH_GATE_SUPPRESSED" in codes,
     )
@@ -358,7 +360,11 @@ def record_evaluation_result(
             f"{evaluation.american}"
         ),
         "evaluation_type": horizon,
-        "cohort": data_mode.value,
+        # The real cohort. Under `data_mode` a burn-in evaluation and an
+        # official one shared an identity slot for the same game, market
+        # and cutoff - the ledger IS the evaluation record, so that was
+        # the two experiments overwriting each other's results.
+        "cohort": cohort.value,
         "policy_version": policy.policy_version,
         "model_version": policy.model_version,
         "decision_context_hash": context,
@@ -392,6 +398,7 @@ def record_evaluation(
     horizon: str,
     as_of_at: datetime,
     data_completeness: float | None,
+    cohort: Cohort,
     exclusion_reason: str | None = None,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
 ) -> ForwardLedgerEntry:
@@ -407,7 +414,7 @@ def record_evaluation(
             session, prediction=prediction, canonical_game_id=canonical_game_id,
             evaluation=evaluation, policy=policy, horizon=horizon,
             as_of_at=as_of_at, data_completeness=data_completeness,
-            exclusion_reason=exclusion_reason, data_mode=data_mode,
+            cohort=cohort, exclusion_reason=exclusion_reason, data_mode=data_mode,
         ),
         entity="research_evaluation",
     ).record
@@ -444,14 +451,23 @@ class ClvResult:
 
 
 
-def _cohort_for(data_mode: DataMode) -> Cohort:
-    """Which cohort a data mode's records belong to.
+def _cohort_of(entry: ForwardLedgerEntry) -> Cohort | None:
+    """The cohort this entry was written into, or None if it predates the
+    column.
 
-    A narrow mapping rather than a general one: the ledger only ever asks
-    about the cohort whose closes it is reading, and inventing a broader
-    translation would imply a correspondence the two axes do not have.
+    This used to be `_cohort_for(data_mode)`, mapping LIVE_RESEARCH to
+    BURN_IN — a guess, and the wrong one for every official row, which
+    would have gone looking for its close among burn-in captures. The
+    entry now carries its own cohort, so there is nothing to infer.
+
+    `unknown_legacy` returns None rather than raising: a row written
+    before the column existed has no recorded cohort, and the honest
+    answer is that we do not know which cohort's close belongs to it.
     """
-    return Cohort.FIXTURE if data_mode is DataMode.DEMO else Cohort.BURN_IN
+    try:
+        return Cohort(entry.cohort)
+    except ValueError:
+        return None
 
 
 def compute_clv(
@@ -482,7 +498,13 @@ def compute_clv(
         has_unresolved_conflict,
     )
 
-    cohort = _cohort_for(data_mode)
+    cohort = _cohort_of(entry)
+    if cohort is None:
+        return ClvResult(
+            None, None, None, None, None,
+            "this entry predates cohort recording; the cohort whose closing "
+            "capture applies to it is not known, and picking one would be a guess",
+        )
     if has_unresolved_conflict(
         session, canonical_game_id=entry.canonical_game_id,
         market=entry.market, cohort=cohort,

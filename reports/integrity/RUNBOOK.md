@@ -234,6 +234,39 @@ something untrue:
 * **LIVE provider mode with no key** — so that "no key" is never mistaken
   for "no prices"
 
+### The cohort is an argument, and it decides the book minimum
+
+```bash
+python apps/api/scripts/run_scheduler.py --once --cohort burn_in
+python apps/api/scripts/run_scheduler.py --once --cohort official_forward_test
+```
+
+`--cohort` defaults to `burn_in`. It is not cosmetic: it is part of every
+captured record's logical identity, and it sets how many books a
+consensus needs.
+
+| cohort | books required |
+|---|---|
+| `burn_in` | **1** |
+| everything else | 3 |
+
+Three is the working number — with two, one book's error is half the
+median and there is no third opinion to break a tie. Burn-in is the
+exception on purpose: it exists to exercise capture, identity, the
+scheduler, the ledger and the screens on whatever quotes a single free
+plan returns. **A burn-in consensus from one book is a plumbing test, not
+a market price.** The applied minimum is stored on the snapshot
+(`min_books_applied`), and the Live Slate says so in words wherever a
+consensus rests on a single book.
+
+Burn-in results may never influence the official evaluation, and no
+threshold or model parameter may be changed because of what burn-in
+results looked like. Operational corrections are allowed.
+
+The two cohorts are separate all the way down: separate identity slots,
+and reads scoped by cohort so an official prediction can never select a
+burn-in consensus or settle against a burn-in close.
+
 Overrides exist (`--allow-closed-window`,
 `--allow-fixture-in-live-research`) and both have to be typed, so nobody
 later mistakes a rehearsal for forward-test evidence.

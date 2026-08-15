@@ -23,6 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fde_api.db.forward_models import ForwardPrediction, ScheduleObservation, Venue
+from fde_api.forward.cohort import Cohort
 from fde_api.forward.consensus import latest_consensus_at
 from fde_api.forward.injuries import availability_snapshot, resolve_starting_qb
 from fde_api.forward.modes import DataMode
@@ -75,6 +76,7 @@ def gather_inputs(
     horizon: str,
     as_of_at: datetime,
     policy: ForwardTestPolicy,
+    cohort: Cohort,
     expected_home_qb: str | None = None,
     expected_away_qb: str | None = None,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
@@ -93,7 +95,7 @@ def gather_inputs(
         weights_total += 1.0
         snap = latest_consensus_at(
             session, canonical_game_id=game.canonical_game_id, market=market,
-            as_of_at=as_of_at, data_mode=data_mode,
+            as_of_at=as_of_at, cohort=cohort, data_mode=data_mode,
         )
         if snap is None:
             out.warnings.append(f"no eligible {market} consensus at cutoff")
@@ -194,6 +196,7 @@ def generate_vintage(
     horizon: str,
     policy: ForwardTestPolicy,
     moments: tuple[float, float, float, float] | None,
+    cohort: Cohort,
     expected_home_qb: str | None = None,
     expected_away_qb: str | None = None,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
@@ -217,7 +220,8 @@ def generate_vintage(
 
     inputs = gather_inputs(
         session, game=game, horizon=horizon, as_of_at=as_of_at, policy=policy,
-        expected_home_qb=expected_home_qb, expected_away_qb=expected_away_qb, data_mode=data_mode,
+        cohort=cohort, expected_home_qb=expected_home_qb,
+        expected_away_qb=expected_away_qb, data_mode=data_mode,
     )
 
     spread = inputs.consensus.get("SPREAD", {})

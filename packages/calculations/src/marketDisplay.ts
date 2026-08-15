@@ -101,6 +101,38 @@ export function describeConsensus(
   return '—';
 }
 
+/**
+ * How a consensus's book coverage should be stated.
+ *
+ * "1 books" is a grammar bug; the harder problem is that "1 book" on its
+ * own reads as a market consensus that happened to be thin. It is not.
+ * The burn-in cohort deliberately admits a single book so the pipeline
+ * can be exercised end to end on whatever a free plan returns, and a
+ * single book's price is that book's price — there is no second opinion
+ * in it and no tie to break.
+ *
+ * So the count and the RULE are stated together, and a consensus resting
+ * on the permitted minimum of one says in words what it is.
+ */
+export function describeBookCoverage(
+  eligibleBooks: number,
+  minBooksApplied: number | null | undefined,
+): { label: string; caveat: string | null } {
+  const label = `${eligibleBooks} ${eligibleBooks === 1 ? 'book' : 'books'}`;
+  if (minBooksApplied === 1 && eligibleBooks === 1) {
+    return {
+      label,
+      caveat:
+        'One book, which this cohort permits. This is that book’s price, ' +
+        'not a market consensus.',
+    };
+  }
+  if (minBooksApplied != null && eligibleBooks < 3) {
+    return { label, caveat: `minimum applied: ${minBooksApplied}` };
+  }
+  return { label, caveat: null };
+}
+
 /** -0 is a real IEEE value and it renders as "-0". Never show it. */
 function negateZero(n: number): number {
   return n === 0 ? 0 : n;

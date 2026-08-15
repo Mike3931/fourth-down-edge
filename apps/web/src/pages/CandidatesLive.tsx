@@ -135,6 +135,26 @@ export default function CandidatesLive() {
           So the degraded checks are folded in here rather than left on
           Data Health. They do not close the gate and are not presented as
           if they did; they are presented as the likelier explanation. */}
+      {/* Two experiments in one list. `assert_single_cohort` exists
+          because a metric spanning two experiments is not a metric — and
+          a LIST spanning two is the same problem one step earlier,
+          because the reader draws the aggregate themselves. The rows are
+          not filtered: hiding them would show fewer candidates than
+          exist and explain nothing. */}
+      {data.mixed_cohorts && (
+        <div className="rounded border border-warning/40 bg-warning/10 p-4">
+          <p className="text-sm font-semibold text-warning">
+            This list spans {data.cohorts_present.length} cohorts:{' '}
+            {data.cohorts_present.join(', ')}.
+          </p>
+          <p className="mt-1 text-sm text-muted">
+            Burn-in exists to exercise the pipeline and admits a consensus built from a
+            single book. Its rows must not be read together with the official forward
+            test, or counted into any figure describing it. Each row is labelled below.
+          </p>
+        </div>
+      )}
+
       {gate.open && data.count === 0 && (
         <div className="rounded border border-border p-4 text-sm text-muted">
           <p>
@@ -225,6 +245,16 @@ export default function CandidatesLive() {
                     >
                       {c.status}
                     </span>
+                    {/* Shown only when the list actually spans two
+                        experiments. On a single-cohort slate the label
+                        is the same on every row and adds nothing; on a
+                        mixed one it is the difference between a
+                        one-book burn-in candidate and an official one. */}
+                    {data.mixed_cohorts && (
+                      <span className="ml-1.5 rounded bg-bg-subtle px-1.5 py-0.5 text-xs text-muted">
+                        {c.cohort}
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}

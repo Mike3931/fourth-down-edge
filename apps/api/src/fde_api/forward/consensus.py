@@ -21,9 +21,27 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fde_api.db.forward_models import ConsensusSnapshot, OddsQuote
-from fde_api.forward.cohort import combine_provider_modes
+from fde_api.forward.cohort import Cohort, combine_provider_modes
 from fde_api.forward.modes import DataMode
 from fde_api.util import utc_now
+
+# How many distinct books a consensus needs before it is a consensus.
+#
+# Three is the working number: with two, one book's error is half the
+# median and there is no third opinion to break a tie. Burn-in is the one
+# exception, and not because one book is enough to price with — it is that
+# burn-in exists to exercise the pipeline end to end (capture, identity,
+# scheduler, ledger, screen) on whatever quotes a single free plan
+# returns. A burn-in consensus from one book is a plumbing test, and the
+# applied minimum is recorded on the row so a reader can see that it was.
+BOOK_MINIMUM_BY_COHORT: dict[Cohort, int] = {
+    Cohort.BURN_IN: 1,
+}
+DEFAULT_BOOK_MINIMUM = 3
+
+
+def book_minimum(cohort: Cohort) -> int:
+    return BOOK_MINIMUM_BY_COHORT.get(cohort, DEFAULT_BOOK_MINIMUM)
 
 # v2: three corrections to how a consensus is computed, each of which
 # changes the number produced from identical quotes.
@@ -177,15 +195,25 @@ def build_consensus(
     market: str,
     as_of_at: datetime,
     kickoff_utc: datetime | None,
+    cohort: Cohort,
     max_age_minutes: int = 60,
-    min_books: int = 3,
+    min_books: int | None = None,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
 ) -> tuple[ConsensusSnapshot | None, EligibilityReport]:
     """Compute and persist one consensus snapshot.
 
     Returns (None, report) when too few eligible books exist — the caller
     must then treat the market as DATA INCOMPLETE rather than guessing.
+
+    `cohort` is required and has no default. It is part of the snapshot's
+    logical identity, and the two live cohorts are indistinguishable by
+    `data_mode` — so a default here would be a guess about which
+    experiment a record belongs to, resolved silently.
+
+    `min_books` defaults to the cohort's minimum. An explicit value
+    overrides it and is recorded as what applied.
     """
+    applied_min = book_minimum(cohort) if min_books is None else min_books
     quotes = list(
         session.scalars(
             select(OddsQuote).where(
@@ -199,8 +227,11 @@ def build_consensus(
         quotes, as_of_at=as_of_at, max_age_minutes=max_age_minutes, kickoff_utc=kickoff_utc
     )
     books = {q.sportsbook for q in eligible}
-    if len(books) < min_books:
-        rep.reasons.append(f"only {len(books)} eligible book(s), minimum is {min_books}")
+    if len(books) < applied_min:
+        rep.reasons.append(
+            f"only {len(books)} eligible book(s), minimum is {applied_min} "
+            f"for cohort {cohort.value}"
+        )
         return None, rep
 
     def side(sel: str) -> list[OddsQuote]:
@@ -293,6 +324,8 @@ def build_consensus(
     ages = [int((as_of_at - q.observed_at).total_seconds()) for q in eligible]
     snap = ConsensusSnapshot(
         data_mode=data_mode.value,
+        cohort=cohort.value,
+        min_books_applied=applied_min,
         canonical_game_id=canonical_game_id,
         market=market,
         method_version=CONSENSUS_METHOD_VERSION,
@@ -341,7 +374,11 @@ def build_consensus(
         "canonical_game_id": canonical_game_id,
         "market": market,
         "cutoff": as_of_at,
-        "cohort": data_mode.value,
+        # The real cohort, not `data_mode`. Under the mode, a burn-in and
+        # an official consensus for the same game, market and cutoff
+        # produced the identical hash with different content — a conflict
+        # on every row the moment a second cohort runs.
+        "cohort": cohort.value,
         "method_version": CONSENSUS_METHOD_VERSION,
     }
     content = {
@@ -357,6 +394,10 @@ def build_consensus(
         "line_dispersion": snap.line_dispersion,
         "price_dispersion": snap.price_dispersion,
         "provider_mode": snap.provider_mode,
+        # The rule that admitted this row, not just the count that passed
+        # it. Two snapshots over one book differ in kind depending on
+        # whether one book was permitted or merely all that showed up.
+        "min_books_applied": snap.min_books_applied,
     }
     result = upsert_by_identity(
         session, ConsensusSnapshot, identity=CONSENSUS,
@@ -391,6 +432,7 @@ def latest_consensus_at(
     canonical_game_id: str,
     market: str,
     as_of_at: datetime,
+    cohort: Cohort,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
     exclude_closing_capture: bool = True,
 ) -> ConsensusSnapshot | None:
@@ -398,11 +440,20 @@ def latest_consensus_at(
 
     Closing captures are excluded by default: they exist only for
     evaluation and must never feed an earlier prediction.
+
+    Cohort-scoped, and required. A burn-in consensus may rest on a single
+    book by design; letting one answer this query for an official
+    prediction would put a one-book price behind an official candidate,
+    which no amount of downstream care could undo. Rows written before
+    the cohort column existed carry `unknown_legacy` and therefore match
+    no cohort here — they stay readable and stop being selectable, which
+    is the correct treatment for a record whose experiment is unknown.
     """
     stmt = select(ConsensusSnapshot).where(
         ConsensusSnapshot.canonical_game_id == canonical_game_id,
         ConsensusSnapshot.market == market,
         ConsensusSnapshot.data_mode == data_mode.value,
+        ConsensusSnapshot.cohort == cohort.value,
         ConsensusSnapshot.observed_at <= as_of_at,
     )
     if exclude_closing_capture:
@@ -418,6 +469,7 @@ def closing_consensus(
     canonical_game_id: str,
     market: str,
     kickoff_utc: datetime,
+    cohort: Cohort,
     max_age_before_kickoff_minutes: int = 30,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
 ) -> ConsensusSnapshot | None:
@@ -426,6 +478,11 @@ def closing_consensus(
 
     Deliberately not "the best-looking quote" — the rule is fixed in the
     forward-test policy before capture begins.
+
+    Scoped to one cohort. Filtering on `data_mode` alone would let a
+    burn-in close — built from one book, by design — settle the CLV of an
+    official row, which is precisely the contamination cohorts exist to
+    prevent.
     """
     window_start = kickoff_utc - timedelta(minutes=max_age_before_kickoff_minutes)
     return session.scalars(
@@ -434,6 +491,7 @@ def closing_consensus(
             ConsensusSnapshot.canonical_game_id == canonical_game_id,
             ConsensusSnapshot.market == market,
             ConsensusSnapshot.data_mode == data_mode.value,
+            ConsensusSnapshot.cohort == cohort.value,
             ConsensusSnapshot.observed_at <= kickoff_utc,
             ConsensusSnapshot.observed_at >= window_start,
         )
@@ -447,6 +505,7 @@ def build_all_consensus_for_game(
     *,
     canonical_game_id: str,
     kickoff_utc: datetime | None,
+    cohort: Cohort,
     as_of_at: datetime | None = None,
     markets: tuple[str, ...] = ("SPREAD", "TOTAL", "MONEYLINE"),
     **kwargs: Any,
@@ -460,6 +519,7 @@ def build_all_consensus_for_game(
             market=m,
             as_of_at=as_of_at,
             kickoff_utc=kickoff_utc,
+            cohort=cohort,
             **kwargs,
         )
         out[m] = {"snapshot_id": snap.id if snap else None, "eligibility": rep.as_dict(), "reasons": rep.reasons}

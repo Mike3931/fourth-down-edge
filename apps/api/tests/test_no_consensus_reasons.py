@@ -22,6 +22,7 @@ These tests pin two things that matter more than the wording:
 from __future__ import annotations
 
 from fde_api.api.main import _no_consensus_reasons
+from fde_api.forward.cohort import Cohort
 from fde_api.forward.consensus import EligibilityReport
 
 
@@ -35,10 +36,35 @@ def _report(**kw: int) -> EligibilityReport:
 class TestTheBindingConstraintIsAlwaysStatedFirst:
     def test_the_book_minimum_leads_every_explanation(self) -> None:
         reasons = _no_consensus_reasons(
-            0, _report(considered=6, rejected_stale=6)
+            0, _report(considered=6, rejected_stale=6),
+            cohort=Cohort.OFFICIAL_FORWARD_TEST,
         )
         assert reasons[0].startswith("no consensus captured yet")
         assert "minimum is 3" in reasons[0]
+
+    def test_the_minimum_is_the_cohort_s_and_not_a_constant(self) -> None:
+        """It used to be hardcoded to 3. Burn-in admits one book, so the
+        screen would have announced a refusal the engine was not making —
+        the same shape as the two disagreeing health gates, one layer
+        further out."""
+        reasons = _no_consensus_reasons(
+            0, _report(considered=6, rejected_stale=6), cohort=Cohort.BURN_IN,
+        )
+        assert "minimum is 1" in reasons[0]
+        assert "minimum is 3" not in reasons[0]
+
+    def test_it_names_the_cohort_that_set_the_number(self) -> None:
+        reasons = _no_consensus_reasons(
+            0, _report(considered=6), cohort=Cohort.BURN_IN)
+        assert "burn_in" in reasons[0]
+
+    def test_an_unknown_cohort_omits_the_number_rather_than_guessing(self) -> None:
+        """Nothing has been captured, so the running cohort cannot be
+        read from the data. Asserting a minimum here would be inventing
+        the answer."""
+        reasons = _no_consensus_reasons(0, _report(considered=6), cohort=None)
+        assert reasons[0].startswith("no consensus captured yet")
+        assert "minimum" not in reasons[0]
 
     def test_it_leads_even_when_nothing_was_captured(self) -> None:
         reasons = _no_consensus_reasons(0, _report())

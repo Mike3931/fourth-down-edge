@@ -52,15 +52,31 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from fde_api.forward.domain_identity import LOGICAL_IDENTITY_VERSION
+
 MANIFEST_SCHEMA_VERSION = "identity-resolution-manifest-v1"
 
 # Namespaces a resolved row can be moved into. They are values of
 # `logical_identity_version`, so a moved row can never again collide with a
 # current one, and every query that filters on the current version stops
 # seeing it — without anything being deleted.
-CURRENT_NAMESPACE = "domain-logical-identity-v1"
-ARCHIVED_NAMESPACE = "domain-logical-identity-v1/archived-exact-duplicate"
-SUPERSEDED_NAMESPACE = "domain-logical-identity-v1/superseded"
+# Derived from the live version, not spelled out. These were hardcoded to
+# `domain-logical-identity-v1`, so bumping the identity version left
+# CURRENT_NAMESPACE naming a version nothing writes any more — every
+# resolution would have moved a v2 row into the v1 namespace, which is
+# both wrong and silent.
+CURRENT_NAMESPACE = LOGICAL_IDENTITY_VERSION
+ARCHIVED_NAMESPACE = f"{LOGICAL_IDENTITY_VERSION}/archived-exact-duplicate"
+SUPERSEDED_NAMESPACE = f"{LOGICAL_IDENTITY_VERSION}/superseded"
+
+# Namespaces from earlier identity versions. A row moved under v1 keeps
+# its v1 namespace: renaming it would break the promise that a resolved
+# row stays findable where it was put.
+HISTORICAL_NAMESPACES: tuple[str, ...] = (
+    "domain-logical-identity-v1",
+    "domain-logical-identity-v1/archived-exact-duplicate",
+    "domain-logical-identity-v1/superseded",
+)
 
 
 class Disposition(str, Enum):

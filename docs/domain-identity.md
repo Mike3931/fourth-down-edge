@@ -4,8 +4,8 @@ Four records now carry two hashes instead of relying on a service-level
 pre-check.
 
 ```text
-logical_identity_version = domain-logical-identity-v1
-content_hash_version     = domain-content-v1
+logical_identity_version = domain-logical-identity-v2
+content_hash_version     = domain-content-v2
 digest                   = sha256
 float precision          = 6 decimal places
 ```
@@ -72,7 +72,7 @@ Shared by both hashes, in `fde_api.forward.domain_identity`:
 **Content** — `median_line`, `home_price_american`, `away_price_american`,
 `over_price_american`, `under_price_american`, `no_vig_home_prob`,
 `no_vig_over_prob`, `eligible_books`, `quote_lineage`, `line_dispersion`,
-`price_dispersion`, `provider_mode`
+`price_dispersion`, `provider_mode`, `min_books_applied`
 
 | behaviour | outcome |
 |---|---|
@@ -87,7 +87,7 @@ the inputs changed after the fact, and downstream consumers read that value
 as truth.
 
 - **Constraint** `uq_consensus_snapshots_logical_identity`
-- **Backfill** cutoff from `observed_at`, cohort from `data_mode`
+- **Backfill** cutoff from `observed_at`; cohort `unknown_legacy` (see below)
 - **Lineage** referenced by prediction vintages via canonical identity
 
 ---
@@ -212,3 +212,62 @@ columns discards every stored hash; a re-upgrade recomputes from *current*
 content, which is correct for unchanged rows and silently wrong for any row
 edited in between. These tables are append-only, so that should not arise —
 recorded because "should not arise" is not "cannot".
+
+---
+
+## Why the versions are at v2
+
+Revision **`d8f41c6a3b92`**, on `b7e2f9c41a68`.
+
+The `cohort` field was in three of the four logical identities from the
+start, and three of the four call sites passed `data_mode.value` into it.
+`DataMode` has two values. `Cohort` has four, and **BURN_IN and
+OFFICIAL_FORWARD_TEST both write LIVE_RESEARCH** — so a burn-in record and
+an official record for the same game, market and cutoff hashed to the same
+slot with different contents. A `CONFLICT` on every game and every market,
+the moment a second cohort runs.
+
+`price_observation` was the fourth and always passed the real cohort, which
+is why the pattern is unchanged there.
+
+It stayed invisible because only one cohort had ever run. The pilot runs a
+burn-in cohort beside the official forward test, which is precisely the
+thing that makes it unavoidable.
+
+**What changed**
+
+- `consensus_snapshots`, `forward_ledger` and `availability_assessments`
+  each gained a `cohort` column: `NOT NULL`, **no server default**, with a
+  vocabulary CHECK. A write that omits the cohort fails rather than
+  inheriting one.
+- `consensus_snapshots` gained `min_books_applied`. `eligible_books` says
+  how many books turned up; only this says how many were required. Burn-in
+  permits one book; every other cohort requires three.
+- `LOGICAL_IDENTITY_VERSION` → `domain-logical-identity-v2` (same fields,
+  different meaning for `cohort`).
+- `CONTENT_HASH_VERSION` → `domain-content-v2` (`min_books_applied` joined
+  the CONSENSUS content fields; the allowlist refused it until it was added
+  deliberately, which is what the allowlist is for).
+- Reads are cohort-scoped too — `latest_consensus_at`,
+  `closing_consensus`, `select_closing_snapshot`. A burn-in consensus may
+  rest on a single book by design, so an official prediction must not be
+  able to select one.
+
+**Backfill: `unknown_legacy`, not `burn_in`**
+
+Existing rows are marked `unknown_legacy`, mirroring
+`ProviderMode.UNKNOWN_LEGACY`. It is deliberately **not** a `Cohort` member:
+the enum governs what new code may write, and this is a state new code must
+never produce.
+
+`burn_in` was the convenient answer — it is what a LIVE_RESEARCH row
+probably was, and it would let those rows be re-hashed and reused. Nothing
+in the schema records it: `scheduled_job_runs` carries `data_mode` and
+provider mode and **not** cohort. So `burn_in` would manufacture a
+provenance the rows do not have, and it is exactly the value that would
+collide with the burn-in cohort about to start.
+
+Because `unknown_legacy` is not a `Cohort`, no cohort-scoped read can name
+it. Those rows stay readable and stop being selectable, which is the
+correct treatment for a record whose experiment is unknown. The
+`legacy_cohort_records` health check counts them; the count can only fall.

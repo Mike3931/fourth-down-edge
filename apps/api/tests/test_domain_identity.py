@@ -52,6 +52,7 @@ KICK = datetime(2026, 9, 13, 17, 0, tzinfo=UTC)
 CUTOFF = KICK - timedelta(days=1)
 GAME = "2026_02_KC_BUF"
 MODE = DataMode.DEMO
+COHORT = Cohort.DEMO
 SPEC_DOC = Path(__file__).resolve().parents[3] / "docs" / "domain-identity.md"
 
 
@@ -190,7 +191,7 @@ class TestConsensusIdentity:
         from fde_api.forward.consensus import build_consensus
 
         return build_consensus(db, canonical_game_id=GAME, market="TOTAL",
-                               as_of_at=at, kickoff_utc=KICK, data_mode=MODE)
+                               as_of_at=at, kickoff_utc=KICK, cohort=COHORT, data_mode=MODE)
 
     def test_first_insertion_creates_one_row(self, db: Session) -> None:
         _quotes(db, at=CUTOFF - timedelta(hours=1), total=47.5)
@@ -248,7 +249,7 @@ class TestAvailabilityIdentity:
         from fde_api.forward.injuries import assess_player
 
         return assess_player(db, canonical_game_id=GAME, team_id="BUF",
-                             player_id=player, as_of_at=at, data_mode=MODE)
+                             player_id=player, as_of_at=at, cohort=COHORT, data_mode=MODE)
 
     def test_first_insertion_then_exact_retry(self, db: Session) -> None:
         first = self._assess(db, at=CUTOFF)
@@ -330,7 +331,7 @@ class TestTheUpsertPrimitive:
         def build_invalid() -> ConsensusSnapshot:
             # data_mode is NOT NULL; this violates a different constraint.
             return ConsensusSnapshot(
-                data_mode=None, canonical_game_id=GAME, market="TOTAL",
+                data_mode=None, cohort=COHORT.value, min_books_applied=3, canonical_game_id=GAME, market="TOTAL",
                 method_version="v1", provider_mode="FIXTURE", eligible_books=1,
                 quote_ids={}, observed_at=CUTOFF,
             )
@@ -351,7 +352,7 @@ class TestTheUpsertPrimitive:
         from fde_api.forward.injuries import assess_player
 
         assess_player(db, canonical_game_id=GAME, team_id="BUF",
-                      player_id="BUF_QB_ALLEN", as_of_at=CUTOFF, data_mode=MODE)
+                      player_id="BUF_QB_ALLEN", as_of_at=CUTOFF, cohort=COHORT, data_mode=MODE)
         row = db.scalars(select(AvailabilityAssessment)).one()
         assert row.logical_identity_hash and row.content_hash
         assert row.logical_identity_version == LOGICAL_IDENTITY_VERSION
@@ -424,7 +425,8 @@ class TestTheConstraintExistsInBothPlaces:
 
         def row(content: str) -> AvailabilityAssessment:
             return AvailabilityAssessment(
-                data_mode=MODE.value, canonical_game_id=GAME, team_id="BUF",
+                data_mode=MODE.value, cohort=COHORT.value,
+                canonical_game_id=GAME, team_id="BUF",
                 player_id="BUF_QB_ALLEN", state="EXPECTED_ACTIVE",
                 active_prob_low=0.9, active_prob_high=1.0,
                 confidence_tier="HIGH", is_starting_qb=True, as_of_at=CUTOFF,

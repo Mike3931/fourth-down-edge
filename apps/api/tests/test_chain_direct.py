@@ -216,7 +216,7 @@ class TestTheDirectChainIsIdempotent:
 
             build_consensus(s, canonical_game_id=GAME, market="SPREAD",
                             as_of_at=KICK - timedelta(minutes=1), kickoff_utc=KICK,
-                            data_mode=MODE)
+                            cohort=COHORT, data_mode=MODE)
             s.flush()
             policy = load_policy(s, POLICY)
             outcome = capture_close(

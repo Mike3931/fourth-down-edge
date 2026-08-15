@@ -62,7 +62,7 @@ def _weather(db: Session, *, observed_at: datetime, game: str = "g1",
 def _consensus(db: Session, *, observed_at: datetime, game: str = "g1",
                data_mode: str = "burn_in") -> None:
     db.add(ConsensusSnapshot(
-        data_mode=data_mode, canonical_game_id=game, market="SPREAD",
+        data_mode=data_mode, cohort="burn_in", min_books_applied=3, canonical_game_id=game, market="SPREAD",
         method_version="v1", provider_mode="FIXTURE", eligible_books=0,
         quote_ids=[], observed_at=observed_at,
     ))
@@ -71,7 +71,7 @@ def _consensus(db: Session, *, observed_at: datetime, game: str = "g1",
 
 def _ledger(db: Session, *, game: str, data_mode: str = "burn_in") -> None:
     db.add(ForwardLedgerEntry(
-        data_mode=data_mode, canonical_game_id=game, policy_version="ftp-2026-v1",
+        data_mode=data_mode, cohort="burn_in", canonical_game_id=game, policy_version="ftp-2026-v1",
         model_version="m1", horizon="T-24h", market="SPREAD", status="RESEARCH_CANDIDATE",
         reasons=[], as_of_at=SLOT, created_at=SLOT, result="WIN", settled_at=SLOT,
     ))

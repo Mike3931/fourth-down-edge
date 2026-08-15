@@ -43,8 +43,26 @@ from typing import Any
 # Bump either version when the FIELD SET or the rendering changes. A stored
 # hash is uninterpretable without the version that produced it, which is
 # why both are persisted beside the hash rather than assumed.
-LOGICAL_IDENTITY_VERSION = "domain-logical-identity-v1"
-CONTENT_HASH_VERSION = "domain-content-v1"
+#
+# v1 -> v2: the field set is unchanged, but `cohort` meant something else.
+# CONSENSUS, EVALUATION and AVAILABILITY were fed `data_mode.value`, which
+# has two values where `Cohort` has four — so BURN_IN and
+# OFFICIAL_FORWARD_TEST both rendered "LIVE_RESEARCH" and shared one
+# identity slot. A v1 hash and a v2 hash over the same row therefore differ,
+# and a v1 hash cannot be reproduced by this code. That is exactly what a
+# version is for, and `require_known_versions` refuses such a hash rather
+# than comparing it.
+#
+# The v1 rows are NOT re-hashed under v2, and cannot honestly be: no table
+# records which cohort wrote them (`scheduled_job_runs` carries data mode
+# and provider mode, not cohort), so a v2 hash would need a cohort nobody
+# recorded. They are marked `unknown_legacy`, which no cohort-scoped read
+# can name, and the `legacy_cohort_records` health check counts them.
+LOGICAL_IDENTITY_VERSION = "domain-logical-identity-v2"
+# v1 -> v2: `min_books_applied` joined the CONSENSUS content fields. The
+# allowlist refused it until it was added here on purpose, which is what
+# the allowlist is for - a new column must never join a hash by accident.
+CONTENT_HASH_VERSION = "domain-content-v2"
 
 # Decimal places for float normalisation. Two paths can compute the same
 # quantity through different arithmetic and differ in the last bits; that is
@@ -235,6 +253,11 @@ CONSENSUS = EntityIdentity(
         "line_dispersion",
         "price_dispersion",
         "provider_mode",
+        # The rule that ADMITTED the snapshot, not just the count that
+        # satisfied it. Burn-in permits a single book; every other cohort
+        # requires three. Two one-book snapshots are different records
+        # depending on which rule let them exist.
+        "min_books_applied",
     ),
     conflict_requires_review=True,
     rationale=(

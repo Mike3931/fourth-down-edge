@@ -24,6 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fde_api.db.forward_models import AvailabilityAssessment, InjuryObservation
+from fde_api.forward.cohort import Cohort
 from fde_api.forward.domain_identity import IdentityResult, handled
 from fde_api.forward.modes import DataMode
 from fde_api.pit.guards import LookaheadError
@@ -235,6 +236,7 @@ def assess_player_result(
     team_id: str,
     player_id: str,
     as_of_at: datetime,
+    cohort: Cohort,
     position: str | None = None,
     is_starting_qb: bool = False,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
@@ -268,6 +270,7 @@ def assess_player_result(
 
     assessment = AvailabilityAssessment(
         data_mode=data_mode.value,
+        cohort=cohort.value,
         canonical_game_id=canonical_game_id,
         team_id=team_id,
         player_id=player_id,
@@ -294,7 +297,9 @@ def assess_player_result(
         "canonical_game_id": canonical_game_id,
         "player_id": player_id,
         "cutoff": as_of_at,
-        "cohort": data_mode.value,
+        # The real cohort. `data_mode` cannot tell burn-in from official
+        # and this field is named for the thing it was not carrying.
+        "cohort": cohort.value,
         "method_version": AVAILABILITY_METHOD_VERSION,
     }
     content = {
@@ -412,6 +417,7 @@ def assess_player(
     team_id: str,
     player_id: str,
     as_of_at: datetime,
+    cohort: Cohort,
     position: str | None = None,
     is_starting_qb: bool = False,
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
@@ -425,8 +431,8 @@ def assess_player(
     return handled(
         assess_player_result(
             session, canonical_game_id=canonical_game_id, team_id=team_id,
-            player_id=player_id, as_of_at=as_of_at, position=position,
-            is_starting_qb=is_starting_qb, data_mode=data_mode,
+            player_id=player_id, as_of_at=as_of_at, cohort=cohort,
+            position=position, is_starting_qb=is_starting_qb, data_mode=data_mode,
         ),
         entity="availability_assessment",
     ).record

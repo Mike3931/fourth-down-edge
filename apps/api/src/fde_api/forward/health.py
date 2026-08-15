@@ -180,6 +180,7 @@ CHECK_SCOPES: dict[str, HealthScope] = {
     "model_integrity": HealthScope.GOVERNANCE_INTEGRITY,
     "cohort_separation": HealthScope.GOVERNANCE_INTEGRITY,
     "unknown_legacy_origin": HealthScope.GOVERNANCE_INTEGRITY,
+    "legacy_cohort_records": HealthScope.GOVERNANCE_INTEGRITY,
     "compatibility_status_drift": HealthScope.GOVERNANCE_INTEGRITY,
     "policy_hash_integrity": HealthScope.GOVERNANCE_INTEGRITY,
     "model_artifact_integrity": HealthScope.GOVERNANCE_INTEGRITY,
@@ -456,6 +457,45 @@ def _newest_observation(
     not swallowed: `observation_instant_in_future` reports them by name.
     """
     return session.scalar(select(func.max(column)).where(where, column <= now))
+
+
+def _legacy_cohort_check(session: Session, *, now: datetime) -> HealthCheck:
+    """Rows written before their table had a cohort column.
+
+    WARNING, not CRITICAL, and it does not suppress. These rows are not
+    wrong — they are unattributed. Every cohort-scoped read filters on a
+    real cohort, so `unknown_legacy` matches nothing and cannot reach a
+    prediction, a close, or an evaluation. They stay in the database
+    because deleting evidence to make a counter read zero is not a fix.
+
+    What the operator needs is to know they exist, so a count that does
+    not match the ledger is explicable rather than alarming. The count
+    should never grow: nothing in the write path can produce this value.
+    """
+    from fde_api.db.forward_models import (
+        AvailabilityAssessment,
+        ConsensusSnapshot,
+        ForwardLedgerEntry,
+    )
+    from fde_api.forward.cohort import LEGACY_COHORT
+
+    counts = {
+        model.__tablename__: session.scalar(
+            select(func.count()).select_from(model).where(model.cohort == LEGACY_COHORT)
+        ) or 0
+        for model in (ConsensusSnapshot, ForwardLedgerEntry, AvailabilityAssessment)
+    }
+    total = sum(counts.values())
+    if not total:
+        return _ok("legacy_cohort_records", Severity.WARNING,
+                   "every record states the cohort it was written into", now)
+    return _fail(
+        "legacy_cohort_records", Severity.WARNING,
+        f"{total} record(s) predate cohort recording and are attributed to no experiment",
+        "none of them can be selected by a cohort-scoped read; they are retained as "
+        "history and their cohort is not recoverable from any table",
+        now, status=Status.DEGRADED, detail={"by_table": counts},
+    )
 
 
 def _future_observation_check(
@@ -921,6 +961,8 @@ def run_health_checks(
         session, provider_mode=provider_mode, data_mode=data_mode, now=now
     ))
     checks.append(_future_observation_check(session, now=now, data_mode=data_mode))
+
+    checks.append(_legacy_cohort_check(session, now=now))
 
     bad_origin = detect_invalid_origin(session)
     checks.append(

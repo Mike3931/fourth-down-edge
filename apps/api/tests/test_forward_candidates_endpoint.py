@@ -48,18 +48,22 @@ def client(monkeypatch, tmp_path) -> TestClient:
     db_engine.get_engine.cache_clear()  # type: ignore[attr-defined]
 
 
-def _seed(session: Session, *, status: str = "RESEARCH_CANDIDATE") -> None:
-    session.add(ScheduleObservation(
-        canonical_game_id=GAME, data_mode="LIVE_RESEARCH", season=2026,
-        season_type="REG", week=2, away_team_id="KC", home_team_id="BUF",
-        kickoff_utc=KICKOFF, game_status="SCHEDULED", provider="nflverse",
-        provider_game_id="nflverse:2026_02_KC_BUF", content_hash="h1",
-        observed_at=NOW - timedelta(days=1),
-    ))
+def _seed(
+    session: Session, *, status: str = "RESEARCH_CANDIDATE",
+    cohort: str = "burn_in", market: str = "SPREAD",
+) -> None:
+    if session.scalar(select(ScheduleObservation).limit(1)) is None:
+        session.add(ScheduleObservation(
+            canonical_game_id=GAME, data_mode="LIVE_RESEARCH", season=2026,
+            season_type="REG", week=2, away_team_id="KC", home_team_id="BUF",
+            kickoff_utc=KICKOFF, game_status="SCHEDULED", provider="nflverse",
+            provider_game_id="nflverse:2026_02_KC_BUF", content_hash="h1",
+            observed_at=NOW - timedelta(days=1),
+        ))
     session.add(ForwardLedgerEntry(
-        data_mode="LIVE_RESEARCH", canonical_game_id=GAME,
+        data_mode="LIVE_RESEARCH", cohort=cohort, canonical_game_id=GAME,
         policy_version="ftp-2026-v1", model_version="market-residual-v1",
-        horizon="PREGAME", market="SPREAD", selection="HOME", status=status,
+        horizon="PREGAME", market=market, selection="HOME", status=status,
         qualifying_line=-3.0, qualifying_american=-110,
         price_source="consensus", price_age_seconds=600,
         model_probability=0.58, break_even_probability=0.5238,
@@ -182,3 +186,43 @@ class TestThePerformanceRecord:
     ) -> None:
         body = client.get("/v1/forward/performance").json()
         assert "not evidence of profitability" in body["not_a_claim"].lower()
+
+
+class TestACandidateSaysWhichExperimentProducedIt:
+    """Burn-in and the official forward test both write LIVE_RESEARCH.
+
+    Without the cohort on the row, a burn-in candidate — which may rest
+    on a single book, by design — is indistinguishable from an official
+    one on the same screen. `assert_single_cohort` exists because a
+    metric spanning two experiments is not a metric; a LIST spanning two
+    is the same problem one step earlier, because the reader draws the
+    aggregate themselves.
+    """
+
+    def test_every_candidate_carries_its_cohort(self, client: TestClient) -> None:
+        with _session(client) as s:
+            _seed(s, cohort="official_forward_test")
+        body = client.get("/v1/forward/candidates").json()
+        assert body["candidates"], body
+        assert all(c["cohort"] == "official_forward_test" for c in body["candidates"])
+
+    def test_a_single_cohort_list_is_not_flagged(self, client: TestClient) -> None:
+        with _session(client) as s:
+            _seed(s, cohort="burn_in")
+        body = client.get("/v1/forward/candidates").json()
+        assert body["cohorts_present"] == ["burn_in"]
+        assert body["mixed_cohorts"] is False
+
+    def test_a_mixed_list_is_flagged_rather_than_filtered(
+        self, client: TestClient
+    ) -> None:
+        """Reported, not hidden. Dropping rows to make the list look
+        single-cohort would be its own kind of lie — the reader would see
+        fewer candidates than exist and be told nothing."""
+        with _session(client) as s:
+            _seed(s, cohort="burn_in", market="SPREAD")
+            _seed(s, cohort="official_forward_test", market="TOTAL")
+        body = client.get("/v1/forward/candidates").json()
+        assert body["count"] == 2
+        assert body["cohorts_present"] == ["burn_in", "official_forward_test"]
+        assert body["mixed_cohorts"] is True

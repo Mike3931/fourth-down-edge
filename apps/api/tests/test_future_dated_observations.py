@@ -104,7 +104,7 @@ class TestWhatItCatches:
 
     def test_a_consensus_snapshot_is_checked_too(self, session: Session) -> None:
         session.add(ConsensusSnapshot(
-            data_mode="LIVE_RESEARCH", canonical_game_id="2026_01_SF_LA",
+            data_mode="LIVE_RESEARCH", cohort="burn_in", min_books_applied=3, canonical_game_id="2026_01_SF_LA",
             market="SPREAD", method_version="consensus-v2", provider_mode="LIVE",
             median_line=-2.5, eligible_books=3, quote_ids={"quote_ids": [], "books": []},
             observed_at=NOW + timedelta(days=3),

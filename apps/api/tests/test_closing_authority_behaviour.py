@@ -27,6 +27,7 @@ from fde_api.db.forward_models import (
 )
 from fde_api.forward.chain import reconcile_chain
 from fde_api.forward.closing import authoritative_capture, closing_snapshot_for
+from fde_api.forward.cohort import Cohort
 from fde_api.forward.semantic_hash import build_semantic_chain, compare
 
 
@@ -165,7 +166,7 @@ class TestTheClassifiedReadersStayWithinTheirRemit:
             # hides all of them from the ordinary lookup...
             hidden = latest_consensus_at(
                 s, canonical_game_id=GAME, market="SPREAD", as_of_at=KICK,
-                data_mode=DATA_MODE)
+                cohort=Cohort.BURN_IN, data_mode=DATA_MODE)
             # ...and the close is still exactly what the capture says.
             close_after = closing_snapshot_for(
                 s, canonical_game_id=GAME, market="SPREAD", cohort=COHORT)

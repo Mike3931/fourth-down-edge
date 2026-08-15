@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { describeConsensus, describeQuote } from '@fde/calculations';
+import { describeBookCoverage, describeConsensus, describeQuote } from '@fde/calculations';
 import EngineDown from '../components/EngineDown';
 import { fmtAgoLive, fmtInstant } from '../lib/format';
 
@@ -37,7 +37,16 @@ interface Quote {
 }
 
 interface MarketBlock {
-  consensus: { median_line: number | null; eligible_books: number; observed_at: string } | null;
+  consensus: {
+    median_line: number | null;
+    eligible_books: number;
+    // The rule that admitted the snapshot. Burn-in permits one book, and
+    // the count alone cannot say whether one book was allowed or was all
+    // that arrived.
+    min_books_applied?: number | null;
+    cohort?: string;
+    observed_at: string;
+  } | null;
   reasons: string[];
   eligible: number;
   considered: number;
@@ -238,8 +247,20 @@ export default function LiveSlate() {
                         awayTeamId: g.away_team_id,
                       })}
                       <span className="ml-2 text-xs font-normal text-muted">
-                        {block.consensus.eligible_books} books
+                        {describeBookCoverage(
+                          block.consensus.eligible_books,
+                          block.consensus.min_books_applied,
+                        ).label}
                       </span>
+                      {(() => {
+                        const { caveat } = describeBookCoverage(
+                          block.consensus.eligible_books,
+                          block.consensus.min_books_applied,
+                        );
+                        return caveat ? (
+                          <p className="mt-1 text-xs font-normal text-warning">{caveat}</p>
+                        ) : null;
+                      })()}
                     </div>
                   ) : (
                     <div className="mt-1">

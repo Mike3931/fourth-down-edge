@@ -52,6 +52,7 @@ KICK = datetime(2026, 9, 13, 17, 0, tzinfo=UTC)
 CUTOFF = KICK - timedelta(days=1)
 GAME = "2026_02_KC_BUF"
 MODE = DataMode.DEMO
+COHORT = Cohort.DEMO
 WORKERS = 4
 
 
@@ -167,7 +168,7 @@ def _build_consensus(factory, *, at: datetime) -> str:
     with factory() as s:
         _snap, rep = build_consensus(
             s, canonical_game_id=GAME, market="TOTAL", as_of_at=at,
-            kickoff_utc=KICK, data_mode=MODE)
+            kickoff_utc=KICK, cohort=COHORT, data_mode=MODE)
         s.commit()
     for reason in rep.reasons:
         if "identity outcome:" in reason:
@@ -213,7 +214,7 @@ def _assess(factory, *, at: datetime, player: str = "BUF_QB_ALLEN") -> str:
     with factory() as s:
         result = assess_player_result(
             s, canonical_game_id=GAME, team_id="BUF", player_id=player,
-            as_of_at=at, data_mode=MODE)
+            as_of_at=at, cohort=COHORT, data_mode=MODE)
         s.commit()
         return result.outcome.value
 
@@ -366,7 +367,7 @@ def _build_consensus_window(factory, *, at: datetime, max_age: int) -> str:
     with factory() as s:
         _snap, rep = build_consensus(
             s, canonical_game_id=GAME, market="TOTAL", as_of_at=at,
-            kickoff_utc=KICK, data_mode=MODE, max_age_minutes=max_age)
+            kickoff_utc=KICK, cohort=COHORT, data_mode=MODE, max_age_minutes=max_age)
         s.commit()
     for reason in rep.reasons:
         if "identity outcome:" in reason:
@@ -422,7 +423,7 @@ def _assess_with_state(factory, *, at: datetime, designation: str | None) -> str
         )
         result = assess_player_result(
             s, canonical_game_id=GAME, team_id="BUF", player_id="BUF_WR_DIGGS",
-            as_of_at=at, data_mode=MODE)
+            as_of_at=at, cohort=COHORT, data_mode=MODE)
         s.commit()
         return result.outcome.value
 
@@ -494,7 +495,7 @@ def _record_evaluation(
         result = record_evaluation_result(
             s, prediction=None, canonical_game_id=GAME, evaluation=ev,
             policy=policy, horizon=horizon, as_of_at=CUTOFF,
-            data_completeness=1.0, data_mode=MODE)
+            data_completeness=1.0, cohort=COHORT, data_mode=MODE)
         s.commit()
         return result.outcome.value
 

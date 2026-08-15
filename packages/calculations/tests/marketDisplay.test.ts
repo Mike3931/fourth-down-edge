@@ -16,6 +16,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  describeBookCoverage,
   describeConsensus,
   describeQuote,
   formatLine,
@@ -384,5 +385,51 @@ describe('describeStrengthEdge', () => {
     expect(a).toContain('CIN');
     expect(b).toContain('LAR');
     expect(a).not.toBe(b);
+  });
+});
+
+describe('describeBookCoverage', () => {
+  it('does not say "1 books"', () => {
+    expect(describeBookCoverage(1, 1).label).toBe('1 book');
+    expect(describeBookCoverage(3, 3).label).toBe('3 books');
+  });
+
+  it('says in words that one permitted book is not a market consensus', () => {
+    // The burn-in cohort admits a single book on purpose. Rendering
+    // "-2.5 · 1 book" and stopping would let a reader take one book's
+    // price for a market number, which is the whole thing the consensus
+    // machinery exists to avoid.
+    const { caveat } = describeBookCoverage(1, 1);
+    expect(caveat).toContain('not a market consensus');
+    expect(caveat).toContain('this cohort permits');
+  });
+
+  it('adds nothing to an ordinary three-book consensus', () => {
+    expect(describeBookCoverage(3, 3).caveat).toBeNull();
+    expect(describeBookCoverage(7, 3).caveat).toBeNull();
+  });
+
+  it('states the rule when coverage is thin but not the minimum', () => {
+    // Two books under a one-book minimum: not the permitted floor, still
+    // thinner than the normal rule, so the applied minimum is stated
+    // rather than implied.
+    expect(describeBookCoverage(2, 1).caveat).toBe('minimum applied: 1');
+  });
+
+  it('says nothing extra when the rule was never recorded', () => {
+    // Rows written before `min_books_applied` existed. Silence is
+    // correct; inventing "minimum applied: 3" would assert something the
+    // row does not carry.
+    expect(describeBookCoverage(1, null).caveat).toBeNull();
+    expect(describeBookCoverage(1, undefined).caveat).toBeNull();
+    expect(describeBookCoverage(1, null).label).toBe('1 book');
+  });
+
+  it('never claims a consensus is better than it is', () => {
+    for (const n of [1, 2]) {
+      const { label, caveat } = describeBookCoverage(n, 1);
+      expect(label).not.toContain('consensus');
+      expect((caveat ?? '').toLowerCase()).not.toContain('reliable');
+    }
   });
 });

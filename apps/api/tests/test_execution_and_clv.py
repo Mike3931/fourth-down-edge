@@ -88,7 +88,7 @@ def _consensus(
     nv_home: float | None = None, nv_over: float | None = None,
 ) -> ConsensusSnapshot:
     row = ConsensusSnapshot(
-        data_mode=MODE.value, canonical_game_id=GAME, market=market,
+        data_mode=MODE.value, cohort=COHORT.value, min_books_applied=3, canonical_game_id=GAME, market=market,
         method_version="consensus-v1", provider_mode=ProviderMode.FIXTURE.value,
         median_line=line, home_price_american=home, away_price_american=away,
         over_price_american=over, under_price_american=under,
@@ -122,7 +122,7 @@ def _entry(
     return record_evaluation(
         db, prediction=None, canonical_game_id=GAME, evaluation=ev, policy=policy,
         horizon="T-24h", as_of_at=as_of or (KICK - timedelta(days=1)),
-        data_completeness=1.0, data_mode=MODE,
+        data_completeness=1.0, cohort=COHORT, data_mode=MODE,
     )
 
 
