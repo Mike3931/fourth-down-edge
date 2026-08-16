@@ -89,10 +89,88 @@ class ConflictingDuplicatesFound(RuntimeError):
     """
 
 
-def _identity_for(entity: str):
-    from fde_api.forward import domain_identity as di
+# The versions and field sets THIS revision hashed with, frozen here.
+#
+# These used to be read live from `fde_api.forward.domain_identity`. That
+# was invisible while the live constants still said v1 and became wrong the
+# moment `d8f41c6a3b92` moved them to v2: the version string is mixed INTO
+# the digest, and the allowlist decides which fields reach it, so borrowing
+# either made a later commit silently change what this migration writes -
+# and it stamped the borrowed version on the result, claiming current code
+# could reproduce a hash it computed under different rules.
+#
+# A migration describes the schema AND the semantics at a point in history.
+# It may not import a constant a later commit can redefine. Same argument
+# `d8f41c6a3b92` makes for spelling out the cohort vocabulary rather than
+# importing the enum.
+#
+# `cohort` here renders the row's DATA MODE, because that is what this
+# revision meant by the word. Under v2 it means the row's cohort column,
+# which does not exist at this revision. Hence v1, honestly labelled: rows
+# backfilled here are refused by `require_known_versions`, which is correct
+# - this code cannot reproduce them.
+_V1_LOGICAL = "domain-logical-identity-v1"
+_V1_CONTENT = "domain-content-v1"
 
-    return di.BY_ENTITY[entity]
+_FIELDS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
+    "consensus_snapshot": (
+        ("canonical_game_id", "market", "cutoff", "cohort", "method_version"),
+        ("median_line", "home_price_american", "away_price_american",
+         "over_price_american", "under_price_american", "no_vig_home_prob",
+         "no_vig_over_prob", "eligible_books", "quote_lineage",
+         "line_dispersion", "price_dispersion", "provider_mode"),
+    ),
+    "research_evaluation": (
+        ("canonical_game_id", "prediction_identity", "price_identity",
+         "evaluation_type", "cohort", "policy_version", "model_version",
+         "decision_context_hash"),
+        ("status", "model_probability", "conservative_probability",
+         "break_even_probability", "expected_value", "decision_reason_codes",
+         "suppressed", "data_completeness", "execution_eligible"),
+    ),
+    "availability_assessment": (
+        ("canonical_game_id", "player_id", "cutoff", "cohort", "method_version"),
+        ("state", "active_prob_low", "active_prob_high", "snap_share_low",
+         "snap_share_high", "confidence_tier", "is_starting_qb",
+         "observation_lineage", "missing_data"),
+    ),
+    "price_observation": (
+        ("canonical_game_id", "market", "selection", "observed_at", "cohort",
+         "provider_mode", "source_identity"),
+        ("line", "american", "decimal_odds", "break_even_probability",
+         "confirmed", "source", "policy_version", "code_commit"),
+    ),
+}
+
+
+class _FrozenIdentity:
+    """This revision's hashing, independent of the live module.
+
+    Only `canonical_payload` and `digest` are borrowed: they are the
+    RENDERING (float precision, timestamp normalisation, missing-vs-null),
+    and a change to either is required to bump the version string, which
+    is pinned above - so a drift there cannot pass silently.
+    """
+
+    def __init__(self, logical: tuple[str, ...], content: tuple[str, ...]) -> None:
+        self.logical_fields = logical
+        self.content_fields = content
+
+    def logical_hash(self, values: dict) -> str:
+        di = _identity_module()
+        return di.digest(
+            di.canonical_payload(values, self.logical_fields), version=_V1_LOGICAL
+        )
+
+    def content_hash(self, values: dict) -> str:
+        di = _identity_module()
+        return di.digest(
+            di.canonical_payload(values, self.content_fields), version=_V1_CONTENT
+        )
+
+
+def _identity_for(entity: str) -> _FrozenIdentity:
+    return _FrozenIdentity(*_FIELDS[entity])
 
 
 def _row_values(table: str, row: sa.Row) -> tuple[dict, dict]:
@@ -249,8 +327,9 @@ def upgrade() -> None:
                     "content_hash=:ch WHERE id=:rid"
                 ),
                 {
-                    "lv": _identity_module().LOGICAL_IDENTITY_VERSION, "lh": lid,
-                    "cv": _identity_module().CONTENT_HASH_VERSION, "ch": cid,
+                    # This revision's versions, not today's - see _FIELDS.
+                    "lv": _V1_LOGICAL, "lh": lid,
+                    "cv": _V1_CONTENT, "ch": cid,
                     "rid": row._mapping["id"],
                 },
             )
