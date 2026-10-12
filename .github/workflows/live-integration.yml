@@ -1,0 +1,71 @@
+name: Live engine acceptance
+
+# This workflow is intentionally independent of the demo-backed journey.
+# It fails if the backend cannot start, migrations fail, or live pages
+# silently settle into the engine-down state.
+on:
+  push:
+    branches: [feature/forward-data-capture, 'codex/fde-*']
+  pull_request:
+    branches: [feature/forward-data-capture, codex/fde-release0-ci-db-20261012]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  real-engine-e2e:
+    name: FastAPI + browser integration (engine required)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FDE_DATABASE_URL: sqlite:///./data/ci_live_acceptance.db
+      FDE_ALLOW_UNAUTHENTICATED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: npm ci
+      - name: Install Python analytical-engine dependencies
+        working-directory: apps/api
+        run: uv sync --locked
+      - name: Migrate isolated disposable test database
+        working-directory: apps/api
+        run: |
+          mkdir -p data
+          uv run alembic upgrade head
+      - name: Validate populated-migration and duplicate-refusal fixtures
+        working-directory: apps/api
+        run: |
+          uv run pytest -q tests/test_migration_upgrade.py tests/test_migration_stamps_its_own_version.py tests/test_identity_resolution.py
+          uv run pytest -q tests/test_diagnose_local_database.py tests/test_snapshot_capture_database.py tests/test_handoff_layout.py
+      - name: Verify frontend typecheck and production build
+        run: npm run build
+      - name: Start actual analytical engine
+        working-directory: apps/api
+        run: |
+          nohup uv run uvicorn fde_api.api.main:app --host 127.0.0.1 --port 8000 > "$RUNNER_TEMP/fde-engine.log" 2>&1 &
+          echo $! > "$RUNNER_TEMP/fde-engine.pid"
+          for i in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:8000/health > "$RUNNER_TEMP/engine-health.json"; then
+              break
+            fi
+            sleep 2
+          done
+          curl --fail --show-error http://127.0.0.1:8000/health
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Require live FastAPI/browser integration
+        run: npx playwright test --config=playwright.live.config.ts
+      - name: Upload engine log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-engine-acceptance-log
+          path: ${{ runner.temp }}/fde-engine.log
+          if-no-files-found: ignore

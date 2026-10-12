@@ -9,7 +9,7 @@ on:
   push:
     branches: [master]
   pull_request:
-    branches: [master]
+    branches: [master, feature/forward-data-capture, codex/fde-release0-ci-db-20261012]
   workflow_dispatch: {}
 
 concurrency:
