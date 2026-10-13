@@ -483,3 +483,51 @@ class TestTheSpreadAndTheMoneylineAgreeAboutTheFavourite:
                        home_ml=home_ml, away_ml=away_ml)
         )
         assert by_spread == by_ml
+
+
+def test_rejected_range_falls_back_to_exact_daily_queries(capture, monkeypatch):
+    import httpx
+    requests = []
+
+    def get(url, **kwargs):
+        requests.append(kwargs.get('params'))
+        request = httpx.Request('GET', url)
+        if '?' in url:
+            return httpx.Response(400, request=request)
+        day = kwargs['params']['dates']
+        return httpx.Response(200, request=request, json={'events': [{'id': day}]})
+
+    monkeypatch.setattr(capture.httpx, 'get', get)
+    payload = capture.fetch('20261018')
+    assert requests == [None, {'dates': '20261017'}, {'dates': '20261018'}, {'dates': '20261019'}]
+    assert [e['id'] for e in payload['events']] == ['20261017', '20261018', '20261019']
+
+
+def test_daily_failure_does_not_return_partial_capture(capture, monkeypatch):
+    import httpx
+    calls = 0
+
+    def get(url, **kwargs):
+        nonlocal calls
+        calls += 1
+        return httpx.Response(400 if calls == 1 else 503 if calls == 3 else 200,
+                              request=httpx.Request('GET', url), json={'events': []})
+
+    monkeypatch.setattr(capture.httpx, 'get', get)
+    with pytest.raises(httpx.HTTPStatusError):
+        capture.fetch('20261018')
+
+
+def test_conflicting_daily_event_never_silently_overwrites(capture, monkeypatch):
+    import httpx
+    calls = 0
+
+    def get(url, **kwargs):
+        nonlocal calls
+        calls += 1
+        return httpx.Response(400 if calls == 1 else 200, request=httpx.Request('GET', url),
+                              json={'events': [{'id': 'stable', 'value': calls}]})
+
+    monkeypatch.setattr(capture.httpx, 'get', get)
+    with pytest.raises(ValueError, match='Conflicting ESPN events'):
+        capture.fetch('20261018')

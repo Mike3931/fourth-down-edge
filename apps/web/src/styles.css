@@ -21,6 +21,15 @@
   --color-bad: #e05d5d;
   --color-model: #8b93d6;
 
+  /* Engine screens use these semantic names; keep them on the same palette. */
+  --color-fg: var(--color-ink);
+  --color-muted: var(--color-ink-muted);
+  --color-border: var(--color-edge);
+  --color-bg-subtle: var(--color-panel-raised);
+  --color-success: var(--color-ok);
+  --color-warning: var(--color-warn);
+  --color-danger: var(--color-bad);
+
   --font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
   --font-mono: 'Cascadia Mono', 'Consolas', ui-monospace, monospace;
 }

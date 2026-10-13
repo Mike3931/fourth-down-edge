@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { soonestScheduledWeek, weekLabel } from '@fde/calculations';
 import { useForwardSlate, type SlateGame } from '../lib/engine';
 import EngineDown from '../components/EngineDown';
@@ -171,7 +172,9 @@ export default function SlateLive() {
               <tr key={g.canonical_game_id} className="border-t border-border">
                 <td className="py-1.5 pr-4 whitespace-nowrap text-muted">{fmtKick(g.kickoff_utc)}</td>
                 <td className="py-1.5 pr-4 font-medium text-fg">
-                  {g.away_team_id} @ {g.home_team_id}
+                  <Link to={`/live/game/${encodeURIComponent(g.canonical_game_id)}`} className="text-accent hover:underline">
+                    {g.away_team_id} @ {g.home_team_id}
+                  </Link>
                   {g.neutral_site && (
                     <span className="ml-2 rounded bg-bg-subtle px-1.5 py-0.5 text-[11px] text-muted">
                       neutral

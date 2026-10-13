@@ -164,8 +164,38 @@ def fetch(dates: str | None = None) -> dict[str, Any]:
     query = espn_query_range(dates)
     url = SCOREBOARD + (f"?dates={query}" if query else "")
     r = httpx.get(url, timeout=45, follow_redirects=True)
-    r.raise_for_status()
-    return r.json()
+    if r.status_code != 400 or dates is None:
+        r.raise_for_status()
+        return r.json()
+    # The public endpoint can reject a range while accepting its individual
+    # days. Query exactly the widened requested window, never the default
+    # week. Fail the whole capture if any day fails; no partial slate.
+    first, last = _parse_dates(dates)
+    first -= timedelta(days=1)
+    last += timedelta(days=1)
+    if (last - first).days >= 31:
+        raise ValueError('ESPN daily fallback is limited to 31 days')
+    events: dict[str, dict[str, Any]] = {}
+    combined: dict[str, Any] = {}
+    day = first
+    while day <= last:
+        daily = httpx.get(SCOREBOARD, params={'dates': day.strftime('%Y%m%d')},
+                         timeout=45, follow_redirects=True)
+        daily.raise_for_status()
+        payload = daily.json()
+        if not isinstance(payload.get('events'), list):
+            raise ValueError('ESPN daily response lacks an events array')
+        combined = {k: v for k, v in payload.items() if k != 'events'}
+        for item in payload['events']:
+            if not isinstance(item, dict) or not item.get('id'):
+                raise ValueError('ESPN event lacks its stable provider ID')
+            identifier = str(item['id'])
+            if identifier in events and events[identifier] != item:
+                raise ValueError('Conflicting ESPN events across daily responses')
+            events[identifier] = item
+        day += timedelta(days=1)
+    combined['events'] = list(events.values())
+    return combined
 
 
 def _spread_from_flags(odds: dict[str, Any], side: str) -> float | None:
@@ -509,8 +539,8 @@ def main() -> int:
     try:
         payload = fetch(args.dates)
         games = within_utc_window(discover(payload), args.dates)
-    except ValueError as e:
-        print(f"--dates: {e}", file=sys.stderr)
+    except (ValueError, httpx.HTTPError) as e:
+        print(f"ESPN capture failed; no records written: {e}", file=sys.stderr)
         return 2
 
     print(f"\n=== ESPN PUBLIC SCOREBOARD  ({len(games)} game(s)) ===")

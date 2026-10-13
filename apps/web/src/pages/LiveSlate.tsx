@@ -200,7 +200,9 @@ export default function LiveSlate() {
           <div className="border-b border-border p-4">
             <div className="flex flex-wrap items-baseline gap-2">
               <h2 className="text-lg font-semibold text-fg">
-                {g.away_team_id} @ {g.home_team_id}
+                <Link to={`/live/game/${encodeURIComponent(g.canonical_game_id)}`} className="text-accent hover:underline">
+                  {g.away_team_id} @ {g.home_team_id}
+                </Link>
               </h2>
               <span className="rounded bg-bg-subtle px-2 py-0.5 text-xs text-muted">
                 {g.season} {g.season_type}

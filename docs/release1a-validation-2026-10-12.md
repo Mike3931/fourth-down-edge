@@ -1,0 +1,11 @@
+# Release 1A validation
+
+Stacked dependency: Release 0 PR #1; original audited feature SHA f388e6954ab886ab11990272d8d10cc344b9e52c. Source link script verified all six original Git blobs before changes; subsequent reruns now require exact patched hashes as well. Windows fixture newline bugs corrected.
+
+Real slate/candidate matchups open /live/game/:canonicalId, separate from the demo lab. Readonly detail displays observed prices, provenance, missing consensus, frozen candidates and unapproved-model limits. Source timestamps are compared as instants; contradictory equal-time newest quotes retained and warned, never silently chosen. Explicit refresh/error recovery, named headings/table/column scopes and mobile price cards. Corrected missing semantic theme tokens used by engine pages.
+
+Public ESPN date-range calls returned 400 while individual days returned 200. Added bounded daily fallback for exactly the widened UTC request window, requiring every response and refusing inconsistent event IDs. No default-week substitution or partial write. Three unit tests cover recovery, intermediate failure and conflicting repeated events. Validation capture on disposable SQLite: 15 real games, 84 actual published quotes, one final result. Provider ESPN, named book DraftKings; one-book evidence does not establish official three-book consensus or Bet365 availability. No private capture database used by this service.
+
+Local evidence: 239 JavaScript tests; production TS/build; six patcher tests and 38 ESPN cases; Ruff and mypy; 24 fixture-backed browser tests (not provider validation); six actual FastAPI/browser tests including opt-in current-provider desktop/mobile journey, keyboard link activation, deep-link reload, actual captured quote table. Screenshots in qa/handoff-2026-10-12. Full CI on exact PR SHA required before merge/deploy.
+
+Unresolved: private historical semantic conflict group, no approved model/accuracy/profit claim, no real-game paper ledger workflow, no player-prop/SGP recommendation or Bet365 integration, no secure hosted service deployment. Read docs/product-outcome-gap.md. Older installed 1.0.60 and its separate richer research branch remain intact; these changes are feature-branch source increments, not an installed upgrade.

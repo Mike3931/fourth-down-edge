@@ -34,7 +34,7 @@ const NAV = (firstGameId: string | undefined) => [
   // Falls back to the DEMO slate, not the live one. A nav item sitting
   // under "Demonstration data" that lands the reader on engine-backed
   // data is the exact confusion this split exists to prevent.
-  { to: firstGameId ? `/game/${firstGameId}` : '/slate-demo', label: 'Game Lab', icon: '⚗', live: false, group: DEMO_GROUP },
+  { to: firstGameId ? `/game/${firstGameId}` : '/slate-demo', label: 'Game Lab (demo)', icon: '⚗', live: false, group: DEMO_GROUP },
   { to: '/injuries', label: 'Injury Center', icon: '✚', live: false, group: DEMO_GROUP },
   { to: '/market', label: 'Market Monitor', icon: '≋', live: false, group: DEMO_GROUP },
   { to: '/portfolio', label: 'Bet Portfolio', icon: '▦', live: false, group: DEMO_GROUP },
@@ -65,7 +65,7 @@ const LIVE_ROUTES = new Set([
 const SETUP_ROUTES = new Set(['/settings']);
 
 function isLiveRoute(pathname: string): boolean {
-  return LIVE_ROUTES.has(pathname);
+  return LIVE_ROUTES.has(pathname) || pathname.startsWith('/live/game/');
 }
 
 function isSetupRoute(pathname: string): boolean {

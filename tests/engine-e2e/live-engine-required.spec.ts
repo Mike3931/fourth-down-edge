@@ -69,3 +69,37 @@ test('research candidate and captured-market API endpoints fail closed, not mock
     expect(payload.research_banner).toMatch(/RESEARCH/i);
   }
 });
+
+
+test('current public NFL captures navigate to Game Lab on desktop and mobile', async ({ page, request }) => {
+  test.skip(process.env.FDE_E2E_REAL_CAPTURE !== '1', 'Separate opt-in public-provider journey; empty database gate does not prove ingestion.');
+  const response = await request.get('/research-api/v1/forward/slate');
+  expect(response.ok()).toBeTruthy();
+  const slate = await response.json();
+  const game = slate.games.find((g: { kickoff_utc: string }) => Date.parse(g.kickoff_utc) > Date.now());
+  expect(game, 'current real capture must contain an upcoming fixture').toBeTruthy();
+  await page.goto('/');
+  await page.getByRole('button', { name: /enter local demo session/i }).click();
+  await page.goto('/slate');
+  const showAll = page.getByRole('button', { name: 'show all weeks' });
+  if (await showAll.isVisible()) await showAll.click();
+  const matchup = page.getByRole('link', { name: `${game.away_team_id} @ ${game.home_team_id}`, exact: true });
+  await matchup.focus();
+  await matchup.press('Enter');
+  await expect(page).toHaveURL(new RegExp(`/live/game/${game.canonical_game_id}$`));
+  await expect(page.getByRole('heading', { name: `Game Lab · ${game.away_team_id} @ ${game.home_team_id}` })).toBeVisible();
+  await expect(page.getByRole('table', { name: 'Latest observed market prices' })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'espn / LIVE', exact: true }).first()).toBeVisible();
+  await expect(page.getByText('DEMONSTRATION DATA — NOT FOR REAL-MONEY DECISIONS')).toHaveCount(0);
+  await page.screenshot({ path: 'qa/handoff-2026-10-12/game-lab-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.reload();
+  await expect(page.getByRole('heading', { name: `Game Lab · ${game.away_team_id} @ ${game.home_team_id}` })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  await page.screenshot({ path: 'qa/handoff-2026-10-12/game-lab-mobile.png', fullPage: true });
+  await page.getByRole('link', { name: '← All games' }).click();
+  await expect(page.getByRole('table', { name: 'Ingested fixtures' })).toBeVisible();
+  await page.screenshot({ path: 'qa/handoff-2026-10-12/slate-mobile.png', fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.screenshot({ path: 'qa/handoff-2026-10-12/slate-desktop.png', fullPage: true });
+});

@@ -5,6 +5,7 @@ import Shell from './components/Shell';
 import SignIn from './pages/SignIn';
 import TodaysPicks from './pages/TodaysPicks';
 import LiveSlate from './pages/LiveSlate';
+import LiveGameLab from './pages/LiveGameLab';
 import CandidatesLive from './pages/CandidatesLive';
 import ForwardTestLive from './pages/ForwardTestLive';
 import SlateLive from './pages/SlateLive';
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/live" replace />} />
         <Route path="/picks-demo" element={<TodaysPicks />} />
         <Route path="/live" element={<LiveSlate />} />
+        <Route path="/live/game/:gameId" element={<LiveGameLab />} />
         <Route path="/slate" element={<SlateLive />} />
         <Route path="/candidates" element={<CandidatesLive />} />
         <Route path="/forward-test" element={<ForwardTestLive />} />
