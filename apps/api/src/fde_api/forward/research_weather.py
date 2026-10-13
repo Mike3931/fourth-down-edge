@@ -66,7 +66,9 @@ def collect_weather(s: Session, *, now: datetime) -> dict[str, int]:
                               updated_at=now)
                 s.add(venue)
                 s.flush()
-            if venue.verification_status != "VERIFIED" or venue.roof_type != "OUTDOOR":
+            if (venue.verification_status != "VERIFIED" or venue.roof_type != "OUTDOOR"
+                    or venue.country != "US" or not venue.weather_applicable
+                    or venue.latitude is None or venue.longitude is None):
                 counts["weather_not_attempted"] += 1
                 continue
             attempts += 1

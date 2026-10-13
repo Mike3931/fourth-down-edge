@@ -38,6 +38,7 @@ def main() -> int:
 
 def run(args: argparse.Namespace, target: Path) -> int:
     os.environ["FDE_DATABASE_URL"] = f"sqlite:///{target.as_posix()}"
+    os.environ["FDE_DATA_DIR"] = str(target.parent / (target.stem + ".research-data"))
     from espn_live_capture import discover, fetch, persist, within_utc_window
     from sqlalchemy.orm import sessionmaker
 
