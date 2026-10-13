@@ -11,3 +11,5 @@ Full Python suite and CI PostgreSQL matrix pending at initial PR creation. Do no
 Private captured-data snapshot remains outside repository. Its schema is newer than the audited branch (f6d92c4ab811); no downgrade attempted. Stored-identity diagnostic found no duplicate hashes; semantic inventory found ONE conflicting forward-ledger group. This distinction is material: column presence is not conflict clearance. Every source row retained. Private inventory and snapshot manifest are local only; no record contents uploaded. No canonical choice or relabeling authorized or performed.
 
 Provider/live model readiness is not established by an empty migrated-database gate. Source capture, real current NFL journey and full browser/mobile acceptance follow in Release 1A.
+
+First CI source gates passed, including PostgreSQL engine, frontend, dependencies and mandatory engine browser checks. Live acceptance workflow failed only during setup-uv post-job cache pruning after five minutes (uv 0.13.0 exit 2). Pin tested uv 0.12.1 and disable optional cache pruning; rerun exact commit CI. This is an infrastructure repair, not a waived source check.

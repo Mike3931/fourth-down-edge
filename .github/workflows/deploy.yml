@@ -80,7 +80,8 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
         with:
-          enable-cache: true
+          enable-cache: false
+          version: "0.12.1"
 
       - name: Install locked dependencies
         run: uv sync --locked
@@ -270,7 +271,8 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
         with:
-          enable-cache: true
+          enable-cache: false
+          version: "0.12.1"
 
       - uses: actions/setup-python@v5
         with:
