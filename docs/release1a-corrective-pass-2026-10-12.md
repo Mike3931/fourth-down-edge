@@ -24,6 +24,8 @@ Regression fixtures contain 405 historical games plus an upcoming game, and 205 
 
 Before CI: Ruff and mypy passed, focused backend/governance tests passed (119), production build and 239 frontend unit tests passed, schema/RLS/immutability checks passed, client secret audit passed, and the browser suite passed (25). Final-source CI and fresh real-public-source acceptance must be read back before merge readiness is asserted. Updated PR evidence records the exact tested commit and workflow links.
 
+The first complete CI challenge detected nine failures in an older lightweight exclusion fixture lacking provider metadata. Its quote contract was corrected without weakening the production rule; an additional regression verifies the new exclusion counter partitions correctly. All PostgreSQL gates passed in that run. The entire suite is rerun on the corrected source rather than counting the first run as acceptance. Game Lab's absence message explicitly names the endpoint's pregame window so it cannot imply absence across all history and future horizons.
+
 Expected exclusions to verify from final CI: network-marked tests are intentionally excluded from deterministic CI; PostgreSQL markers run as separate mandatory gates. Artifact-dependent skips must be enumerated from pytest's short summary. The actual public-capture browser journey is opt-in and skipped by default in CI; it is run locally against an isolated migrated database. Deployment is skipped by PR policy and explicitly prohibited here. Production dependency audit currently reports two moderate router findings; the existing Python audit exceptions remain documented in security.md.
 
 ## Preservation

@@ -280,7 +280,7 @@ export default function LiveGameLab() {
           <p className="mt-2 text-sm text-warning">Evaluation gate closed. See Data Health before interpreting any prior research record.</p>
         )}
         {candidates.data && candidates.data.has_more === false && candidates.data.canonical_game_id === gameId && research.length === 0 && (
-          <p className="mt-2 text-sm text-muted">No active WATCH or RESEARCH_CANDIDATE entry for this game.
+          <p className="mt-2 text-sm text-muted">No active WATCH or RESEARCH_CANDIDATE entry for this game within this endpoint's pregame window.
             This is not a model prediction of zero edge, and PASS records are not part of this endpoint.</p>
         )}
         {research.map((candidate) => (
