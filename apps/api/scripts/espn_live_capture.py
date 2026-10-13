@@ -421,6 +421,9 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                     season=g["season"],
                     season_type=g["season_type"],
                     week=week,
+                    change_summary=(existing.change_summary if existing is not None
+                                    and existing.game_status == "FINAL" else None),
+                    supersedes_id=(existing.id if existing is not None else None),
                     home_team_id=g["home"],
                     away_team_id=g["away"],
                     kickoff_utc=g["kickoff_utc"],

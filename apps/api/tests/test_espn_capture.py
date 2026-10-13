@@ -561,3 +561,23 @@ def test_source_week_correction_appends_and_preserves_original(capture, db):
 
     slate = get_forward_slate()
     assert slate['games'][0]['week'] == 6
+
+
+def test_week_correction_keeps_verified_final_score_and_original_lineage(capture, db):
+    from fde_api.forward.modes import DataMode
+    from fde_api.forward.results import result_scores
+
+    game = _game(status='STATUS_FINAL', completed=True, quotes=[])
+    game.update(season_type='REG', week=5)
+    capture.persist([game], data_mode_value='LIVE_RESEARCH')
+    with db() as session:
+        before = list(session.scalars(select(ScheduleObservation).order_by(ScheduleObservation.id)))
+        originals = [(r.id, r.week, r.change_summary, r.content_hash) for r in before]
+    game['week'] = 6
+    outcome = capture.persist([game], data_mode_value='LIVE_RESEARCH')
+    assert outcome['results_refused'] == 0
+    with db() as session:
+        after = list(session.scalars(select(ScheduleObservation).order_by(ScheduleObservation.id)))
+        assert [(r.id, r.week, r.change_summary, r.content_hash) for r in after[:-1]] == originals
+        assert after[-1].supersedes_id == before[-1].id
+        assert result_scores(session, canonical_game_id=game['canonical_game_id'], data_mode=DataMode.LIVE_RESEARCH) == (30, 33)
