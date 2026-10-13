@@ -5,7 +5,7 @@ import hashlib
 import json
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from fde_api.db.forward_models import GameIdentityBinding, GameIdentityReview, ScheduleObservation
@@ -20,11 +20,19 @@ def resolve_game(s: Session, *, provider: str, provider_game_id: str, data_mode:
     Once bound, kickoff/week revisions retain the identity. Legacy duplicates
     and contradictory participant/season histories are never arbitrarily merged.
     """
-    rows = list(s.scalars(select(ScheduleObservation).where(
-        ScheduleObservation.data_mode == data_mode,
-    ).order_by(ScheduleObservation.observed_at, ScheduleObservation.id)))
     key = (data_mode, provider, provider_game_id)
     binding = s.get(GameIdentityBinding, key)
+    rows = list(s.scalars(select(ScheduleObservation).where(
+        ScheduleObservation.data_mode == data_mode,
+        or_(and_(ScheduleObservation.season == season,
+                 ScheduleObservation.season_type == season_type,
+                 ScheduleObservation.home_team_id.in_([home, away]),
+                 ScheduleObservation.away_team_id.in_([home, away])),
+            and_(ScheduleObservation.provider == provider,
+                 ScheduleObservation.provider_game_id == provider_game_id),
+            ScheduleObservation.canonical_game_id.in_([
+                proposed_id, binding.canonical_game_id if binding else proposed_id])),
+    ).order_by(ScheduleObservation.observed_at, ScheduleObservation.id)))
     anchors = {r.canonical_game_id for r in rows
                if r.provider == provider and r.provider_game_id == provider_game_id}
     if binding:
@@ -92,6 +100,12 @@ def resolve_game(s: Session, *, provider: str, provider_game_id: str, data_mode:
                 review("CANONICAL_ID_COLLISION", {canonical})
                 return None
     if binding is None:
+        history = list(s.scalars(select(ScheduleObservation).where(
+            ScheduleObservation.data_mode == data_mode,
+            ScheduleObservation.canonical_game_id == canonical)))
+        if any((r.season, r.season_type, r.home_team_id, r.away_team_id) != participants for r in history):
+            review("PARTICIPANT_OR_SEASON_DISAGREEMENT", {canonical})
+            return None
         claim_id = hashlib.sha256(json.dumps(participants).encode()).hexdigest()
         claim = s.get(GameIdentityBinding, (data_mode, "_fixture_claim", claim_id))
         if claim and claim.canonical_game_id != canonical:

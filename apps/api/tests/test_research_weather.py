@@ -62,3 +62,44 @@ def test_collection_is_bounded_and_stops_on_outage(monkeypatch, failure):
     assert len(calls) == (1 if failure else 6)
     assert counts["weather_unavailable"] == int(failure)
     assert counts["weather_not_attempted"] == (9 if failure else 4)
+
+
+def test_identical_source_body_appends_new_period_after_reschedule(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import Session
+
+    from fde_api.config import settings
+    from fde_api.db.forward_models import Venue, WeatherForecastVintage
+    from fde_api.db.models import Base
+    from fde_api.forward.weather import capture_forecast_for_game
+
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    starts = [KICKOFF, KICKOFF + timedelta(days=1)]
+    payload = {"properties": {"updated": NOW.isoformat(), "periods": [
+        {"startTime": start.isoformat(), "endTime": (start + timedelta(hours=1)).isoformat(),
+         "temperature": 55 + i, "temperatureUnit": "F", "windSpeed": "5 mph"}
+        for i, start in enumerate(starts)]}}
+
+    def respond(request):
+        if "/points/" in str(request.url):
+            return httpx.Response(200, json={"properties": {"forecastHourly": "https://api.weather.gov/forecast"}})
+        return httpx.Response(200, json=payload)
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as s, httpx.Client(transport=httpx.MockTransport(respond)) as http:
+        venue = Venue(id="DEN", name="Denver", latitude=39.7, longitude=-105.0,
+            country="US", roof_type="OUTDOOR", source="test", verification_status="VERIFIED", updated_at=NOW)
+        s.add(venue)
+        s.flush()
+        for i, kickoff in enumerate(starts):
+            capture_forecast_for_game(s, canonical_game_id="same-game", venue=venue,
+                kickoff_utc=kickoff, observed_at=NOW + timedelta(minutes=i),
+                client=CoveringForecastClient(http, kickoff, NOW))
+        rows = list(s.scalars(select(WeatherForecastVintage).order_by(WeatherForecastVintage.id)))
+        assert len(rows) == 2 and rows[0].raw_hash == rows[1].raw_hash
+        assert [row.forecast_period_start for row in rows] == starts
+        assert [row.temp_f for row in rows] == [55, 56]
+        assert capture_forecast_for_game(s, canonical_game_id="same-game", venue=venue,
+            kickoff_utc=starts[1], observed_at=NOW + timedelta(minutes=3),
+            client=CoveringForecastClient(http, starts[1], NOW)) is None

@@ -16,6 +16,8 @@ Migration `e92a61bf4037` creates empty crosswalk/review/workspace tables only. N
 
 ## Worker protection
 
+Forecast deduplication now includes the selected forecast period as well as the source-body hash. When a reschedule selects a different period from an unchanged NWS response, a new vintage is appended under the same canonical game; the old forecast remains intact. Repeating that new period is still a no-op. Identity candidate reads are scoped to the relevant season/participants/source key, with complete canonical history checked before binding, rather than scanning unrelated seasons for every fixture.
+
 `init_research_workspace.py` creates only a nonexistent file using exclusive creation, migrates that explicit new target in a separate process, and records a database UUID plus filesystem device/file identity. It cannot adopt a populated file. The attestation is local, ignored by Git, and not a provider credential.
 
 The worker requires the matching UUID and filesystem identity; a renamed/copied file plus copied sidecar cannot pass. Known protected databases and hard-linked/symlinked aliases are rejected by file identity. Unregistered profiles and any attested database containing historical forward evaluations, backtests or model evaluations are refused. Additional protected paths can be supplied through `FDE_PROTECTED_DATABASES`. A serial process lock prevents overlapping workers; authorization is rechecked each cycle. This protects against accidental profile selection/copying, not a hostile local owner deliberately forging database contents and attestations.

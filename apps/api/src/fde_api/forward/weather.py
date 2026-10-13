@@ -163,10 +163,12 @@ def capture_forecast_for_game(
             WeatherForecastVintage.canonical_game_id == canonical_game_id,
             WeatherForecastVintage.data_mode == data_mode.value,
         )
-        .order_by(WeatherForecastVintage.observed_at.desc())
+        .order_by(WeatherForecastVintage.observed_at.desc(), WeatherForecastVintage.id.desc())
         .limit(1)
     ).first()
-    if newest is not None and newest.raw_hash == raw_hash:
+    period_start = datetime.fromisoformat(period["startTime"]) if period and period.get("startTime") else None
+    if (newest is not None and newest.raw_hash == raw_hash
+            and newest.forecast_period_start == period_start):
         return None
 
     settings.ensure_dirs()
@@ -192,7 +194,7 @@ def capture_forecast_for_game(
         office=grid.get("office"),
         grid_x=grid.get("grid_x"),
         grid_y=grid.get("grid_y"),
-        forecast_period_start=datetime.fromisoformat(period["startTime"]) if period and period.get("startTime") else None,
+        forecast_period_start=period_start,
         forecast_period_end=datetime.fromisoformat(period["endTime"]) if period and period.get("endTime") else None,
         temp_f=float(temp) if temp is not None else None,
         wind_mph=_parse_wind((period or {}).get("windSpeed")),
