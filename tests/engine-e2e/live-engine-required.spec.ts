@@ -24,16 +24,46 @@ test('the real backend responds with a migrated database', async ({ request }) =
   expect(Array.isArray(result.games)).toBeTruthy();
 });
 
-test('the live slate uses the real engine rather than the demo fallback', async ({ page }) => {
-  const response = page.waitForResponse((r) => r.url().endsWith('/research-api/v1/forward/live'));
+test('the War Room uses the real engine rather than the demo fallback', async ({ page }) => {
+  const response = page.waitForResponse((r) => r.url().endsWith('/research-api/v1/research/briefing'));
   await page.goto('/');
   await page.getByRole('button', { name: /enter local demo session/i }).click();
   expect((await response).ok()).toBeTruthy();
-  await expect(page).toHaveURL(/\/live$/);
-  await expect(page.getByRole('heading', { name: 'Live Slate' })).toBeVisible();
-  await expect(page.getByText('REAL CAPTURED DATA', { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/war-room$/);
+  await expect(page.getByRole('heading', { name: 'The War Room' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'NO BET', exact: true })).toBeVisible();
+  const briefing = await page.request.get('/research-api/v1/research/briefing');
+  expect(briefing.ok()).toBeTruthy();
+  expect((await briefing.json()).verified_bet365_count).toBe(0);
+  await expect(page.getByText(/Engine connected · read/)).toBeVisible();
   await expect(page.getByText('The analytical engine is not reachable.')).toHaveCount(0);
   await expect(page.getByText('DEMONSTRATION DATA — NOT FOR REAL-MONEY DECISIONS')).toHaveCount(0);
+});
+
+test('War Room briefing matches the actual backend on desktop and mobile', async ({ page, request }) => {
+  const response = await request.get('/research-api/v1/research/briefing');
+  expect(response.ok()).toBeTruthy();
+  const briefing = await response.json();
+  await page.goto('/');
+  await page.getByRole('button', { name: /enter local demo session/i }).click();
+  await expect(page.getByRole('heading', { name: 'The War Room' })).toBeVisible();
+  await expect(page.getByText(briefing.briefing, { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'NO BET', exact: true })).toBeVisible();
+  if (process.env.FDE_E2E_REAL_CAPTURE === '1') {
+    await page.screenshot({ path: 'qa/war-room/war-room-desktop.png', fullPage: true });
+  }
+  await page.setViewportSize({ width: 375, height: 812 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  if (process.env.FDE_E2E_REAL_CAPTURE === '1') {
+    await page.screenshot({ path: 'qa/war-room/war-room-mobile.png', fullPage: true });
+    expect(briefing.games.length).toBeGreaterThan(0);
+    const game = briefing.games[0];
+    const card = page.getByRole('article').filter({ hasText: `${game.away_team_id} at ${game.home_team_id}` });
+    const link = card.getByRole('link', { name: 'Open Game Lab →' });
+    await link.focus();
+    await link.press('Enter');
+    await expect(page.getByRole('heading', { name: `Game Lab · ${game.away_team_id} @ ${game.home_team_id}` })).toBeVisible();
+  }
 });
 
 test('the live schedule comes from the backend, even when no games are seeded', async ({ page }) => {

@@ -413,7 +413,20 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
             week = g.get("week", 0 if g["season_type"] == "PRE" else None)
             if not isinstance(week, int) or (g["season_type"] != "PRE" and week <= 0):
                 raise ValueError('Cannot persist a regular/postseason fixture without a reported week')
-            if existing is None or existing.week != week:
+            content_hash = hashlib.sha256(json.dumps({
+                "game": g["canonical_game_id"], "home": g["home"],
+                "away": g["away"], "kickoff": g["kickoff_utc"].isoformat(),
+                "venue": g["venue"], "neutral": g["neutral_site"],
+                "season_type": g["season_type"], "week": week,
+            }, sort_keys=True).encode()).hexdigest()
+            status = _GAME_STATUS.get(g["status"] or "", "UNRESOLVED")
+            fixture_changed = existing is None or (
+                existing.home_team_id, existing.away_team_id, existing.kickoff_utc,
+                existing.stadium_name, existing.neutral_site, existing.season_type, existing.week,
+            ) != (g["home"], g["away"], g["kickoff_utc"], g["venue"],
+                  g["neutral_site"], g["season_type"], week)
+            if (fixture_changed
+                    or (existing.game_status != "FINAL" and existing.game_status != status)):
                 # A source-confirmed correction appends; original captured rows
                 # remain intact. Preserve a verified FINAL designation.
                 session.add(ScheduleObservation(
@@ -448,14 +461,9 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                     # Over the fields that define the fixture, so a later
                     # observation of the same game can be compared rather
                     # than blindly appended.
-                    content_hash=hashlib.sha256(json.dumps({
-                        "game": g["canonical_game_id"], "home": g["home"],
-                        "away": g["away"], "kickoff": g["kickoff_utc"].isoformat(),
-                        "venue": g["venue"], "neutral": g["neutral_site"],
-                        "season_type": g["season_type"], "week": week,
-                    }, sort_keys=True).encode()).hexdigest(),
+                    content_hash=content_hash,
                     source_manifest_version=SOURCE_VERSION,
-                    source_updated_at=now,
+                    source_updated_at=None,  # ESPN does not establish a fixture update time.
                     observed_at=now,
                 ))
                 counts["games_created"] += 1

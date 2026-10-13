@@ -144,6 +144,13 @@ def read_session() -> Iterator[Session]:
 
 Db = Annotated[Session, Depends(read_session)]
 
+
+@app.get("/v1/research/briefing", dependencies=[Auth])
+def get_research_briefing(s: Db) -> dict[str, Any]:
+    from fde_api.forward.briefing import read_briefing
+
+    return read_briefing(s, now=utc_now())
+
 # /health must distinguish "deliberately open" from "nobody configured a
 # token". Reporting both as "disabled (local dev)" is how an unprotected
 # deployment reads as a normal one.

@@ -87,7 +87,7 @@ jobs:
         run: uv sync --locked
 
       - name: Lint
-        run: uv run ruff check src tests
+        run: uv run ruff check src tests scripts/run_research.py
 
       - name: Type check
         run: uv run mypy

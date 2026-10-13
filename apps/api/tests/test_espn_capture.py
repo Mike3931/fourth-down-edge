@@ -46,6 +46,22 @@ def _module():
     return module
 
 
+def test_schedule_change_appends_without_inventing_source_time(capture, db):
+    from datetime import timedelta
+
+    game = _game(status="STATUS_SCHEDULED", completed=False, quotes=[])
+    capture.persist([game], data_mode_value="LIVE_RESEARCH")
+    game["kickoff_utc"] += timedelta(hours=1)
+    capture.persist([game], data_mode_value="LIVE_RESEARCH")
+    capture.persist([game], data_mode_value="LIVE_RESEARCH")
+    with db() as s:
+        rows = list(s.scalars(select(ScheduleObservation).order_by(ScheduleObservation.id)))
+        assert len(rows) == 2
+        assert rows[1].supersedes_id == rows[0].id
+        assert rows[1].kickoff_utc - rows[0].kickoff_utc == timedelta(hours=1)
+        assert all(row.source_updated_at is None for row in rows)
+
+
 @pytest.fixture(scope="module")
 def capture():
     return _module()
