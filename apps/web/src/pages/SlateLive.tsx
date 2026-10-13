@@ -198,7 +198,7 @@ export default function SlateLive() {
                     title={
                       g.schedule_provider === 'nflverse'
                         ? 'From the schedule feed.'
-                        : 'Attested only by an odds provider — a weaker record than the schedule feed.'
+                        : 'From this provider’s captured fixture feed; verify schedule provenance.'
                     }
                   >
                     {g.schedule_provider}

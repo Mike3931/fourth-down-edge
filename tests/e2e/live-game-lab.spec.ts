@@ -77,7 +77,7 @@ test('a captured quote is described as history, not offered as an available wage
   await page.goto('/live/game/FDE-REAL-TEST-GAME');
   await expect(page.getByRole('table', { name: 'Latest observed market prices' })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'test book', exact: true })).toBeVisible();
-  await expect(page.getByText('licensed fixture / SANDBOX')).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'licensed fixture / SANDBOX', exact: true })).toBeVisible();
   await expect(page.getByText(/At least one quote is not labelled LIVE by its source/)).toBeVisible();
   await expect(page.getByText('No active WATCH or RESEARCH_CANDIDATE entry')).toBeVisible();
   await expect(page.getByText('Research only. Models have not been approved')).toBeVisible();

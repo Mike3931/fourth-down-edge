@@ -96,6 +96,7 @@ test('current public NFL captures navigate to Game Lab on desktop and mobile', a
   await page.reload();
   await expect(page.getByRole('heading', { name: `Game Lab · ${game.away_team_id} @ ${game.home_team_id}` })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  await expect(page.getByRole('list', { name: 'Observed market prices' })).toBeVisible();
   await page.screenshot({ path: 'qa/handoff-2026-10-12/game-lab-mobile.png', fullPage: true });
   await page.getByRole('link', { name: '← All games' }).click();
   await expect(page.getByRole('table', { name: 'Ingested fixtures' })).toBeVisible();
