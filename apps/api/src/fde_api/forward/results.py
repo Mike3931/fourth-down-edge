@@ -32,6 +32,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fde_api.db.forward_models import ScheduleObservation
+from fde_api.forward.game_identity import FINAL_CARRIER_PREFIX
 from fde_api.forward.modes import DataMode
 from fde_api.forward.ordering import newest
 from fde_api.forward.schedule import current_schedule_state
@@ -42,9 +43,6 @@ NOT_PLAYED = ("CANCELLED", "POSTPONED")
 
 class ResultIngestionError(ValueError):
     """A result that would be untrue or unusable if stored."""
-
-
-FINAL_CARRIER_PREFIX = "identity-schedule-revision-v1; "
 
 
 @dataclass(frozen=True)

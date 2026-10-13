@@ -163,3 +163,13 @@ def test_schedule_alias_does_not_refresh_final_result_provenance(capture, db):
         current = final_observation(s, canonical_game_id=game["canonical_game_id"], data_mode=DataMode.LIVE_RESEARCH)
         assert current.id == original_id and current.provider == "espn" and current.observed_at == observed_at
         assert result_scores(s, canonical_game_id=game["canonical_game_id"], data_mode=DataMode.LIVE_RESEARCH) == (30, 33)
+
+
+def test_date_change_after_a_known_final_is_reviewed_not_accepted(capture, db):
+    game = _game(status="STATUS_FINAL", completed=True, quotes=PRICES)
+    capture.persist([game], data_mode_value="LIVE_RESEARCH")
+    game["kickoff_utc"] += timedelta(days=1)
+    assert capture.persist([game], data_mode_value="LIVE_RESEARCH")["identity_refused"] == 1
+    with db() as s:
+        assert s.scalars(select(GameIdentityReview)).one().reason == "FINAL_KICKOFF_DISAGREEMENT"
+        assert result_scores(s, canonical_game_id=game["canonical_game_id"], data_mode=DataMode.LIVE_RESEARCH) == (30, 33)

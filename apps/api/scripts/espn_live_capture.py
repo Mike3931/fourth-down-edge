@@ -396,7 +396,7 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
     from fde_api.db.forward_models import OddsQuote, ScheduleObservation
     from fde_api.forward.venues import resolve_venue
     from fde_api.forward.game_identity import resolve_game
-    from fde_api.forward.results import FINAL_CARRIER_PREFIX
+    from fde_api.forward.game_identity import FINAL_CARRIER_PREFIX
 
     counts = {"games_created": 0, "games_existing": 0, "quotes_written": 0,
               "quotes_duplicate": 0, "results_recorded": 0, "results_refused": 0,

@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 
 from fde_api.db.forward_models import GameIdentityBinding, GameIdentityReview, ScheduleObservation
 
+FINAL_CARRIER_PREFIX = "identity-schedule-revision-v1; "
+
 
 def resolve_game(s: Session, *, provider: str, provider_game_id: str, data_mode: str,
                  season: int, season_type: str, home: str, away: str, week: int,
@@ -70,6 +72,9 @@ def resolve_game(s: Session, *, provider: str, provider_game_id: str, data_mode:
             return None
         if matching - anchors:
             review("EXISTING_DUPLICATE_IDENTITIES", matching | anchors)
+            return None
+        if latest.get(canonical) and latest[canonical].game_status == "FINAL" and latest[canonical].kickoff_utc != kickoff:
+            review("FINAL_KICKOFF_DISAGREEMENT", anchors)
             return None
     else:
         reversed_roles = {r.canonical_game_id for r in latest.values()

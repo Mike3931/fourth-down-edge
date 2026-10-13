@@ -28,9 +28,8 @@ from sqlalchemy.orm import Session
 
 from fde_api.canonical.team_map import canonical_team_code
 from fde_api.db.forward_models import ScheduleObservation
-from fde_api.forward.game_identity import resolve_game
+from fde_api.forward.game_identity import FINAL_CARRIER_PREFIX, resolve_game
 from fde_api.forward.modes import DataMode
-from fde_api.forward.results import FINAL_CARRIER_PREFIX
 from fde_api.forward.venues import is_international, resolve_venue
 
 _EASTERN = ZoneInfo("America/New_York")
