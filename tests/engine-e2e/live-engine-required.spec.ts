@@ -63,6 +63,9 @@ test('War Room briefing matches the actual backend on desktop and mobile', async
     await link.focus();
     await link.press('Enter');
     await expect(page.getByRole('heading', { name: `Game Lab · ${game.away_team_id} @ ${game.home_team_id}` })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Prepared research inputs' })).toBeVisible();
+    await page.getByText('Missing evidence and qualification blockers', { exact: true }).click();
+    await expect(page.getByText('Verified bet365 Tennessee prices', { exact: true })).toBeVisible();
   }
 });
 

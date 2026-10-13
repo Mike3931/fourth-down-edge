@@ -5,6 +5,7 @@ import { describeBookCoverage, describeConsensus, describeQuote } from '@fde/cal
 import EngineDown from '../components/EngineDown';
 import { engineGet, useForwardCandidates, useForwardSlate } from '../lib/engine';
 import { fmtAgoLive, fmtInstant } from '../lib/format';
+import { useBriefing } from '../lib/briefing';
 
 /**
  * A real-game, read-only Game Lab. Everything rendered here comes from the
@@ -61,6 +62,9 @@ const percent = (value: number | null) =>
 export default function LiveGameLab() {
   const { gameId } = useParams<{ gameId: string }>();
   const slate = useForwardSlate(gameId);
+  const preparation = useBriefing();
+  const inputs = !preparation.error
+    ? preparation.data?.games.find(g => g.canonical_game_id === gameId) : undefined;
   const markets = useQuery({
     queryKey: ['engine', 'forward-live', 'game-lab'],
     queryFn: () => engineGet<CapturedResponse>('/v1/forward/live'),
@@ -138,7 +142,7 @@ export default function LiveGameLab() {
   return (
     <div className="space-y-5 p-2 sm:p-6">
       <header className="space-y-2">
-        <button type="button" className="float-right rounded border border-border px-3 py-2 text-sm text-accent" disabled={slate.isFetching || markets.isFetching || candidates.isFetching} onClick={() => { void slate.refetch(); void markets.refetch(); void candidates.refetch(); }}>Refresh analysis</button>
+        <button type="button" className="float-right rounded border border-border px-3 py-2 text-sm text-accent" disabled={slate.isFetching || markets.isFetching || candidates.isFetching || preparation.isFetching} onClick={() => { void slate.refetch(); void markets.refetch(); void candidates.refetch(); void preparation.refetch(); }}>Refresh analysis</button>
         <Link to="/slate" className="text-xs text-accent underline">← All games</Link>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold text-fg">Game Lab · {game.away_team_id} @ {game.home_team_id}</h1>
@@ -157,6 +161,16 @@ export default function LiveGameLab() {
           this screen is not a bet recommendation and does not communicate with bet365.
         </div>
       </header>
+
+      <section aria-label="Prepared research inputs" className="rounded border border-border p-4">
+        <div className="flex flex-wrap justify-between gap-2"><h2 className="text-lg font-semibold text-fg">Research inputs</h2><Link to="/war-room" className="text-sm text-accent underline">Back to War Room</Link></div>
+        {preparation.isPending && <p role="status" className="mt-2 text-sm text-muted">Retrieving prepared evidence…</p>}
+        {!preparation.isPending && !inputs && <p className="mt-2 text-sm text-muted">Input preparation is unavailable for this game. The briefing covers the current seven-day window; no demo evidence was substituted.</p>}
+        {inputs && <>
+          <p className="mt-3 text-sm text-muted">{inputs.weather ? `${inputs.weather.source.toUpperCase()} forecast: ${inputs.weather.temp_f ?? 'unknown'}°F; wind ${inputs.weather.wind_mph ?? 'unknown'} mph. Captured ${fmtAgoLive(inputs.weather.captured_at)}; ${inputs.weather.source_updated_at ? `issued ${fmtAgoLive(inputs.weather.source_updated_at)}` : 'issue time unknown'}.` : 'No weather forecast prepared for this game.'} Forecasts are observations; no probability adjustment was made.</p>
+          <details className="mt-3 text-sm text-muted"><summary className="cursor-pointer text-fg">Missing evidence and qualification blockers</summary><ul className="mt-2 space-y-1">{inputs.missing.map(reason => <li key={reason}>{reason}</li>)}</ul><p className="mt-2">Missing reports do not mean players are healthy or confirmed active. Team efficiency and player usage inputs are not yet prepared by this worker.</p></details>
+        </>}
+      </section>
 
       <section aria-labelledby="market-title" className="rounded border border-border p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
