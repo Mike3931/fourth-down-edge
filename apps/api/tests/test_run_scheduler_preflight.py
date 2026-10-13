@@ -59,7 +59,13 @@ def factory():
 
 
 @pytest.fixture()
-def runner():
+def runner(factory, monkeypatch):
+    # main() calls _build(), which used the user's configured database.
+    # CI's migrated PostgreSQL hid that dependency. Bind every runner test
+    # to the existing isolated fixture, never a populated capture profile.
+    from fde_api.db import engine as db_engine
+
+    monkeypatch.setattr(db_engine, "get_engine", lambda url=None: factory.kw["bind"])
     return _runner()
 
 
@@ -186,3 +192,13 @@ class TestTheJobsAreActuallyRegistered:
         )
         assert runner.main() == 2
         assert "REFUSING TO RUN" in capsys.readouterr().out
+
+
+def test_runner_build_never_opens_the_configured_capture_path(runner, factory, tmp_path, monkeypatch):
+    from fde_api.config import settings
+
+    untouched = tmp_path / 'must-not-create-capture.db'
+    monkeypatch.setattr(settings, 'database_url', f'sqlite:///{untouched.as_posix()}')
+    _, built = runner._build(_args())
+    assert built.kw['bind'] is factory.kw['bind']
+    assert not untouched.exists()
