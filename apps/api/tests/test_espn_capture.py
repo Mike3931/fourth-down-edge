@@ -345,13 +345,13 @@ class TestTheSeasonTypeComesFromTheEvent:
             top={}, event_season={"year": 2026, "type": 1, "slug": "preseason"}))
         assert len(games) == 1
         assert games[0]["season_type"] == "PRE"
-        assert games[0]["canonical_game_id"] == "2026_PRE_0814_DEN_ATL"
+        assert games[0]["canonical_game_id"] == "2026_PRE_ESPN_401"
 
     def test_a_regular_season_game_is_still_REG(self, capture) -> None:
         games = capture.discover(self._payload(
             top={}, event_season={"year": 2026, "type": 2, "slug": "regular-season"}))
         assert games[0]["season_type"] == "REG"
-        assert "_REG_" in games[0]["canonical_game_id"]
+        assert games[0]["canonical_game_id"] == "2026_06_DEN_ATL"
 
     def test_the_top_level_season_is_used_when_the_event_has_none(self, capture) -> None:
         """Older payloads carry it only at the top; those must still work."""

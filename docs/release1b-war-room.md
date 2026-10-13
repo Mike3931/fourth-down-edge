@@ -16,13 +16,14 @@ An ESPN source correction appends a new schedule observation for changed kickoff
 
 ## Local isolated acceptance
 
-From `apps/api`, set `FDE_DATABASE_URL` to a new isolated SQLite database and migrate it with `uv run alembic upgrade head`. Do not point this branch at the original newer populated database. Run:
+From `apps/api`, initialize a NEW isolated SQLite workspace. The initializer refuses every existing file, migrates only the new file in a fresh process, and records a database UUID plus filesystem-identity attestation. Do not point this branch at the original newer populated database. Run:
 
 ```
-uv run python scripts/run_research.py --database-file data/research_1b_acceptance.db
+uv run python scripts/init_research_workspace.py --database-file data/research_1b_identity_acceptance.db
+uv run python scripts/run_research.py --database-file data/research_1b_identity_acceptance.db
 ```
 
-For bounded periodic collection, supply `--cycles 8 --interval 900`. This command must use an existing migrated file; `fde.db` is refused. No installation or background service is implicit. Serve the same isolated database with the existing loopback FastAPI/Vite setup and open `/war-room`. UI refresh rereads evidence; the worker performs source ingestion independently. A failed capture remains the latest attempt even when an older successful manifest exists.
+For bounded periodic collection, supply `--cycles 8 --interval 900`. The worker requires matching workspace UUID and file identity, rejects copies/replacements and protected-file aliases, and refuses databases with historical research/evaluation rows. A filename is never sufficient authorization. Previously created unattested scratch databases cannot be adopted; create a new workspace instead. No installation or background service is implicit. Serve the same isolated database with the existing loopback FastAPI/Vite setup and open `/war-room`. UI refresh rereads evidence; the worker performs source ingestion independently. A failed capture remains the latest attempt even when an older successful manifest exists.
 
 An exclusive sibling lock prevents overlapping worker instances. Normal exit removes the owned lock. After a hard process kill, confirm that no worker remains before manually removing its lock; recovery does not silently override it. Each cycle queries a bounded UTC window; the initial range plus daily fallback can make up to 12 public requests, with existing request timeouts. NWS collection adds at most 12 calls for six verified outdoor US venues, using ten-second request timeouts and stopping further weather calls on the first failure. Forecasts outside the kickoff period or with future issuance are refused. Dome, retractable/unknown roof and international venues remain explicitly unattempted; there is no weather-based probability adjustment. Scheduled Windows services, event-triggered injury collection and notifications are not enabled by this source change.
 

@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 
 from fde_api.canonical.team_map import canonical_team_code
 from fde_api.db.forward_models import ScheduleObservation
+from fde_api.forward.game_identity import resolve_game
 from fde_api.forward.modes import DataMode
 from fde_api.forward.venues import is_international, resolve_venue
 
@@ -134,7 +135,7 @@ def ingest_schedule(
             ScheduleObservation.data_mode == data_mode.value,
             ScheduleObservation.supersedes_id.is_(None) | ScheduleObservation.supersedes_id.isnot(None),
         )
-        .order_by(ScheduleObservation.observed_at)
+        .order_by(ScheduleObservation.observed_at, ScheduleObservation.id)
     ):
         latest[obs.canonical_game_id] = obs  # last write wins => newest
 
@@ -142,7 +143,8 @@ def ingest_schedule(
         if int(row["season"]) != season:
             continue
         result.observed_games += 1
-        game_id = row["game_id"].strip()
+        source_id = row["game_id"].strip()
+        game_id = source_id
 
         raw_type = (row.get("game_type") or "REG").strip().upper()
         season_type = SEASON_TYPE_MAP.get(raw_type, "REG")
@@ -155,6 +157,14 @@ def ingest_schedule(
             continue
 
         kickoff = _kickoff_utc(row.get("gameday", ""), row.get("gametime", ""))
+        resolved = resolve_game(session, provider=provider, provider_game_id=source_id,
+            data_mode=data_mode.value, season=season, season_type=season_type,
+            home=home, away=away, week=int(row["week"]), kickoff=kickoff,
+            proposed_id=source_id, observed_at=observed_at)
+        if resolved is None:
+            result.warnings.append(f"{source_id}: game identity requires review; no game data written")
+            continue
+        game_id = resolved
         raw_stadium_id = (row.get("stadium_id") or "").strip() or None
         stadium_name = (row.get("stadium") or "").strip() or None
         location = (row.get("location") or "Home").strip().lower()
@@ -175,6 +185,14 @@ def ingest_schedule(
         # The source has no explicit status column; a scheduled game with no
         # kickoff is treated as unresolved rather than assumed playable.
         game_status = "SCHEDULED" if kickoff else "UNRESOLVED"
+        prev = latest.get(game_id)
+        own = session.scalars(select(ScheduleObservation).where(
+            ScheduleObservation.data_mode == data_mode.value,
+            ScheduleObservation.provider == provider,
+            ScheduleObservation.provider_game_id == source_id,
+        ).order_by(ScheduleObservation.observed_at.desc(), ScheduleObservation.id.desc())).first()
+        if prev is not None and prev.game_status == "FINAL":
+            game_status = "FINAL"
 
         fields: dict[str, Any] = {
             "season_type": season_type,
@@ -191,8 +209,7 @@ def ingest_schedule(
         }
         chash = _content_hash(fields)
 
-        prev = latest.get(game_id)
-        if prev is not None and prev.content_hash == chash:
+        if own is not None and own.content_hash == chash:
             result.unchanged += 1
             continue
 
@@ -200,13 +217,14 @@ def ingest_schedule(
             data_mode=data_mode.value,
             canonical_game_id=game_id,
             provider=provider,
-            provider_game_id=game_id,
+            provider_game_id=source_id,
             season=season,
             content_hash=chash,
             source_manifest_version=source_manifest_version,
             observed_at=observed_at,
             supersedes_id=prev.id if prev is not None else None,
-            change_summary=_describe_change(prev, fields) if prev is not None else None,
+            change_summary=(prev.change_summary if prev is not None and prev.game_status == "FINAL"
+                            else _describe_change(prev, fields) if prev is not None else None),
             **fields,
         )
         session.add(obs)

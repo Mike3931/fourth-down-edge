@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     Float,
@@ -24,6 +25,33 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fde_api.db.models import Base
+
+
+class GameIdentityBinding(Base):
+    __tablename__ = "game_identity_bindings"
+    data_mode: Mapped[str] = mapped_column(String(16), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
+    provider_game_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    canonical_game_id: Mapped[str] = mapped_column(String(32), index=True)
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column()
+
+
+class GameIdentityReview(Base):
+    __tablename__ = "game_identity_reviews"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    data_mode: Mapped[str] = mapped_column(String(16))
+    provider: Mapped[str] = mapped_column(String(32))
+    provider_game_id: Mapped[str] = mapped_column(String(64))
+    reason: Mapped[str] = mapped_column(String(64))
+    evidence: Mapped[dict[str, Any]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column()
+
+
+class ResearchWorkspace(Base):
+    __tablename__ = "research_workspace"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column()
 
 
 class DomainIdentityMixin:

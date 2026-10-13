@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from fde_api.db.forward_models import (
     ForwardLedgerEntry,
+    GameIdentityReview,
     InjuryObservation,
     OddsQuote,
     ScheduleObservation,
@@ -140,13 +141,18 @@ def prepare_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
                        "environment": "SOURCE_TIMED_OBSERVATIONS_ONLY" if fresh_weather else "UNAVAILABLE"},
         })
     today = [g for g in prepared if g["today"]]
+    review_count = len(list(s.scalars(select(GameIdentityReview).where(
+        GameIdentityReview.data_mode == mode, GameIdentityReview.created_at <= now))))
     covered = sum(bool(g["markets_observed"]) for g in today)
+    identity_notice = (f" {review_count} game identity observation(s) require review; "
+                       "capture coverage is incomplete." if review_count else "")
     return {"version": VERSION, "as_of_at": now.isoformat(), "timezone": TIMEZONE,
             "data_mode": mode, "today_count": len(today), "observed_market_games": covered,
             "verified_bet365_count": 0, "qualified_count": 0, "decision": "NO_BET",
             "briefing": f"{len(today)} captured NFL game(s) today. {covered} have published market "
                         "observations. No verified bet365 Tennessee opportunity qualifies. "
-                        "Price and model requirements are not satisfied.",
+                        "Price and model requirements are not satisfied." + identity_notice,
+            "identity_review_count": review_count,
             "games": prepared, "sgp": {"status": "UNAVAILABLE", "reasons": [
                 "Exact bet365 combined pricing and combinability are unverified",
                 "No approved joint-probability model"]}}
