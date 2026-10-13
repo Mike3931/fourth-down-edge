@@ -30,6 +30,7 @@ from fde_api.canonical.team_map import canonical_team_code
 from fde_api.db.forward_models import ScheduleObservation
 from fde_api.forward.game_identity import resolve_game
 from fde_api.forward.modes import DataMode
+from fde_api.forward.results import FINAL_CARRIER_PREFIX
 from fde_api.forward.venues import is_international, resolve_venue
 
 _EASTERN = ZoneInfo("America/New_York")
@@ -223,7 +224,8 @@ def ingest_schedule(
             source_manifest_version=source_manifest_version,
             observed_at=observed_at,
             supersedes_id=prev.id if prev is not None else None,
-            change_summary=(prev.change_summary if prev is not None and prev.game_status == "FINAL"
+            change_summary=(FINAL_CARRIER_PREFIX + (prev.change_summary or "")
+                            if prev is not None and prev.game_status == "FINAL"
                             else _describe_change(prev, fields) if prev is not None else None),
             **fields,
         )

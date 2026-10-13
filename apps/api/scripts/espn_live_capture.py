@@ -396,6 +396,7 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
     from fde_api.db.forward_models import OddsQuote, ScheduleObservation
     from fde_api.forward.venues import resolve_venue
     from fde_api.forward.game_identity import resolve_game
+    from fde_api.forward.results import FINAL_CARRIER_PREFIX
 
     counts = {"games_created": 0, "games_existing": 0, "quotes_written": 0,
               "quotes_duplicate": 0, "results_recorded": 0, "results_refused": 0,
@@ -463,7 +464,7 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                     season=g["season"],
                     season_type=g["season_type"],
                     week=week,
-                    change_summary=(existing.change_summary if existing is not None
+                    change_summary=(FINAL_CARRIER_PREFIX + (existing.change_summary or "") if existing is not None
                                     and existing.game_status == "FINAL" else None),
                     supersedes_id=(existing.id if existing is not None else None),
                     home_team_id=g["home"],

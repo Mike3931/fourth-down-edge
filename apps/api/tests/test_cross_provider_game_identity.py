@@ -148,3 +148,18 @@ def test_nflverse_bound_source_revision_does_not_move_research_assessment(captur
         assert {o.canonical_game_id for o in s.scalars(select(ScheduleObservation))} == {entry.canonical_game_id}
     capture.persist([game], data_mode_value="LIVE_RESEARCH")
     assert game["canonical_game_id"] == "2026_00_CAR_ARI"
+
+
+def test_schedule_alias_does_not_refresh_final_result_provenance(capture, db):
+    from fde_api.forward.results import final_observation
+
+    game = _game(status="STATUS_FINAL", completed=True, quotes=PRICES)
+    capture.persist([game], data_mode_value="LIVE_RESEARCH")
+    with db() as s:
+        original = final_observation(s, canonical_game_id=game["canonical_game_id"], data_mode=DataMode.LIVE_RESEARCH)
+        original_id, observed_at = original.id, original.observed_at
+        nflverse(s, game)
+        s.commit()
+        current = final_observation(s, canonical_game_id=game["canonical_game_id"], data_mode=DataMode.LIVE_RESEARCH)
+        assert current.id == original_id and current.provider == "espn" and current.observed_at == observed_at
+        assert result_scores(s, canonical_game_id=game["canonical_game_id"], data_mode=DataMode.LIVE_RESEARCH) == (30, 33)

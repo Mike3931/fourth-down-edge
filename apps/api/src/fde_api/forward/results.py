@@ -44,6 +44,9 @@ class ResultIngestionError(ValueError):
     """A result that would be untrue or unusable if stored."""
 
 
+FINAL_CARRIER_PREFIX = "identity-schedule-revision-v1; "
+
+
 @dataclass(frozen=True)
 class ResultObservation:
     """One provider statement about how a game finished."""
@@ -105,11 +108,27 @@ def final_observation(
     # deterministically. Ordering by time alone made a simultaneous pair
     # resolve differently on different runs - and on SQLite it resolved the
     # same way by accident, which is why it went unnoticed.
-    return newest(
+    result = newest(
         list(session.scalars(stmt)),
         when=lambda r: r.observed_at,
         ident=lambda r: r.id,
     )
+    seen: set[int] = set()
+    while result is not None and (result.change_summary or "").startswith(FINAL_CARRIER_PREFIX):
+        # New schedule carriers preserve known status, not a new score offer.
+        # Only explicitly marked new rows are dereferenced; legacy semantics
+        # and independent final/correction observations remain unchanged.
+        if result.id in seen or result.supersedes_id is None:
+            return None
+        seen.add(result.id)
+        parent = session.get(ScheduleObservation, result.supersedes_id)
+        if (parent is None or parent.canonical_game_id != canonical_game_id
+                or parent.data_mode != data_mode.value or parent.game_status != FINAL
+                or _score_of(parent) != _score_of(result)
+                or (as_of is not None and parent.observed_at > as_of)):
+            return None
+        result = parent
+    return result
 
 
 def ingest_result(

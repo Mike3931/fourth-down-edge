@@ -14,6 +14,8 @@ A database primary key protects each provider binding. A shared fixture claim al
 
 Migration `e92a61bf4037` creates empty crosswalk/review/workspace tables only. No backfill, deduplication, alias resolution, canonical renumbering, evaluation resolution or child-record update occurs. Previously duplicated identities remain distinct and flagged. A populated newer original database is not downgraded or migrated.
 
+New schedule rows that carry a previously known FINAL state are explicitly marked as schedule carriers. Final-result lookup follows their validated same-game/score parent lineage to the original result observation, preserving its provider and capture time. Independent score corrections remain distinct observations. Unmarked legacy rows retain their prior lookup behavior; stored historical calculations and observations are not rewritten.
+
 ## Worker protection
 
 Forecast deduplication now includes the selected forecast period as well as the source-body hash. When a reschedule selects a different period from an unchanged NWS response, a new vintage is appended under the same canonical game; the old forecast remains intact. Repeating that new period is still a no-op. Identity candidate reads are scoped to the relevant season/participants/source key, with complete canonical history checked before binding, rather than scanning unrelated seasons for every fixture.
