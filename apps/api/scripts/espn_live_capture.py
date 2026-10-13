@@ -11,7 +11,10 @@ WHY THIS SOURCE EXISTS ALONGSIDE THE ODDS API
     fixture and sportsbook lines. This captures from it.
 
 WHAT IT IS AND IS NOT
-    It IS live market data: real prices, real books, real timestamps.
+    It IS real public-source observation data, captured by this application.
+    ESPN may publish closing or summary prices without sportsbook price times.
+    `observed_at` is application capture time; `provider_timestamp` stays unknown.
+    LIVE identifies the public-source origin, not price freshness or availability.
     It is NOT The Odds API, and every row it writes says `provider="espn"`
     so the two can never be confused in the record.
 
@@ -45,7 +48,7 @@ import httpx
 
 SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
 PROVIDER = "espn"
-SOURCE_VERSION = "espn-public-scoreboard-v1"
+SOURCE_VERSION = "espn-public-scoreboard-v2"
 
 # ESPN season types. 1 = preseason, 2 = regular, 3 = postseason.
 _SEASON_TYPE = {1: "PRE", 2: "REG", 3: "POST"}
@@ -164,8 +167,38 @@ def fetch(dates: str | None = None) -> dict[str, Any]:
     query = espn_query_range(dates)
     url = SCOREBOARD + (f"?dates={query}" if query else "")
     r = httpx.get(url, timeout=45, follow_redirects=True)
-    r.raise_for_status()
-    return r.json()
+    if r.status_code != 400 or dates is None:
+        r.raise_for_status()
+        return r.json()
+    # The public endpoint can reject a range while accepting its individual
+    # days. Query exactly the widened requested window, never the default
+    # week. Fail the whole capture if any day fails; no partial slate.
+    first, last = _parse_dates(dates)
+    first -= timedelta(days=1)
+    last += timedelta(days=1)
+    if (last - first).days >= 31:
+        raise ValueError('ESPN daily fallback is limited to 31 days')
+    events: dict[str, dict[str, Any]] = {}
+    combined: dict[str, Any] = {}
+    day = first
+    while day <= last:
+        daily = httpx.get(SCOREBOARD, params={'dates': day.strftime('%Y%m%d')},
+                         timeout=45, follow_redirects=True)
+        daily.raise_for_status()
+        payload = daily.json()
+        if not isinstance(payload.get('events'), list):
+            raise ValueError('ESPN daily response lacks an events array')
+        combined = {k: v for k, v in payload.items() if k != 'events'}
+        for item in payload['events']:
+            if not isinstance(item, dict) or not item.get('id'):
+                raise ValueError('ESPN event lacks its stable provider ID')
+            identifier = str(item['id'])
+            if identifier in events and events[identifier] != item:
+                raise ValueError('Conflicting ESPN events across daily responses')
+            events[identifier] = item
+        day += timedelta(days=1)
+    combined['events'] = list(events.values())
+    return combined
 
 
 def _spread_from_flags(odds: dict[str, Any], side: str) -> float | None:
@@ -305,6 +338,14 @@ def discover(payload: dict[str, Any]) -> list[dict[str, Any]]:
         if season_type is None or year is None:
             unreadable.append(str(event.get("shortName") or event.get("id")))
             continue
+        reported_week = (event.get("week") or {}).get("number")
+        if season_type == "PRE":
+            week = 0  # explicit application preseason convention
+        elif isinstance(reported_week, int) and not isinstance(reported_week, bool) and 1 <= reported_week <= 22:
+            week = reported_week
+        else:
+            unreadable.append(str(event.get("shortName") or event.get("id")))
+            continue
         try:
             home = provider_team_to_code(teams["home"].get("displayName", ""))
             away = provider_team_to_code(teams["away"].get("displayName", ""))
@@ -321,6 +362,7 @@ def discover(payload: dict[str, Any]) -> list[dict[str, Any]]:
             "name": event.get("name"),
             "season": year,
             "season_type": season_type,
+            "week": week,
             "home": home, "away": away,
             "kickoff_utc": kickoff,
             "venue": (comp.get("venue") or {}).get("fullName"),
@@ -340,7 +382,7 @@ def discover(payload: dict[str, Any]) -> list[dict[str, Any]]:
         # Reported, never silent. A game dropped for an unreadable season
         # is a gap in the record, and a gap nobody is told about is
         # indistinguishable from a day with no games.
-        print(f"  SKIPPED {len(unreadable)} game(s) with an unreadable season type: "
+        print(f"  SKIPPED {len(unreadable)} game(s) with an unreadable season type/week: "
               f"{', '.join(unreadable[:5])}", file=sys.stderr)
     return games
 
@@ -366,9 +408,14 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                 select(ScheduleObservation).where(
                     ScheduleObservation.canonical_game_id == g["canonical_game_id"],
                     ScheduleObservation.data_mode == data_mode_value,
-                ).limit(1)
+                ).order_by(ScheduleObservation.observed_at.desc(), ScheduleObservation.id.desc()).limit(1)
             ).first()
-            if existing is None:
+            week = g.get("week", 0 if g["season_type"] == "PRE" else None)
+            if not isinstance(week, int) or (g["season_type"] != "PRE" and week <= 0):
+                raise ValueError('Cannot persist a regular/postseason fixture without a reported week')
+            if existing is None or existing.week != week:
+                # A source-confirmed correction appends; original captured rows
+                # remain intact. Preserve a verified FINAL designation.
                 session.add(ScheduleObservation(
                     data_mode=data_mode_value,
                     canonical_game_id=g["canonical_game_id"],
@@ -376,7 +423,10 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                     provider_game_id=g["provider_event_id"],
                     season=g["season"],
                     season_type=g["season_type"],
-                    week=0,
+                    week=week,
+                    change_summary=(existing.change_summary if existing is not None
+                                    and existing.game_status == "FINAL" else None),
+                    supersedes_id=(existing.id if existing is not None else None),
                     home_team_id=g["home"],
                     away_team_id=g["away"],
                     kickoff_utc=g["kickoff_utc"],
@@ -393,7 +443,8 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                     stadium_name=g["venue"],
                     neutral_site=g["neutral_site"],
                     international=False,
-                    game_status=_GAME_STATUS.get(g["status"] or "", "UNRESOLVED"),
+                    game_status=("FINAL" if existing is not None and existing.game_status == "FINAL"
+                                 else _GAME_STATUS.get(g["status"] or "", "UNRESOLVED")),
                     # Over the fields that define the fixture, so a later
                     # observation of the same game can be compared rather
                     # than blindly appended.
@@ -401,7 +452,7 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                         "game": g["canonical_game_id"], "home": g["home"],
                         "away": g["away"], "kickoff": g["kickoff_utc"].isoformat(),
                         "venue": g["venue"], "neutral": g["neutral_site"],
-                        "season_type": g["season_type"],
+                        "season_type": g["season_type"], "week": week,
                     }, sort_keys=True).encode()).hexdigest(),
                     source_manifest_version=SOURCE_VERSION,
                     source_updated_at=now,
@@ -430,9 +481,9 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                     data_mode=data_mode_value,
                     canonical_game_id=g["canonical_game_id"],
                     provider=PROVIDER,
-                    # LIVE: these are real prices from a real book, fetched
-                    # now. Calling them FIXTURE would be a lie in the other
-                    # direction.
+                    # LIVE identifies the public provider, not an executable offer.
+                    # ESPN close/summary fields have no verified book price timestamp.
+                    # observed_at is our capture time; never fabricate provider time.
                     provider_mode="LIVE",
                     provider_event_id=g["provider_event_id"],
                     sportsbook=q["sportsbook"],
@@ -509,12 +560,13 @@ def main() -> int:
     try:
         payload = fetch(args.dates)
         games = within_utc_window(discover(payload), args.dates)
-    except ValueError as e:
-        print(f"--dates: {e}", file=sys.stderr)
+    except (ValueError, httpx.HTTPError) as e:
+        print(f"ESPN capture failed; no records written: {e}", file=sys.stderr)
         return 2
 
     print(f"\n=== ESPN PUBLIC SCOREBOARD  ({len(games)} game(s)) ===")
-    print("    real market data, provider=espn - NOT The Odds API, not bet365\n")
+    print("    published price observations, provider=espn; not verified current offers\n")
+    print("    capture time is local; sportsbook price establishment time is unknown\n")
     for g in games:
         print(f"  {g['name']}")
         print(f"    {g['away']} @ {g['home']}   kickoff {g['kickoff_utc'].isoformat()}")

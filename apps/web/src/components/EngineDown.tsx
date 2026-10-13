@@ -22,10 +22,12 @@ export default function EngineDown({
   title,
   message,
   expectedAt,
+  onRetry,
 }: {
   title: string;
   message: string;
   expectedAt?: string;
+  onRetry?: () => void;
 }) {
   return (
     <div className="p-6">
@@ -50,6 +52,7 @@ export default function EngineDown({
           No demonstration data is shown here. This screen is empty rather than misleading.
         </p>
       </div>
+      {onRetry && <button type="button" className="mt-4 rounded border border-border px-3 py-2 text-accent" onClick={onRetry}>Try again</button>}
       <p className="mt-4 text-sm text-muted">
         Nothing on the engine-backed screens will work until it is running. The{' '}
         <Link to="/picks-demo" className="text-accent underline">

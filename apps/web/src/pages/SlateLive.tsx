@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { soonestScheduledWeek, weekLabel } from '@fde/calculations';
 import { useForwardSlate, type SlateGame } from '../lib/engine';
 import EngineDown from '../components/EngineDown';
@@ -79,6 +80,9 @@ export default function SlateLive() {
 
   return (
     <div className="space-y-4 p-6">
+      {data?.has_more && <p role="status" className="text-sm text-warning">
+        Showing the first {data.count} of {data.total_count} fixtures, with upcoming games first.
+        Additional fixtures remain in the research archive.</p>}
       <header className="space-y-2">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-semibold text-fg">Slate</h1>
@@ -171,7 +175,9 @@ export default function SlateLive() {
               <tr key={g.canonical_game_id} className="border-t border-border">
                 <td className="py-1.5 pr-4 whitespace-nowrap text-muted">{fmtKick(g.kickoff_utc)}</td>
                 <td className="py-1.5 pr-4 font-medium text-fg">
-                  {g.away_team_id} @ {g.home_team_id}
+                  <Link to={`/live/game/${encodeURIComponent(g.canonical_game_id)}`} className="text-accent hover:underline">
+                    {g.away_team_id} @ {g.home_team_id}
+                  </Link>
                   {g.neutral_site && (
                     <span className="ml-2 rounded bg-bg-subtle px-1.5 py-0.5 text-[11px] text-muted">
                       neutral
@@ -195,7 +201,7 @@ export default function SlateLive() {
                     title={
                       g.schedule_provider === 'nflverse'
                         ? 'From the schedule feed.'
-                        : 'Attested only by an odds provider — a weaker record than the schedule feed.'
+                        : 'From this provider’s captured fixture feed; verify schedule provenance.'
                     }
                   >
                     {g.schedule_provider}

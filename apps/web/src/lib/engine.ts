@@ -64,6 +64,8 @@ export interface SlateGame {
 export interface ForwardSlate {
   generated_at_utc: string;
   count: number;
+  total_count?: number;
+  has_more?: boolean;
   games: SlateGame[];
 }
 
@@ -98,10 +100,10 @@ export function useForwardHealth() {
   });
 }
 
-export function useForwardSlate() {
+export function useForwardSlate(gameId?: string) {
   return useQuery({
-    queryKey: ['engine', 'forward-slate'],
-    queryFn: () => engineGet<ForwardSlate>('/v1/forward/slate'),
+    queryKey: ['engine', 'forward-slate', gameId ?? null],
+    queryFn: () => engineGet<ForwardSlate>('/v1/forward/slate' + (gameId ? `?canonical_game_id=${encodeURIComponent(gameId)}` : '')),
     retry: false,
   });
 }
@@ -178,6 +180,8 @@ export interface ForwardCandidates {
   generated_at_utc: string;
   data_mode: string;
   horizon_hours: number;
+  has_more?: boolean;
+  canonical_game_id?: string | null;
   gate: CandidateGate;
   count: number;
   /** Distinct cohorts among the returned rows, sorted. */
@@ -221,10 +225,10 @@ export interface ForwardPerformance {
   not_a_claim: string;
 }
 
-export function useForwardCandidates() {
+export function useForwardCandidates(gameId?: string) {
   return useQuery({
-    queryKey: ['engine', 'forward-candidates'],
-    queryFn: () => engineGet<ForwardCandidates>('/v1/forward/candidates'),
+    queryKey: ['engine', 'forward-candidates', gameId ?? null],
+    queryFn: () => engineGet<ForwardCandidates>('/v1/forward/candidates' + (gameId ? `?canonical_game_id=${encodeURIComponent(gameId)}` : '')),
     refetchInterval: 60_000,
     retry: false,
   });

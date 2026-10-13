@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button, Card, CardHeader, Mono, Pill, Term } from '@fde/ui';
 import { useStore } from '../lib/store';
 import { fmtPct } from '../lib/format';
+import { ENGINE_BASE } from '../lib/engine';
 
 const TIMEZONES = [
   'UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Phoenix',
@@ -69,7 +70,7 @@ export default function Settings() {
       </Card>
 
       <Card>
-        <CardHeader title="Analytical engine (research mode)" />
+        <CardHeader title="Legacy Game Lab research connection (demo section)" />
         <div className="space-y-2 p-4">
           <label className="block text-xs text-ink-muted">
             Engine URL — leave blank to disable research mode
@@ -82,7 +83,9 @@ export default function Settings() {
             />
           </label>
           <p className="text-[11px] leading-relaxed text-ink-faint">
-            When connected, Game Lab shows research-grade predictions from the Python engine under the
+            This setting applies to the legacy demonstration Game Lab, not the real NFL screens.
+            Live screens use the configured backend path <code>{ENGINE_BASE}</code>; changing this field
+            does not change that connection. When connected, the legacy Game Lab shows research results under the
             banner “RESEARCH MODE — MODEL NOT APPROVED FOR REAL-MONEY DECISIONS”. If the engine is
             unreachable, screens show DATA INCOMPLETE — demo numbers are never substituted for research
             numbers, and research mode never changes paper-betting behavior.

@@ -89,6 +89,19 @@ PRICES = [
 
 
 class TestRecapturingAnUnchangedMarketAddsNothing:
+    def test_capture_time_is_not_invented_book_time(self, capture, db) -> None:
+        before = datetime.now(UTC)
+        game = _game(status="STATUS_SCHEDULED", completed=False, quotes=PRICES)
+        capture.persist([game], data_mode_value="LIVE_RESEARCH")
+        with db() as s:
+            original = [(q.id, q.raw_hash, q.observed_at) for q in s.scalars(select(OddsQuote))]
+            assert all(q.provider_timestamp is None and q.provider_mode == "LIVE"
+                       and q.observed_at >= before for q in s.scalars(select(OddsQuote)))
+        capture.persist([game], data_mode_value="LIVE_RESEARCH")
+        with db() as s:
+            assert original == [(q.id, q.raw_hash, q.observed_at)
+                                for q in s.scalars(select(OddsQuote))]
+
     def test_a_second_identical_capture_writes_no_quotes(self, capture, db) -> None:
         game = _game(status="STATUS_SCHEDULED", completed=False, quotes=PRICES)
         first = capture.persist([game], data_mode_value="LIVE_RESEARCH")
@@ -293,7 +306,7 @@ class TestTheSeasonTypeComesFromTheEvent:
     @staticmethod
     def _payload(*, top: dict | None, event_season: dict | None) -> dict:
         event = {
-            "id": "401", "shortName": "DEN @ ATL", "name": "Denver at Atlanta",
+            "week": {"number": 6}, "id": "401", "shortName": "DEN @ ATL", "name": "Denver at Atlanta",
             "date": "2026-08-14T23:00Z",
             "competitions": [{
                 "competitors": [
@@ -483,3 +496,101 @@ class TestTheSpreadAndTheMoneylineAgreeAboutTheFavourite:
                        home_ml=home_ml, away_ml=away_ml)
         )
         assert by_spread == by_ml
+
+
+def test_rejected_range_falls_back_to_exact_daily_queries(capture, monkeypatch):
+    import httpx
+    requests = []
+
+    def get(url, **kwargs):
+        requests.append(kwargs.get('params'))
+        request = httpx.Request('GET', url)
+        if '?' in url:
+            return httpx.Response(400, request=request)
+        day = kwargs['params']['dates']
+        return httpx.Response(200, request=request, json={'events': [{'id': day}]})
+
+    monkeypatch.setattr(capture.httpx, 'get', get)
+    payload = capture.fetch('20261018')
+    assert requests == [None, {'dates': '20261017'}, {'dates': '20261018'}, {'dates': '20261019'}]
+    assert [e['id'] for e in payload['events']] == ['20261017', '20261018', '20261019']
+
+
+def test_daily_failure_does_not_return_partial_capture(capture, monkeypatch):
+    import httpx
+    calls = 0
+
+    def get(url, **kwargs):
+        nonlocal calls
+        calls += 1
+        return httpx.Response(400 if calls == 1 else 503 if calls == 3 else 200,
+                              request=httpx.Request('GET', url), json={'events': []})
+
+    monkeypatch.setattr(capture.httpx, 'get', get)
+    with pytest.raises(httpx.HTTPStatusError):
+        capture.fetch('20261018')
+
+
+def test_conflicting_daily_event_never_silently_overwrites(capture, monkeypatch):
+    import httpx
+    calls = 0
+
+    def get(url, **kwargs):
+        nonlocal calls
+        calls += 1
+        return httpx.Response(400 if calls == 1 else 200, request=httpx.Request('GET', url),
+                              json={'events': [{'id': 'stable', 'value': calls}]})
+
+    monkeypatch.setattr(capture.httpx, 'get', get)
+    with pytest.raises(ValueError, match='Conflicting ESPN events'):
+        capture.fetch('20261018')
+
+
+def test_regular_season_uses_the_event_week_and_refuses_unknown(capture):
+    payload = TestTheSeasonTypeComesFromTheEvent._payload(top={}, event_season={'year': 2026, 'type': 2})
+    assert capture.discover(payload)[0]['week'] == 6
+    payload['events'][0].pop('week')
+    assert capture.discover(payload) == []
+
+
+def test_source_week_correction_appends_and_preserves_original(capture, db):
+    game = _game(status='STATUS_SCHEDULED', completed=False, quotes=[])
+    game.update(season_type='REG', week=5)
+    capture.persist([game], data_mode_value='LIVE_RESEARCH')
+    with db() as session:
+        before = session.scalars(select(ScheduleObservation)).one()
+        original = (before.id, before.week, before.content_hash, before.observed_at)
+    game['week'] = 6
+    capture.persist([game], data_mode_value='LIVE_RESEARCH')
+    capture.persist([game], data_mode_value='LIVE_RESEARCH')
+    with db() as session:
+        rows = list(session.scalars(select(ScheduleObservation).order_by(ScheduleObservation.id)))
+        assert len(rows) == 2
+        assert (rows[0].id, rows[0].week, rows[0].content_hash, rows[0].observed_at) == original
+        assert rows[1].week == 6
+        assert rows[1].source_manifest_version == 'espn-public-scoreboard-v2'
+
+    from fde_api.api.main import get_forward_slate
+
+    slate = get_forward_slate()
+    assert slate['games'][0]['week'] == 6
+
+
+def test_week_correction_keeps_verified_final_score_and_original_lineage(capture, db):
+    from fde_api.forward.modes import DataMode
+    from fde_api.forward.results import result_scores
+
+    game = _game(status='STATUS_FINAL', completed=True, quotes=[])
+    game.update(season_type='REG', week=5)
+    capture.persist([game], data_mode_value='LIVE_RESEARCH')
+    with db() as session:
+        before = list(session.scalars(select(ScheduleObservation).order_by(ScheduleObservation.id)))
+        originals = [(r.id, r.week, r.change_summary, r.content_hash) for r in before]
+    game['week'] = 6
+    outcome = capture.persist([game], data_mode_value='LIVE_RESEARCH')
+    assert outcome['results_refused'] == 0
+    with db() as session:
+        after = list(session.scalars(select(ScheduleObservation).order_by(ScheduleObservation.id)))
+        assert [(r.id, r.week, r.change_summary, r.content_hash) for r in after[:-1]] == originals
+        assert after[-1].supersedes_id == before[-1].id
+        assert result_scores(session, canonical_game_id=game['canonical_game_id'], data_mode=DataMode.LIVE_RESEARCH) == (30, 33)

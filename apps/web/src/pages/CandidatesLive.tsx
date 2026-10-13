@@ -216,7 +216,9 @@ export default function CandidatesLive() {
                     {fmtInstant(c.kickoff_utc)}
                   </td>
                   <td className="py-1.5 pr-4 text-muted">
-                    {c.away_team_id} @ {c.home_team_id}
+                    <Link to={`/live/game/${encodeURIComponent(c.canonical_game_id)}`} className="text-accent hover:underline">
+                      {c.away_team_id} @ {c.home_team_id}
+                    </Link>
                   </td>
                   <td className="py-1.5 pr-4 font-medium text-fg">{describe(c)}</td>
                   <td className="py-1.5 pr-4 text-right">{american(c.american)}</td>

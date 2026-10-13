@@ -129,7 +129,7 @@ jobs:
       # skip would look like a pass.
       - name: Tests
         if: always()
-        run: uv run pytest tests -m "not network and not pg_concurrency and not pg_chain and not pg_identity"
+        run: uv run pytest tests -ra -m "not network and not pg_concurrency and not pg_chain and not pg_identity"
 
       # The scheduler-driven record chain, against the real database.
       #

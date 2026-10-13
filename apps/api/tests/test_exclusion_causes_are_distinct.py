@@ -57,6 +57,8 @@ class FakeQuote:
         selection: str = "HOME",
         line: float | None = -3.0,
         american: int = -110,
+        provider: str = "test-provider",
+        provider_timestamp: datetime | None = None,
     ) -> None:
         self.id = quote_id
         self.observed_at = observed_at
@@ -66,6 +68,8 @@ class FakeQuote:
         self.selection = selection
         self.line = line
         self.american = american
+        self.provider = provider
+        self.provider_timestamp = provider_timestamp
 
 
 def _filter(quotes: list[Any], *, max_age_minutes: int = 60) -> Any:
@@ -73,6 +77,18 @@ def _filter(quotes: list[Any], *, max_age_minutes: int = 60) -> Any:
         quotes, as_of_at=NOW, max_age_minutes=max_age_minutes, kickoff_utc=KICKOFF
     )
     return report
+
+
+def test_unverified_espn_timing_has_its_own_exclusion_bucket():
+    rep = _filter([
+        FakeQuote(1, NOW - timedelta(minutes=2), provider="espn"),
+        FakeQuote(2, NOW - timedelta(minutes=2), selection="AWAY"),
+        FakeQuote(3, NOW + timedelta(minutes=2)),
+    ])
+    assert rep.rejected_unverified_price_time == 1
+    assert rep.eligible == 1 and rep.rejected_after_cutoff == 1
+    counts = rep.as_dict()
+    assert sum(value for key, value in counts.items() if key != "considered") == rep.considered
 
 
 class TestStaleAndAfterCutoffAreCountedApart:

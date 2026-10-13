@@ -1,10 +1,11 @@
 import { defineConfig } from '@playwright/test';
 
+const port = process.env.FDE_E2E_PORT ?? '4173';
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 60_000,
   use: {
-    baseURL: 'http://localhost:4173',
+    baseURL: `http://localhost:${port}`,
     viewport: { width: 1440, height: 900 },
   },
   webServer: {
@@ -19,8 +20,8 @@ export default defineConfig({
     // CI was never wrong (its job runs `npm run build` first), which is
     // exactly why this survived — the failure only ever appeared on a
     // developer machine, as a test result that looked like a real one.
-    command: 'npm run build -w @fde/web && npm run preview -w @fde/web -- --port 4173 --strictPort',
-    port: 4173,
+    command: `npm run build -w @fde/web && npm run preview -w @fde/web -- --port ${port} --strictPort`,
+    port: Number(port),
     reuseExistingServer: false,
     timeout: 180_000,
   },

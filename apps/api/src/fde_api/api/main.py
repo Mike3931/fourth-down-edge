@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func, select
+from sqlalchemy import func, select, true
 from sqlalchemy.orm import Session
 
 from fde_api import RESEARCH_BANNER, __version__
@@ -518,6 +518,7 @@ def _no_consensus_reasons(
         (report.rejected_post_kickoff, "observed after kickoff, so in-play"),
         (report.rejected_unknown_book, "from a book that is not on the recognised list"),
         (report.rejected_invalid, "carrying an implausible price or line"),
+        (report.rejected_unverified_price_time, "without verified sportsbook/provider price time"),
         (report.rejected_duplicate, "superseded by a newer quote from the same book"),
     ]
     parts = [f"{n} {why}" for n, why in excluded if n]
@@ -583,7 +584,7 @@ def get_forward_live(
                     # point they became the most informative thing on it.
                     ScheduleObservation.kickoff_utc >= now - timedelta(hours=lookback_hours),
                     ScheduleObservation.kickoff_utc <= horizon,
-                ).order_by(ScheduleObservation.kickoff_utc)
+                ).order_by(ScheduleObservation.observed_at, ScheduleObservation.id)
             )
         )
         # One entry per game: the schedule is append-only, so the newest
@@ -713,6 +714,17 @@ def get_forward_live(
                         "american": q.american, "decimal_odds": q.decimal_odds,
                         "provider": q.provider, "provider_mode": q.provider_mode,
                         "observed_at": q.observed_at.isoformat(),
+                        "captured_at_utc": q.observed_at.isoformat(),
+                        "provider_timestamp_utc": (
+                            q.provider_timestamp.isoformat() if q.provider_timestamp else None
+                        ),
+                        "sportsbook_price_established_at_utc": None,
+                        "timestamp_basis": "APPLICATION_CAPTURE",
+                        "currently_available_offer": False,
+                        "price_origin": (
+                            "ESPN_PUBLISHED_CLOSE_OR_SUMMARY" if q.provider == "espn"
+                            else "PROVIDER_OBSERVATION"
+                        ),
                     }
                     for q in quotes
                 ],
@@ -774,21 +786,37 @@ def get_forward_health(s: Db, data_mode: str = "LIVE_RESEARCH") -> dict[str, Any
 
 
 @app.get("/v1/forward/slate", dependencies=[Auth])
-def get_forward_slate(data_mode: str = "LIVE_RESEARCH", limit: int = 400) -> dict[str, Any]:
+def get_forward_slate(
+    data_mode: str = "LIVE_RESEARCH", limit: int = 400, offset: int = 0,
+    canonical_game_id: str | None = None,
+) -> dict[str, Any]:
     """The ingested slate, newest observation per game."""
     from fde_api.db.forward_models import ScheduleObservation
     from fde_api.forward.modes import DataMode
 
     mode = DataMode(data_mode)
+    if not 1 <= limit <= 2000 or offset < 0:
+        raise HTTPException(status_code=422, detail="Invalid pagination bounds")
+    now = utc_now()
     with session_scope() as s:
         rows = list(s.scalars(
             select(ScheduleObservation)
             .where(ScheduleObservation.data_mode == mode.value)
-            .order_by(ScheduleObservation.kickoff_utc)
+            .order_by(ScheduleObservation.observed_at, ScheduleObservation.id)
         ))
         latest: dict[str, Any] = {}
         for o in rows:
             latest[o.canonical_game_id] = o
+        # Upcoming first, nearest kickoff first; history newest first. Stable
+        # canonical IDs break kickoff ties. Pagination never deletes observations.
+        selected = [o for o in latest.values()
+                    if canonical_game_id is None or o.canonical_game_id == canonical_game_id]
+        selected.sort(key=lambda o: (
+            o.kickoff_utc < now,
+            o.kickoff_utc.timestamp() if o.kickoff_utc >= now else -o.kickoff_utc.timestamp(),
+            o.canonical_game_id,
+        ))
+        total_count = len(selected)
         games = [
             {
                 "canonical_game_id": o.canonical_game_id,
@@ -799,12 +827,14 @@ def get_forward_slate(data_mode: str = "LIVE_RESEARCH", limit: int = 400) -> dic
                 "venue": o.stadium_name, "neutral_site": bool(o.neutral_site),
                 "game_status": o.game_status, "schedule_provider": o.provider,
             }
-            for o in sorted(latest.values(), key=lambda x: x.kickoff_utc)[:limit]
+            for o in selected[offset:offset + limit]
         ]
     return {
         "generated_at_utc": utc_now().isoformat(),
         "data_mode": mode.value,
         "count": len(games),
+        "total_count": total_count, "offset": offset,
+        "has_more": offset + len(games) < total_count,
         "games": games,
         "research_banner": RESEARCH_BANNER,
     }
@@ -870,7 +900,8 @@ def _candidate_gate(s: Session, mode: DataMode) -> dict[str, Any]:
 
 @app.get("/v1/forward/candidates", dependencies=[Auth])
 def get_forward_candidates(
-    s: Db, data_mode: str = "LIVE_RESEARCH", hours: int = 240, limit: int = 200
+    s: Db, data_mode: str = "LIVE_RESEARCH", hours: int = 240, limit: int = 200,
+    canonical_game_id: str | None = None, offset: int = 0,
 ) -> dict[str, Any]:
     """Research candidates recorded for games that have not kicked off.
 
@@ -878,7 +909,7 @@ def get_forward_candidates(
     this engine and this endpoint does not invent one: a candidate is a
     row someone can go and read, not an instruction.
 
-    One row per (game, market, selection, horizon) — the newest. The ledger
+    One row per (cohort, game, market, selection, horizon) — the newest. The ledger
     is append-only, so a re-evaluation at a later horizon adds a row rather
     than replacing one, and showing every historical evaluation of the same
     selection would read as many separate opportunities.
@@ -890,6 +921,8 @@ def get_forward_candidates(
 
     mode = DataMode(data_mode)
     now = utc_now()
+    if not 1 <= limit <= 2000 or offset < 0 or not 1 <= hours <= 8760:
+        raise HTTPException(status_code=422, detail="Invalid query bounds")
     horizon_end = now + timedelta(hours=hours)
 
     kickoffs: dict[str, ScheduleObservation] = {}
@@ -897,23 +930,28 @@ def get_forward_candidates(
         select(ScheduleObservation).where(
             ScheduleObservation.data_mode == mode.value,
             ScheduleObservation.kickoff_utc.isnot(None),
-        ).order_by(ScheduleObservation.observed_at)
+            ScheduleObservation.canonical_game_id == canonical_game_id
+            if canonical_game_id is not None else true(),
+        ).order_by(ScheduleObservation.observed_at, ScheduleObservation.id)
     ):
         kickoffs[o.canonical_game_id] = o
 
-    newest: dict[tuple[str, str, str | None, str], ForwardLedgerEntry] = {}
+    newest: dict[tuple[str, str, str, str | None, str], ForwardLedgerEntry] = {}
     for e in s.scalars(
         select(ForwardLedgerEntry)
         .where(
             ForwardLedgerEntry.data_mode == mode.value,
-            ForwardLedgerEntry.status.in_(("RESEARCH_CANDIDATE", "WATCH")),
+            ForwardLedgerEntry.canonical_game_id == canonical_game_id
+            if canonical_game_id is not None else true(),
         )
         .order_by(ForwardLedgerEntry.as_of_at, ForwardLedgerEntry.id)
     ):
-        newest[(e.canonical_game_id, e.market, e.selection, e.horizon)] = e
+        newest[(e.cohort, e.canonical_game_id, e.market, e.selection, e.horizon)] = e
 
     rows: list[dict[str, Any]] = []
     for e in newest.values():
+        if e.status not in ("RESEARCH_CANDIDATE", "WATCH"):
+            continue  # A newer PASS must not resurrect an older active assessment.
         game = kickoffs.get(e.canonical_game_id)
         if game is None or game.kickoff_utc is None:
             continue
@@ -946,8 +984,10 @@ def get_forward_candidates(
             "as_of_at": e.as_of_at.isoformat() if e.as_of_at else None,
         })
 
-    rows.sort(key=lambda r: (r["edge"] is None, -(r["edge"] or 0.0)))
-    shown = rows[:limit]
+    rows.sort(key=lambda r: (r["edge"] is None, -(r["edge"] or 0.0),
+                             r["canonical_game_id"], r["market"], r["selection"] or "",
+                             r["horizon"], r["cohort"]))
+    shown = rows[offset:offset + limit]
     # Reported, never merged. `assert_single_cohort` exists because a
     # metric spanning two experiments is not a metric, and a LIST spanning
     # two is the same problem one step earlier - the reader draws the
@@ -960,6 +1000,8 @@ def get_forward_candidates(
         "horizon_hours": hours,
         "gate": _candidate_gate(s, mode),
         "count": len(rows),
+        "canonical_game_id": canonical_game_id, "offset": offset,
+        "has_more": offset + len(shown) < len(rows),
         "cohorts_present": cohorts_present,
         "mixed_cohorts": len(cohorts_present) > 1,
         "candidates": shown,
