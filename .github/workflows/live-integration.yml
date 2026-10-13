@@ -29,7 +29,8 @@ jobs:
           cache: npm
       - uses: astral-sh/setup-uv@v5
         with:
-          enable-cache: true
+          enable-cache: false
+          version: "0.12.1"
       - run: npm ci
       - name: Install Python analytical-engine dependencies
         working-directory: apps/api
