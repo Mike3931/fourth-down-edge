@@ -11,7 +11,10 @@ WHY THIS SOURCE EXISTS ALONGSIDE THE ODDS API
     fixture and sportsbook lines. This captures from it.
 
 WHAT IT IS AND IS NOT
-    It IS live market data: real prices, real books, real timestamps.
+    It IS real public-source observation data, captured by this application.
+    ESPN may publish closing or summary prices without sportsbook price times.
+    `observed_at` is application capture time; `provider_timestamp` stays unknown.
+    LIVE identifies the public-source origin, not price freshness or availability.
     It is NOT The Odds API, and every row it writes says `provider="espn"`
     so the two can never be confused in the record.
 
@@ -478,9 +481,9 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                     data_mode=data_mode_value,
                     canonical_game_id=g["canonical_game_id"],
                     provider=PROVIDER,
-                    # LIVE: these are real prices from a real book, fetched
-                    # now. Calling them FIXTURE would be a lie in the other
-                    # direction.
+                    # LIVE identifies the public provider, not an executable offer.
+                    # ESPN close/summary fields have no verified book price timestamp.
+                    # observed_at is our capture time; never fabricate provider time.
                     provider_mode="LIVE",
                     provider_event_id=g["provider_event_id"],
                     sportsbook=q["sportsbook"],
@@ -562,7 +565,8 @@ def main() -> int:
         return 2
 
     print(f"\n=== ESPN PUBLIC SCOREBOARD  ({len(games)} game(s)) ===")
-    print("    real market data, provider=espn - NOT The Odds API, not bet365\n")
+    print("    published price observations, provider=espn; not verified current offers\n")
+    print("    capture time is local; sportsbook price establishment time is unknown\n")
     for g in games:
         print(f"  {g['name']}")
         print(f"    {g['away']} @ {g['home']}   kickoff {g['kickoff_utc'].isoformat()}")

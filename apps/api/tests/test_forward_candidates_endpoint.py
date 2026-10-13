@@ -79,6 +79,53 @@ def _session(client: TestClient) -> Session:
     return sessionmaker(bind=db_engine.get_engine(), future=True)()
 
 
+def test_scoped_candidate_is_not_hidden_by_global_cap(client):
+    with _session(client) as s:
+        _seed(s)
+        for i in range(205):
+            gid = f"OTHER_{i:03}"
+            s.add(ScheduleObservation(
+                canonical_game_id=gid, data_mode="LIVE_RESEARCH", season=2026,
+                season_type="REG", week=2, away_team_id="KC", home_team_id="BUF",
+                kickoff_utc=KICKOFF, game_status="SCHEDULED", provider="t", provider_game_id=gid,
+                content_hash=gid, observed_at=NOW,
+            ))
+            s.add(ForwardLedgerEntry(
+                canonical_game_id=gid, data_mode="LIVE_RESEARCH", cohort="burn_in",
+                policy_version="ftp-2026-v1", model_version="market-residual-v1",
+                horizon="PREGAME", market="SPREAD", selection="HOME", status="WATCH",
+                model_probability=0.7, break_even_probability=0.5,
+                reasons={}, as_of_at=NOW, created_at=NOW,
+            ))
+        s.commit()
+    global_result = client.get("/v1/forward/candidates").json()
+    assert global_result["has_more"] and global_result["count"] == 206
+    assert GAME not in {r["canonical_game_id"] for r in global_result["candidates"]}
+    scoped = client.get(f"/v1/forward/candidates?canonical_game_id={GAME}").json()
+    assert scoped["count"] == 1 and not scoped["has_more"]
+    assert scoped["candidates"][0]["canonical_game_id"] == GAME
+    missing = client.get("/v1/forward/candidates?canonical_game_id=ABSENT").json()
+    assert missing["count"] == 0 and not missing["has_more"]
+    assert scoped["gate"] == global_result["gate"]
+    assert client.get("/v1/forward/candidates?offset=-1").status_code == 422
+
+
+def test_same_selection_in_two_cohorts_remains_separate(client):
+    with _session(client) as s:
+        _seed(s, cohort="burn_in")
+        _seed(s, cohort="official_forward_test")
+    result = client.get(f"/v1/forward/candidates?canonical_game_id={GAME}").json()
+    assert result["count"] == 2 and result["mixed_cohorts"]
+
+
+def test_later_pass_does_not_resurrect_an_old_candidate(client):
+    with _session(client) as s:
+        _seed(s)
+        _seed(s, status="PASS")
+    result = client.get(f"/v1/forward/candidates?canonical_game_id={GAME}").json()
+    assert result["count"] == 0 and not result["has_more"]
+
+
 class TestTheEndpointsOnlyRead:
     def test_candidates_writes_nothing(self, client: TestClient) -> None:
         with _session(client) as s:

@@ -62,7 +62,9 @@ def book_minimum(cohort: Cohort) -> int:
 # contradiction about the market. A new version makes it what it is: a
 # legitimately different record, with the old one left readable and
 # unchanged.
-CONSENSUS_METHOD_VERSION = "consensus-v2"
+# v3 excludes ESPN published prices without verified provider timing from
+# current-price consensus. Previous v2 snapshots and their lineage stay immutable.
+CONSENSUS_METHOD_VERSION = "consensus-v3"
 
 # Books accepted into consensus. An unrecognized book is excluded rather
 # than trusted, because an unknown source cannot be quality-assessed.
@@ -118,6 +120,7 @@ class EligibilityReport:
     rejected_after_cutoff: int = 0
     rejected_unknown_book: int = 0
     rejected_duplicate: int = 0
+    rejected_unverified_price_time: int = 0
     rejected_invalid: int = 0
     reasons: list[str] = field(default_factory=list)
 
@@ -131,6 +134,7 @@ class EligibilityReport:
             "rejected_after_cutoff": self.rejected_after_cutoff,
             "rejected_unknown_book": self.rejected_unknown_book,
             "rejected_duplicate": self.rejected_duplicate,
+            "rejected_unverified_price_time": self.rejected_unverified_price_time,
             "rejected_invalid": self.rejected_invalid,
         }
 
@@ -160,6 +164,9 @@ def select_eligible_quotes(
             # observation in the future - a clock, a provider field or a
             # replay - and it is the opposite problem from an old price.
             rep.rejected_after_cutoff += 1
+            continue
+        if q.provider == "espn" and q.provider_timestamp is None:
+            rep.rejected_unverified_price_time += 1
             continue
         if q.is_live:
             rep.rejected_live += 1  # the provider flagged it in-play

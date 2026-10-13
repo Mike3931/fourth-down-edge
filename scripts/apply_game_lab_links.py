@@ -35,6 +35,8 @@ AUDITED_GIT_BLOBS = {
 # Exact reviewed post-transform blobs; anchors alone cannot authorize a rerun.
 PATCHED_GIT_BLOBS = {'apps/web/src/App.tsx': 'b271f0735bc26a8103ad84743f20326cde454269', 'apps/web/src/components/Shell.tsx': '6ee4a68c32eb3838224bed1f054cd23bd129bd43', 'apps/web/src/pages/SlateLive.tsx': 'dc29854c7c587cb423cf84f8a619e207af493500', 'apps/web/src/pages/LiveSlate.tsx': 'f3fb7952860071a4077102a95336722a5125432f', 'apps/web/src/pages/CandidatesLive.tsx': 'b419c33fa00780246f46134b10953c220899ecac', 'apps/web/src/pages/Settings.tsx': '63315d6a13f5528df21c554fc59fba04d6e05a6c'}
 
+CORRECTIVE_GIT_BLOBS = {'apps/web/src/pages/SlateLive.tsx': 'ab54836e3835a69dc5ea9753c4ab8b87461a6102'}
+
 def git_blob_sha(text: str) -> str:
     content = text.encode('utf-8')
     return hashlib.sha1(b'blob ' + str(len(content)).encode('ascii') + b'\0' + content).hexdigest()
@@ -142,7 +144,7 @@ def prepare(root: Path, *, enforce_audited_blobs: bool = True) -> dict[Path, str
             actual = git_blob_sha(before)
             # Re-running on our own fully-patched files is safe and useful.
             # Partial edits or divergent source require a manual diff review.
-            if actual not in (expected, PATCHED_GIT_BLOBS[relative]):
+            if actual not in (expected, PATCHED_GIT_BLOBS[relative], CORRECTIVE_GIT_BLOBS.get(relative)):
                 raise ValueError(
                     f'{relative}: source drift detected; audited git blob '
                     f'{expected}, found {actual}. Review and port manually.'

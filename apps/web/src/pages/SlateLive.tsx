@@ -80,6 +80,9 @@ export default function SlateLive() {
 
   return (
     <div className="space-y-4 p-6">
+      {data?.has_more && <p role="status" className="text-sm text-warning">
+        Showing the first {data.count} of {data.total_count} fixtures, with upcoming games first.
+        Additional fixtures remain in the research archive.</p>}
       <header className="space-y-2">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-semibold text-fg">Slate</h1>

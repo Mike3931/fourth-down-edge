@@ -9,7 +9,7 @@ import { expect, test, type Page } from '@playwright/test';
 async function stubCapturedGame(page: Page, quotes: unknown[] = []) {
   const kickoff = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
   const observed = new Date(Date.now() - 2 * 60_000).toISOString();
-  await page.route('**/research-api/v1/forward/slate', (route) => route.fulfill({
+  await page.route('**/research-api/v1/forward/slate*', (route) => route.fulfill({
     contentType: 'application/json',
     body: JSON.stringify({
       data_mode: 'LIVE_RESEARCH', generated_at_utc: observed, count: 1,
@@ -31,10 +31,11 @@ async function stubCapturedGame(page: Page, quotes: unknown[] = []) {
         }, final: null }],
     }),
   }));
-  await page.route('**/research-api/v1/forward/candidates', (route) => route.fulfill({
+  await page.route('**/research-api/v1/forward/candidates*', (route) => route.fulfill({
     contentType: 'application/json',
     body: JSON.stringify({ data_mode: 'LIVE_RESEARCH', generated_at_utc: observed,
       gate: { open: true, blocked_by: [], degraded_by: [] }, count: 0,
+      canonical_game_id: new URL(route.request().url()).searchParams.get('canonical_game_id'), has_more: false,
       cohorts_present: [], mixed_cohorts: false, candidates: [], not_a_claim: 'Not a wagering offer.' }),
   }));
 }
@@ -81,6 +82,25 @@ test('a captured quote is described as history, not offered as an available wage
   await expect(page.getByText(/At least one quote is not labelled LIVE by its source/)).toBeVisible();
   await expect(page.getByText('No active WATCH or RESEARCH_CANDIDATE entry')).toBeVisible();
   await expect(page.getByText('Research only. Models have not been approved')).toBeVisible();
+  await expect(page.getByText(/Times show when this app captured published quotes/)).toBeVisible();
+  await expect(page.getByRole('columnheader', { name: 'Captured by app' })).toBeVisible();
+});
+
+test('Game Lab requests scoped assessments and distinguishes truncation from absence', async ({ page }) => {
+  await stubCapturedGame(page);
+  let requestedGame: string | null = null;
+  await page.route('**/research-api/v1/forward/candidates*', (route) => {
+    requestedGame = new URL(route.request().url()).searchParams.get('canonical_game_id');
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({
+      gate: { open: true, blocked_by: [], degraded_by: [] }, count: 201,
+      has_more: true, candidates: [], cohorts_present: [], mixed_cohorts: false,
+    }) });
+  });
+  await login(page);
+  await page.goto('/live/game/FDE-REAL-TEST-GAME');
+  await expect(page.getByText(/Assessment results are incomplete/)).toBeVisible();
+  expect(requestedGame).toBe('FDE-REAL-TEST-GAME');
+  await expect(page.getByText('No active WATCH or RESEARCH_CANDIDATE entry')).toHaveCount(0);
 });
 
 
@@ -126,11 +146,11 @@ test('Game Lab supports mobile, refresh and accessible navigation', async ({ pag
 
 test('Game Lab recovers from a schedule failure without a demo fallback', async ({ page }) => {
   await stubCapturedGame(page);
-  await page.route('**/research-api/v1/forward/slate', (route) => route.fulfill({ status: 503, body: 'Unavailable' }));
+  await page.route('**/research-api/v1/forward/slate*', (route) => route.fulfill({ status: 503, body: 'Unavailable' }));
   await login(page);
   await page.goto('/live/game/FDE-REAL-TEST-GAME');
   await expect(page.getByText('The analytical engine is not reachable.')).toBeVisible();
-  await page.unroute('**/research-api/v1/forward/slate');
+  await page.unroute('**/research-api/v1/forward/slate*');
   await stubCapturedGame(page);
   await page.getByRole('button', { name: 'Try again' }).click();
   await expect(page.getByRole('heading', { name: /Game Lab · TEN @ HOU/ })).toBeVisible();

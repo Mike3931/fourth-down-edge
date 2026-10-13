@@ -60,7 +60,7 @@ const percent = (value: number | null) =>
 
 export default function LiveGameLab() {
   const { gameId } = useParams<{ gameId: string }>();
-  const slate = useForwardSlate();
+  const slate = useForwardSlate(gameId);
   const markets = useQuery({
     queryKey: ['engine', 'forward-live', 'game-lab'],
     queryFn: () => engineGet<CapturedResponse>('/v1/forward/live'),
@@ -68,7 +68,7 @@ export default function LiveGameLab() {
     retry: false,
     refetchInterval: 60_000,
   });
-  const candidates = useForwardCandidates();
+  const candidates = useForwardCandidates(gameId);
   const game = slate.data?.games.find((g) => g.canonical_game_id === gameId);
   const captured = markets.data?.games.find((g) => g.canonical_game_id === gameId);
   const research = useMemo(
@@ -188,6 +188,9 @@ export default function LiveGameLab() {
                 ? ' At least one quote is not labelled LIVE by its source; do not interpret it as a current sportsbook offer.'
                 : ' LIVE provenance describes capture origin, not a currently executable sportsbook price.'}
             </p>
+            <p className="mt-2 text-xs text-warning">Times show when this app captured published quotes.
+              Sportsbook price establishment time and current availability are unverified.
+              ESPN may publish closing or summary prices; a recent capture does not make a price a current offer.</p>
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
               {(['SPREAD', 'TOTAL', 'MONEYLINE'] as const).map((market) => {
                 const block = captured.markets?.[market];
@@ -237,7 +240,7 @@ export default function LiveGameLab() {
                   <thead><tr className="text-left text-xs uppercase text-muted">
                     <th scope="col" className="py-2 pr-3">Book</th><th scope="col" className="py-2 pr-3">Market</th>
                     <th scope="col" className="py-2 pr-3">Selection</th><th scope="col" className="py-2 pr-3">Odds</th>
-                    <th scope="col" className="py-2 pr-3">Source / mode</th><th scope="col" className="py-2">Observed</th>
+                    <th scope="col" className="py-2 pr-3">Source / mode</th><th scope="col" className="py-2">Captured by app</th>
                   </tr></thead>
                   <tbody>{latestQuotes.map((q) => (
                     <tr key={JSON.stringify(q)} className="border-t border-border">
@@ -271,10 +274,12 @@ export default function LiveGameLab() {
         {candidates.error && <p role="alert" className="mt-2 text-sm text-danger">
           Research assessments unavailable: {(candidates.error as Error).message}. No model values invented.
         </p>}
+        {candidates.data && (candidates.data.has_more !== false || candidates.data.canonical_game_id !== gameId) && <p role="alert" className="mt-2 text-sm text-warning">
+          Assessment results are incomplete or their game scope is unverified. No conclusion of absence can be drawn.</p>}
         {candidates.data && !candidates.data.gate.open && (
           <p className="mt-2 text-sm text-warning">Evaluation gate closed. See Data Health before interpreting any prior research record.</p>
         )}
-        {candidates.data && research.length === 0 && (
+        {candidates.data && candidates.data.has_more === false && candidates.data.canonical_game_id === gameId && research.length === 0 && (
           <p className="mt-2 text-sm text-muted">No active WATCH or RESEARCH_CANDIDATE entry for this game.
             This is not a model prediction of zero edge, and PASS records are not part of this endpoint.</p>
         )}

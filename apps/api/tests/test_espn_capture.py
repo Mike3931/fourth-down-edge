@@ -89,6 +89,19 @@ PRICES = [
 
 
 class TestRecapturingAnUnchangedMarketAddsNothing:
+    def test_capture_time_is_not_invented_book_time(self, capture, db) -> None:
+        before = datetime.now(UTC)
+        game = _game(status="STATUS_SCHEDULED", completed=False, quotes=PRICES)
+        capture.persist([game], data_mode_value="LIVE_RESEARCH")
+        with db() as s:
+            original = [(q.id, q.raw_hash, q.observed_at) for q in s.scalars(select(OddsQuote))]
+            assert all(q.provider_timestamp is None and q.provider_mode == "LIVE"
+                       and q.observed_at >= before for q in s.scalars(select(OddsQuote)))
+        capture.persist([game], data_mode_value="LIVE_RESEARCH")
+        with db() as s:
+            assert original == [(q.id, q.raw_hash, q.observed_at)
+                                for q in s.scalars(select(OddsQuote))]
+
     def test_a_second_identical_capture_writes_no_quotes(self, capture, db) -> None:
         game = _game(status="STATUS_SCHEDULED", completed=False, quotes=PRICES)
         first = capture.persist([game], data_mode_value="LIVE_RESEARCH")

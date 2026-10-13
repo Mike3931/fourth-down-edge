@@ -115,6 +115,68 @@ def _census(factory) -> dict[str, int]:
         }
 
 
+def test_upcoming_slate_survives_large_history_and_is_paginated(client):
+    api, factory = client
+    with factory() as s:
+        for i in range(405):
+            s.add(ScheduleObservation(
+                data_mode="LIVE_RESEARCH", canonical_game_id=f"HISTORY_{i:03}",
+                provider="t", provider_game_id=f"h{i}", season=2025, season_type="REG", week=1,
+                home_team_id="ARI", away_team_id="CAR",
+                kickoff_utc=NOW - timedelta(days=i + 1),
+                game_status="FINAL", content_hash=f"h{i}", observed_at=NOW,
+            ))
+        s.commit()
+    before = _census(factory)
+    first = api.get("/v1/forward/slate").json()
+    assert first["games"][0]["canonical_game_id"] == GAME
+    assert first["total_count"] == 406 and first["has_more"]
+    assert first == {**api.get("/v1/forward/slate").json(),
+                     "generated_at_utc": first["generated_at_utc"]}
+    second = api.get("/v1/forward/slate?offset=400").json()
+    assert len(second["games"]) == 6 and not second["has_more"]
+    assert not ({g["canonical_game_id"] for g in first["games"]}
+                & {g["canonical_game_id"] for g in second["games"]})
+    scoped = api.get("/v1/forward/slate?canonical_game_id=HISTORY_404").json()
+    assert scoped["count"] == 1
+    assert _census(factory) == before
+    assert api.get("/v1/forward/slate?limit=-1").status_code == 422
+
+
+def test_quote_capture_time_is_not_a_sportsbook_offer(client):
+    api, _ = client
+    quote = api.get("/v1/forward/live").json()["games"][0]["quotes"][0]
+    assert quote["captured_at_utc"] == quote["observed_at"]
+    assert quote["sportsbook_price_established_at_utc"] is None
+    assert quote["timestamp_basis"] == "APPLICATION_CAPTURE"
+    assert quote["currently_available_offer"] is False
+
+
+def test_recent_espn_capture_without_book_time_cannot_price_a_consensus(client):
+    from fde_api.forward.cohort import Cohort
+    from fde_api.forward.consensus import CONSENSUS_METHOD_VERSION, build_consensus
+
+    api, factory = client
+    with factory() as s:
+        quotes = list(s.scalars(select(OddsQuote)))
+        for quote in quotes:
+            quote.provider = "espn"
+        s.commit()
+        original = [(q.id, q.raw_hash, q.observed_at, q.provider_timestamp) for q in quotes]
+        snap, report = build_consensus(
+            s, canonical_game_id=GAME, market="SPREAD", as_of_at=NOW,
+            kickoff_utc=KICK, cohort=Cohort.BURN_IN,
+        )
+        assert snap is None
+        assert report.rejected_unverified_price_time == 6 and report.eligible == 0
+        assert CONSENSUS_METHOD_VERSION == "consensus-v3"
+        assert original == [(q.id, q.raw_hash, q.observed_at, q.provider_timestamp)
+                            for q in s.scalars(select(OddsQuote))]
+    body = api.get("/v1/forward/live").json()["games"][0]
+    assert all(q["price_origin"] == "ESPN_PUBLISHED_CLOSE_OR_SUMMARY" for q in body["quotes"])
+    assert any("without verified" in reason for reason in body["markets"]["SPREAD"]["reasons"])
+
+
 class TestReadEndpointsDoNotWrite:
     @pytest.mark.parametrize("path", READ_ENDPOINTS)
     def test_a_single_request_changes_nothing(self, client, path) -> None:
