@@ -33,7 +33,7 @@ AUDITED_GIT_BLOBS = {
 
 
 # Exact reviewed post-transform blobs; anchors alone cannot authorize a rerun.
-PATCHED_GIT_BLOBS = {'apps/web/src/App.tsx': 'b271f0735bc26a8103ad84743f20326cde454269', 'apps/web/src/components/Shell.tsx': '6ee4a68c32eb3838224bed1f054cd23bd129bd43', 'apps/web/src/pages/SlateLive.tsx': 'e4535ee62bc7a6c40d90bba12cd8df8912728f4e', 'apps/web/src/pages/LiveSlate.tsx': 'f3fb7952860071a4077102a95336722a5125432f', 'apps/web/src/pages/CandidatesLive.tsx': 'b419c33fa00780246f46134b10953c220899ecac', 'apps/web/src/pages/Settings.tsx': '63315d6a13f5528df21c554fc59fba04d6e05a6c'}
+PATCHED_GIT_BLOBS = {'apps/web/src/App.tsx': 'b271f0735bc26a8103ad84743f20326cde454269', 'apps/web/src/components/Shell.tsx': '6ee4a68c32eb3838224bed1f054cd23bd129bd43', 'apps/web/src/pages/SlateLive.tsx': 'dc29854c7c587cb423cf84f8a619e207af493500', 'apps/web/src/pages/LiveSlate.tsx': 'f3fb7952860071a4077102a95336722a5125432f', 'apps/web/src/pages/CandidatesLive.tsx': 'b419c33fa00780246f46134b10953c220899ecac', 'apps/web/src/pages/Settings.tsx': '63315d6a13f5528df21c554fc59fba04d6e05a6c'}
 
 def git_blob_sha(text: str) -> str:
     content = text.encode('utf-8')
