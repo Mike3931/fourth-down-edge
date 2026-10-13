@@ -9,7 +9,7 @@ on:
   push:
     branches: [master]
   pull_request:
-    branches: [master]
+    branches: [master, feature/forward-data-capture, codex/fde-release0-ci-db-20261012]
   workflow_dispatch: {}
 
 concurrency:
@@ -80,7 +80,8 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
         with:
-          enable-cache: true
+          enable-cache: false
+          version: "0.12.1"
 
       - name: Install locked dependencies
         run: uv sync --locked
@@ -270,7 +271,8 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
         with:
-          enable-cache: true
+          enable-cache: false
+          version: "0.12.1"
 
       - uses: actions/setup-python@v5
         with:

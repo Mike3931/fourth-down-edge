@@ -29,3 +29,9 @@ apps/api/data/*.db
 # artifacts under data/policies/ are deliberately committed).
 apps/api/data/weather/
 apps/api/data/policies/test-*.json
+
+# Private database backup sidecars and local validation results
+*.db-wal
+*.db-shm
+*.db.manifest.json
+qa-release*.xml
