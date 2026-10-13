@@ -160,3 +160,19 @@ def test_three_equal_time_assessments_are_all_preserved(session):
     assert len(game["research_records"]) == 3
     assert "Equal-time research assessments require review; none was selected" in game["missing"]
     assert len(list(session.scalars(select(ForwardLedgerEntry)))) == 3
+
+
+@pytest.mark.parametrize("age", [None, -1, 49])
+def test_unknown_future_or_stale_availability_does_not_clear_input_gate(session, age):
+    from fde_api.db.forward_models import InjuryObservation
+
+    schedule(session)
+    session.add(InjuryObservation(data_mode="LIVE_RESEARCH", canonical_game_id="REAL",
+        team_id="KC", player_id="GSIS-TEST", report_date="2026-10-12", game_designation="QUESTIONABLE",
+        source_category="OFFICIAL_VERIFIED", verification_status="VERIFIED", confidence="HIGH",
+        source_updated_at=None if age is None else NOW - timedelta(hours=age),
+        observed_at=NOW, entered_at=NOW))
+    session.flush()
+    game = prepare_briefing(session, now=NOW)["games"][0]
+    assert game["inputs"]["availability"] == "UNAVAILABLE"
+    assert "Fresh verified player availability evidence" in game["missing"]

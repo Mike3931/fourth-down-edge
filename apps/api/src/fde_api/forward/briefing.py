@@ -88,10 +88,17 @@ def prepare_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
         captured = list(latest.values())
         records = [e for group in assessments.values() for e in group if e.canonical_game_id == gid]
         missing = ["Verified bet365 Tennessee prices", "Approved market-specific model evidence"]
-        if not injuries[gid]:
-            missing.append("Player availability evidence")
-        if gid not in weather:
-            missing.append("Game environment evidence")
+        verified_injuries = [i for i in injuries[gid] if i.verification_status == "VERIFIED"
+                            and i.source_category in {"OFFICIAL_VERIFIED", "LICENSED_PROVIDER"}
+                            and i.source_updated_at is not None
+                            and 0 <= (now - i.source_updated_at).total_seconds() <= 172800]
+        if not verified_injuries:
+            missing.append("Fresh verified player availability evidence")
+        game_forecast = weather.get(gid)
+        fresh_weather = (game_forecast is not None and game_forecast.source_updated_at is not None
+                         and 0 <= (now - game_forecast.source_updated_at).total_seconds() <= 21600)
+        if not fresh_weather:
+            missing.append("Fresh source-timed game environment evidence")
         age = (now - game.observed_at).total_seconds()
         quote_age = min(((now - q.observed_at).total_seconds() for q in captured), default=None)
         if age > 86400:
@@ -129,8 +136,8 @@ def prepare_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
                                   "model_version": e.model_version, "policy_version": e.policy_version,
                                   "as_of_at": e.as_of_at.isoformat()} for e in records],
             "inputs": {"team_efficiency": "UNAVAILABLE", "player_usage": "UNAVAILABLE",
-                       "availability": "OBSERVATIONS_ONLY" if injuries[gid] else "UNAVAILABLE",
-                       "environment": "OBSERVATIONS_ONLY" if gid in weather else "UNAVAILABLE"},
+                       "availability": "VERIFIED_OBSERVATIONS_ONLY" if verified_injuries else "UNAVAILABLE",
+                       "environment": "SOURCE_TIMED_OBSERVATIONS_ONLY" if fresh_weather else "UNAVAILABLE"},
         })
     today = [g for g in prepared if g["today"]]
     covered = sum(bool(g["markets_observed"]) for g in today)

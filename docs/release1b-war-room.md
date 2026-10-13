@@ -30,6 +30,8 @@ Release 1B prepares identities, observation provenance and availability manifest
 
 The current quote schema has no established state-specific offer/combinability proof, so this version's verified-price gate is explicitly closed. Even a row named `bet365` cannot enable it. Historical candidates remain research evidence, separate by cohort, and cannot become a verified current recommendation. A completed source capture does not mean analytical completeness. Provider findings and market coverage: `release1b-provider-feasibility.md`.
 
+Foundation freshness diagnostics use source issuance, not capture time: availability requires verified official/licensed observations issued within 48 hours; weather requires a known issuance within six hours. Unknown, stale or future issuance remains a missing-input reason. These diagnostics do not amend frozen policy gates, imply a complete injury report, confirm any player is active, or authorize a forecast/model adjustment. Equal-time research assessments are retained together for review.
+
 ## Product and next milestones
 
 Reusable: canonical captures, immutable observations, feature builders, model registry, forward policy/cohort gates, read-only real Game Lab, health and CI. Missing: validated current-season team/player/availability inputs, qualified market-specific models, authorized TN price feed and exact combined SGP pricing. Demo portfolio is still separate and not a real paper ledger.
