@@ -583,7 +583,7 @@ def get_forward_live(
                     # point they became the most informative thing on it.
                     ScheduleObservation.kickoff_utc >= now - timedelta(hours=lookback_hours),
                     ScheduleObservation.kickoff_utc <= horizon,
-                ).order_by(ScheduleObservation.kickoff_utc)
+                ).order_by(ScheduleObservation.observed_at, ScheduleObservation.id)
             )
         )
         # One entry per game: the schedule is append-only, so the newest
@@ -784,7 +784,7 @@ def get_forward_slate(data_mode: str = "LIVE_RESEARCH", limit: int = 400) -> dic
         rows = list(s.scalars(
             select(ScheduleObservation)
             .where(ScheduleObservation.data_mode == mode.value)
-            .order_by(ScheduleObservation.kickoff_utc)
+            .order_by(ScheduleObservation.observed_at, ScheduleObservation.id)
         ))
         latest: dict[str, Any] = {}
         for o in rows:

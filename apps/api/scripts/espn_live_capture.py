@@ -45,7 +45,7 @@ import httpx
 
 SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
 PROVIDER = "espn"
-SOURCE_VERSION = "espn-public-scoreboard-v1"
+SOURCE_VERSION = "espn-public-scoreboard-v2"
 
 # ESPN season types. 1 = preseason, 2 = regular, 3 = postseason.
 _SEASON_TYPE = {1: "PRE", 2: "REG", 3: "POST"}
@@ -335,6 +335,14 @@ def discover(payload: dict[str, Any]) -> list[dict[str, Any]]:
         if season_type is None or year is None:
             unreadable.append(str(event.get("shortName") or event.get("id")))
             continue
+        reported_week = (event.get("week") or {}).get("number")
+        if season_type == "PRE":
+            week = 0  # explicit application preseason convention
+        elif isinstance(reported_week, int) and not isinstance(reported_week, bool) and 1 <= reported_week <= 22:
+            week = reported_week
+        else:
+            unreadable.append(str(event.get("shortName") or event.get("id")))
+            continue
         try:
             home = provider_team_to_code(teams["home"].get("displayName", ""))
             away = provider_team_to_code(teams["away"].get("displayName", ""))
@@ -351,6 +359,7 @@ def discover(payload: dict[str, Any]) -> list[dict[str, Any]]:
             "name": event.get("name"),
             "season": year,
             "season_type": season_type,
+            "week": week,
             "home": home, "away": away,
             "kickoff_utc": kickoff,
             "venue": (comp.get("venue") or {}).get("fullName"),
@@ -370,7 +379,7 @@ def discover(payload: dict[str, Any]) -> list[dict[str, Any]]:
         # Reported, never silent. A game dropped for an unreadable season
         # is a gap in the record, and a gap nobody is told about is
         # indistinguishable from a day with no games.
-        print(f"  SKIPPED {len(unreadable)} game(s) with an unreadable season type: "
+        print(f"  SKIPPED {len(unreadable)} game(s) with an unreadable season type/week: "
               f"{', '.join(unreadable[:5])}", file=sys.stderr)
     return games
 
@@ -396,9 +405,14 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                 select(ScheduleObservation).where(
                     ScheduleObservation.canonical_game_id == g["canonical_game_id"],
                     ScheduleObservation.data_mode == data_mode_value,
-                ).limit(1)
+                ).order_by(ScheduleObservation.observed_at.desc(), ScheduleObservation.id.desc()).limit(1)
             ).first()
-            if existing is None:
+            week = g.get("week", 0 if g["season_type"] == "PRE" else None)
+            if not isinstance(week, int) or (g["season_type"] != "PRE" and week <= 0):
+                raise ValueError('Cannot persist a regular/postseason fixture without a reported week')
+            if existing is None or existing.week != week:
+                # A source-confirmed correction appends; original captured rows
+                # remain intact. Preserve a verified FINAL designation.
                 session.add(ScheduleObservation(
                     data_mode=data_mode_value,
                     canonical_game_id=g["canonical_game_id"],
@@ -406,7 +420,7 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                     provider_game_id=g["provider_event_id"],
                     season=g["season"],
                     season_type=g["season_type"],
-                    week=0,
+                    week=week,
                     home_team_id=g["home"],
                     away_team_id=g["away"],
                     kickoff_utc=g["kickoff_utc"],
@@ -423,7 +437,8 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                     stadium_name=g["venue"],
                     neutral_site=g["neutral_site"],
                     international=False,
-                    game_status=_GAME_STATUS.get(g["status"] or "", "UNRESOLVED"),
+                    game_status=("FINAL" if existing is not None and existing.game_status == "FINAL"
+                                 else _GAME_STATUS.get(g["status"] or "", "UNRESOLVED")),
                     # Over the fields that define the fixture, so a later
                     # observation of the same game can be compared rather
                     # than blindly appended.
@@ -431,7 +446,7 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                         "game": g["canonical_game_id"], "home": g["home"],
                         "away": g["away"], "kickoff": g["kickoff_utc"].isoformat(),
                         "venue": g["venue"], "neutral": g["neutral_site"],
-                        "season_type": g["season_type"],
+                        "season_type": g["season_type"], "week": week,
                     }, sort_keys=True).encode()).hexdigest(),
                     source_manifest_version=SOURCE_VERSION,
                     source_updated_at=now,

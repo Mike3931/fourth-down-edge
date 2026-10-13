@@ -293,7 +293,7 @@ class TestTheSeasonTypeComesFromTheEvent:
     @staticmethod
     def _payload(*, top: dict | None, event_season: dict | None) -> dict:
         event = {
-            "id": "401", "shortName": "DEN @ ATL", "name": "Denver at Atlanta",
+            "week": {"number": 6}, "id": "401", "shortName": "DEN @ ATL", "name": "Denver at Atlanta",
             "date": "2026-08-14T23:00Z",
             "competitions": [{
                 "competitors": [
@@ -531,3 +531,33 @@ def test_conflicting_daily_event_never_silently_overwrites(capture, monkeypatch)
     monkeypatch.setattr(capture.httpx, 'get', get)
     with pytest.raises(ValueError, match='Conflicting ESPN events'):
         capture.fetch('20261018')
+
+
+def test_regular_season_uses_the_event_week_and_refuses_unknown(capture):
+    payload = TestTheSeasonTypeComesFromTheEvent._payload(top={}, event_season={'year': 2026, 'type': 2})
+    assert capture.discover(payload)[0]['week'] == 6
+    payload['events'][0].pop('week')
+    assert capture.discover(payload) == []
+
+
+def test_source_week_correction_appends_and_preserves_original(capture, db):
+    game = _game(status='STATUS_SCHEDULED', completed=False, quotes=[])
+    game.update(season_type='REG', week=5)
+    capture.persist([game], data_mode_value='LIVE_RESEARCH')
+    with db() as session:
+        before = session.scalars(select(ScheduleObservation)).one()
+        original = (before.id, before.week, before.content_hash, before.observed_at)
+    game['week'] = 6
+    capture.persist([game], data_mode_value='LIVE_RESEARCH')
+    capture.persist([game], data_mode_value='LIVE_RESEARCH')
+    with db() as session:
+        rows = list(session.scalars(select(ScheduleObservation).order_by(ScheduleObservation.id)))
+        assert len(rows) == 2
+        assert (rows[0].id, rows[0].week, rows[0].content_hash, rows[0].observed_at) == original
+        assert rows[1].week == 6
+        assert rows[1].source_manifest_version == 'espn-public-scoreboard-v2'
+
+    from fde_api.api.main import get_forward_slate
+
+    slate = get_forward_slate()
+    assert slate['games'][0]['week'] == 6
