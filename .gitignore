@@ -34,4 +34,7 @@ apps/api/data/policies/test-*.json
 *.db-wal
 *.db-shm
 *.db.manifest.json
+*.research-workspace.json
+*.research.lock
+apps/api/data/*.research-data/
 qa-release*.xml

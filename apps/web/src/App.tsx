@@ -6,6 +6,7 @@ import SignIn from './pages/SignIn';
 import TodaysPicks from './pages/TodaysPicks';
 import LiveSlate from './pages/LiveSlate';
 import LiveGameLab from './pages/LiveGameLab';
+import WarRoom from './pages/WarRoom';
 import CandidatesLive from './pages/CandidatesLive';
 import ForwardTestLive from './pages/ForwardTestLive';
 import SlateLive from './pages/SlateLive';
@@ -48,7 +49,8 @@ export default function App() {
             dollar stake beside it — accurate to its own disclaimer and
             still the first thing a tired person saw at 7pm on a Sunday.
             The demo screens are all still reachable, by name. */}
-        <Route path="/" element={<Navigate to="/live" replace />} />
+        <Route path="/" element={<Navigate to="/war-room" replace />} />
+        <Route path="/war-room" element={<WarRoom />} />
         <Route path="/picks-demo" element={<TodaysPicks />} />
         <Route path="/live" element={<LiveSlate />} />
         <Route path="/live/game/:gameId" element={<LiveGameLab />} />

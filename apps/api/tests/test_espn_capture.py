@@ -46,6 +46,22 @@ def _module():
     return module
 
 
+def test_schedule_change_appends_without_inventing_source_time(capture, db):
+    from datetime import timedelta
+
+    game = _game(status="STATUS_SCHEDULED", completed=False, quotes=[])
+    capture.persist([game], data_mode_value="LIVE_RESEARCH")
+    game["kickoff_utc"] += timedelta(hours=1)
+    capture.persist([game], data_mode_value="LIVE_RESEARCH")
+    capture.persist([game], data_mode_value="LIVE_RESEARCH")
+    with db() as s:
+        rows = list(s.scalars(select(ScheduleObservation).order_by(ScheduleObservation.id)))
+        assert len(rows) == 2
+        assert rows[1].supersedes_id == rows[0].id
+        assert rows[1].kickoff_utc - rows[0].kickoff_utc == timedelta(hours=1)
+        assert all(row.source_updated_at is None for row in rows)
+
+
 @pytest.fixture(scope="module")
 def capture():
     return _module()
@@ -329,13 +345,13 @@ class TestTheSeasonTypeComesFromTheEvent:
             top={}, event_season={"year": 2026, "type": 1, "slug": "preseason"}))
         assert len(games) == 1
         assert games[0]["season_type"] == "PRE"
-        assert games[0]["canonical_game_id"] == "2026_PRE_0814_DEN_ATL"
+        assert games[0]["canonical_game_id"] == "2026_PRE_ESPN_401"
 
     def test_a_regular_season_game_is_still_REG(self, capture) -> None:
         games = capture.discover(self._payload(
             top={}, event_season={"year": 2026, "type": 2, "slug": "regular-season"}))
         assert games[0]["season_type"] == "REG"
-        assert "_REG_" in games[0]["canonical_game_id"]
+        assert games[0]["canonical_game_id"] == "2026_06_DEN_ATL"
 
     def test_the_top_level_season_is_used_when_the_event_has_none(self, capture) -> None:
         """Older payloads carry it only at the top; those must still work."""

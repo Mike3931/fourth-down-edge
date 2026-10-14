@@ -17,7 +17,7 @@ test.describe('Fourth Down Edge core journey', () => {
     // 2) The front door is the engine-backed slate, not a generated pick.
     // `/` used to render Today's Picks, so the app opened on a fabricated
     // "Strong pick" with a stake beside it. It now redirects.
-    await expect(page).toHaveURL(/\/live$/);
+    await expect(page).toHaveURL(/\/war-room$/);
 
     // The demo banner belongs to demo screens ONLY. Asserting its absence
     // here is the point: a red DEMONSTRATION DATA bar above real captured

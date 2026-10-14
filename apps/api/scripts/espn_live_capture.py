@@ -358,7 +358,8 @@ def discover(payload: dict[str, Any]) -> list[dict[str, Any]]:
             quotes.extend(_quotes_from_odds(odds, home=home, away=away))
         games.append({
             "provider_event_id": str(event.get("id")),
-            "canonical_game_id": f"{year}_{season_type}_{kickoff:%m%d}_{away}_{home}",
+            "canonical_game_id": (f"{year}_{week:02}_{away}_{home}" if season_type == "REG"
+                                  else f"{year}_{season_type}_ESPN_{event.get('id')}"),
             "name": event.get("name"),
             "season": year,
             "season_type": season_type,
@@ -394,14 +395,28 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
     from fde_api.db.engine import get_engine
     from fde_api.db.forward_models import OddsQuote, ScheduleObservation
     from fde_api.forward.venues import resolve_venue
+    from fde_api.forward.game_identity import resolve_game
+    from fde_api.forward.game_identity import FINAL_CARRIER_PREFIX
 
     counts = {"games_created": 0, "games_existing": 0, "quotes_written": 0,
-              "quotes_duplicate": 0, "results_recorded": 0, "results_refused": 0}
+              "quotes_duplicate": 0, "results_recorded": 0, "results_refused": 0,
+              "identity_refused": 0}
     now = datetime.now(UTC)
     factory = sessionmaker(bind=get_engine(), future=True)
 
+    accepted = []
     with factory() as session:
         for g in games:
+            resolved = resolve_game(session, provider=PROVIDER,
+                provider_game_id=g["provider_event_id"], data_mode=data_mode_value,
+                season=g["season"], season_type=g["season_type"], home=g["home"], away=g["away"],
+                week=g.get("week", 0), kickoff=g["kickoff_utc"],
+                proposed_id=g["canonical_game_id"], observed_at=now)
+            if resolved is None:
+                counts["identity_refused"] += 1
+                continue
+            g["canonical_game_id"] = resolved
+            accepted.append(g)
             venue = resolve_venue(stadium_id=None, stadium_name=g["venue"],
                                   neutral_site=g["neutral_site"])
             existing = session.scalars(
@@ -413,7 +428,32 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
             week = g.get("week", 0 if g["season_type"] == "PRE" else None)
             if not isinstance(week, int) or (g["season_type"] != "PRE" and week <= 0):
                 raise ValueError('Cannot persist a regular/postseason fixture without a reported week')
-            if existing is None or existing.week != week:
+            content_hash = hashlib.sha256(json.dumps({
+                "game": g["canonical_game_id"], "home": g["home"],
+                "away": g["away"], "kickoff": g["kickoff_utc"].isoformat(),
+                "venue": g["venue"], "neutral": g["neutral_site"],
+                "season_type": g["season_type"], "week": week,
+            }, sort_keys=True).encode()).hexdigest()
+            status = _GAME_STATUS.get(g["status"] or "", "UNRESOLVED")
+            own = session.scalars(select(ScheduleObservation).where(
+                ScheduleObservation.data_mode == data_mode_value,
+                ScheduleObservation.provider == PROVIDER,
+                ScheduleObservation.provider_game_id == g["provider_event_id"],
+            ).order_by(ScheduleObservation.observed_at.desc(), ScheduleObservation.id.desc())).first()
+            fixture_changed = existing is None or (
+                existing.home_team_id, existing.away_team_id, existing.kickoff_utc,
+                existing.stadium_name, existing.neutral_site, existing.season_type, existing.week,
+            ) != (g["home"], g["away"], g["kickoff_utc"], g["venue"],
+                  g["neutral_site"], g["season_type"], week)
+            unchanged_own = own is not None and (
+                own.home_team_id, own.away_team_id, own.kickoff_utc,
+                own.stadium_name, own.neutral_site, own.season_type, own.week,
+            ) == (g["home"], g["away"], g["kickoff_utc"], g["venue"],
+                  g["neutral_site"], g["season_type"], week) and (
+                      own.game_status == "FINAL" or own.game_status == status)
+            if (not unchanged_own and (fixture_changed or own is None
+                    or (existing is not None and existing.game_status != "FINAL"
+                        and existing.game_status != status))):
                 # A source-confirmed correction appends; original captured rows
                 # remain intact. Preserve a verified FINAL designation.
                 session.add(ScheduleObservation(
@@ -424,7 +464,7 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                     season=g["season"],
                     season_type=g["season_type"],
                     week=week,
-                    change_summary=(existing.change_summary if existing is not None
+                    change_summary=(FINAL_CARRIER_PREFIX + (existing.change_summary or "") if existing is not None
                                     and existing.game_status == "FINAL" else None),
                     supersedes_id=(existing.id if existing is not None else None),
                     home_team_id=g["home"],
@@ -448,14 +488,9 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
                     # Over the fields that define the fixture, so a later
                     # observation of the same game can be compared rather
                     # than blindly appended.
-                    content_hash=hashlib.sha256(json.dumps({
-                        "game": g["canonical_game_id"], "home": g["home"],
-                        "away": g["away"], "kickoff": g["kickoff_utc"].isoformat(),
-                        "venue": g["venue"], "neutral": g["neutral_site"],
-                        "season_type": g["season_type"], "week": week,
-                    }, sort_keys=True).encode()).hexdigest(),
+                    content_hash=content_hash,
                     source_manifest_version=SOURCE_VERSION,
-                    source_updated_at=now,
+                    source_updated_at=None,  # ESPN does not establish a fixture update time.
                     observed_at=now,
                 ))
                 counts["games_created"] += 1
@@ -514,7 +549,7 @@ def persist(games: list[dict[str, Any]], *, data_mode_value: str) -> dict[str, i
     )
 
     with factory() as session:
-        for g in games:
+        for g in accepted:
             if not g.get("completed"):
                 continue
             home, away = g["scores"].get("home"), g["scores"].get("away")
@@ -593,7 +628,8 @@ def main() -> int:
           f"duplicate {counts['quotes_duplicate']}")
     print(f"  results recorded {counts['results_recorded']}  "
           f"refused {counts['results_refused']}\n")
-    return 0
+    print(f"  identity observations requiring review {counts['identity_refused']}")
+    return 2 if counts["identity_refused"] else 0
 
 
 if __name__ == "__main__":

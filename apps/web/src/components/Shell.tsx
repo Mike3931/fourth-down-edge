@@ -24,6 +24,7 @@ const DEMO_GROUP = 'Demonstration data';
 const SETUP_GROUP = 'Your setup';
 
 const NAV = (firstGameId: string | undefined) => [
+  { to: '/war-room', label: 'War Room', icon: '◈', live: true, group: LIVE_GROUP },
   { to: '/candidates', label: 'Candidates', icon: '◆', live: true, group: LIVE_GROUP },
   { to: '/live', label: 'Live Slate', icon: '◉', live: true, group: LIVE_GROUP },
   { to: '/slate', label: 'Slate', icon: '▤', live: true, group: LIVE_GROUP },
@@ -48,7 +49,7 @@ const NAV = (firstGameId: string | undefined) => [
 // grows. A screen that is wrongly called live is the failure that matters,
 // so the list is stated rather than inferred.
 const LIVE_ROUTES = new Set([
-  '/candidates', '/live', '/slate', '/forward-test', '/models', '/health',
+  '/war-room', '/candidates', '/live', '/slate', '/forward-test', '/models', '/health',
 ]);
 
 // Screens that read NO dataset — neither the engine nor the demo

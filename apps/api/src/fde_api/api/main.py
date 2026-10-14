@@ -144,6 +144,25 @@ def read_session() -> Iterator[Session]:
 
 Db = Annotated[Session, Depends(read_session)]
 
+
+@app.get("/v1/research/briefing", dependencies=[Auth])
+def get_research_briefing(s: Db) -> dict[str, Any]:
+    from fde_api.forward.briefing import read_briefing
+
+    return read_briefing(s, now=utc_now())
+
+
+@app.get("/v1/research/identity-reviews", dependencies=[Auth])
+def get_identity_reviews(s: Db) -> dict[str, Any]:
+    from fde_api.db.forward_models import GameIdentityReview
+
+    rows = list(s.scalars(select(GameIdentityReview).order_by(GameIdentityReview.created_at,
+                                                            GameIdentityReview.id)))
+    return {"count": len(rows), "status": "REVIEW_REQUIRED" if rows else "NO_FLAGS",
+            "reviews": [{"id": r.id, "provider": r.provider,
+                         "provider_game_id": r.provider_game_id, "reason": r.reason,
+                         "evidence": r.evidence} for r in rows]}
+
 # /health must distinguish "deliberately open" from "nobody configured a
 # token". Reporting both as "disabled (local dev)" is how an unprotected
 # deployment reads as a normal one.
