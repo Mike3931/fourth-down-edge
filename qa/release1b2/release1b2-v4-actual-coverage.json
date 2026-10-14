@@ -1,0 +1,220 @@
+{
+  "version": "nfl-intelligence-v4",
+  "source_sha": "2656f1b64bf2da9285af3c3d0a2eda261020bf10",
+  "sources": [
+    {
+      "dataset": "schedule",
+      "published_at": null,
+      "captured_at": "2026-10-14T01:15:47.536312+00:00",
+      "payload_hash": "51a05d2b8e572b5dbf76de2b367f36c1c7ecd3b76857818679d197774e2bf07b",
+      "coverage": {
+        "source_rows": 272,
+        "weeks": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18
+        ],
+        "max_week": 18,
+        "accepted_rows": 0,
+        "refused_rows": 0,
+        "publication_semantics": "Artifact release time, not per-player report issuance",
+        "quality": "SECONDARY_PUBLIC",
+        "complete_availability": false,
+        "identity_context_hash": null,
+        "season": 2026,
+        "observed_games": 272,
+        "new_games": 257,
+        "revisions": 15,
+        "unchanged": 0,
+        "postponed": 0,
+        "cancelled": 0,
+        "unmapped_stadiums": [],
+        "warnings": [],
+        "results_recorded": 78,
+        "results_unchanged": 1,
+        "results_refused": 0
+      }
+    },
+    {
+      "dataset": "players",
+      "published_at": "2026-10-13T15:30:56+00:00",
+      "captured_at": "2026-10-14T01:15:49.397747+00:00",
+      "payload_hash": "c51ad685747dd8a1f04e9636e326798ac3fe5f19e1f0e0cbcd8d354d6b7f5b97",
+      "coverage": {
+        "source_rows": 24853,
+        "weeks": [],
+        "max_week": null,
+        "accepted_rows": 0,
+        "refused_rows": 0,
+        "publication_semantics": "Artifact release time, not per-player report issuance",
+        "quality": "SECONDARY_PUBLIC",
+        "complete_availability": false,
+        "identity_context_hash": null,
+        "mapped_players": 24853,
+        "conflicting_players": 0
+      }
+    },
+    {
+      "dataset": "rosters",
+      "published_at": "2026-10-13T15:01:28+00:00",
+      "captured_at": "2026-10-14T01:15:54.870498+00:00",
+      "payload_hash": "3e04f1c929b327bd0104674c3937f0170a5a975bc2c5217f07a0be27bb690e78",
+      "coverage": {
+        "source_rows": 3035,
+        "weeks": [
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "max_week": 6,
+        "accepted_rows": 2839,
+        "refused_rows": 196,
+        "publication_semantics": "Artifact release time, not per-player report issuance",
+        "quality": "SECONDARY_PUBLIC",
+        "complete_availability": false,
+        "identity_context_hash": "7f7351d6ec356272ad4b7b5239ea791e77e4d923e57800df97e3e6afb2fec3ae"
+      }
+    },
+    {
+      "dataset": "team_stats",
+      "published_at": "2026-10-13T16:58:48+00:00",
+      "captured_at": "2026-10-14T01:15:58.479935+00:00",
+      "payload_hash": "16dd6beebe0eb11b77cb29c837a78dd038a3e716dc74c646a2a6cb24bd6c00cf",
+      "coverage": {
+        "source_rows": 158,
+        "weeks": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "max_week": 5,
+        "accepted_rows": 158,
+        "refused_rows": 0,
+        "publication_semantics": "Artifact release time, not per-player report issuance",
+        "quality": "SECONDARY_PUBLIC",
+        "complete_availability": false,
+        "identity_context_hash": "7f7351d6ec356272ad4b7b5239ea791e77e4d923e57800df97e3e6afb2fec3ae"
+      }
+    },
+    {
+      "dataset": "player_stats",
+      "published_at": "2026-10-13T16:58:45+00:00",
+      "captured_at": "2026-10-14T01:16:01.494212+00:00",
+      "payload_hash": "fae8bce9fa4c6dd47c8dfbf1db1e6497e634b051956fe8ce3d921535203741e2",
+      "coverage": {
+        "source_rows": 5506,
+        "weeks": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "max_week": 5,
+        "accepted_rows": 5501,
+        "refused_rows": 5,
+        "publication_semantics": "Artifact release time, not per-player report issuance",
+        "quality": "SECONDARY_PUBLIC",
+        "complete_availability": false,
+        "identity_context_hash": "7f7351d6ec356272ad4b7b5239ea791e77e4d923e57800df97e3e6afb2fec3ae"
+      }
+    },
+    {
+      "dataset": "snap_counts",
+      "published_at": "2026-10-13T11:01:32+00:00",
+      "captured_at": "2026-10-14T01:16:05.066330+00:00",
+      "payload_hash": "e4d877bf670c5bc47a1ac863cc3a28a0f4b2f926872cc03666b27b31d6ea332b",
+      "coverage": {
+        "source_rows": 7370,
+        "weeks": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "max_week": 5,
+        "accepted_rows": 7356,
+        "refused_rows": 14,
+        "publication_semantics": "Artifact release time, not per-player report issuance",
+        "quality": "SECONDARY_PUBLIC",
+        "complete_availability": false,
+        "identity_context_hash": "7f7351d6ec356272ad4b7b5239ea791e77e4d923e57800df97e3e6afb2fec3ae"
+      }
+    },
+    {
+      "dataset": "injuries",
+      "published_at": "2026-10-13T14:57:28+00:00",
+      "captured_at": "2026-10-14T01:16:08.465307+00:00",
+      "payload_hash": "8dd06b0e55128af411713591a14c22d3fe7135dbdfab0731c597ea1cf16037f4",
+      "coverage": {
+        "source_rows": 1413,
+        "weeks": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "max_week": 5,
+        "accepted_rows": 1413,
+        "refused_rows": 0,
+        "publication_semantics": "Artifact release time, not per-player report issuance",
+        "quality": "SECONDARY_PUBLIC",
+        "complete_availability": false,
+        "identity_context_hash": "7f7351d6ec356272ad4b7b5239ea791e77e4d923e57800df97e3e6afb2fec3ae"
+      }
+    }
+  ],
+  "counts_after_repeat": {
+    "sources": 7,
+    "facts": 17267,
+    "bindings": 64127,
+    "reviews": 215,
+    "manifests": 28
+  },
+  "actual_pit": {
+    "cutoff": "2026-10-14T01:16:01.494211+00:00",
+    "earlier_player_counts": [
+      0,
+      0
+    ],
+    "current_player_counts": [
+      11,
+      14
+    ]
+  },
+  "concurrent_reads": {
+    "statuses": [
+      200,
+      200,
+      200,
+      200,
+      200,
+      200,
+      200,
+      200
+    ],
+    "elapsed_seconds": 1.046
+  }
+}

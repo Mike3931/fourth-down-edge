@@ -1,0 +1,22 @@
+{
+  "result": {
+    "run_id": "e026fbc5-c17d-47a8-b470-d3be47048673",
+    "status": "finished",
+    "capture": {
+      "research_downloads": 7,
+      "research_failures": 0,
+      "research_not_due": 0
+    }
+  },
+  "before": {
+    "research_sources": 7,
+    "research_facts": 17267,
+    "research_player_bindings": 64127
+  },
+  "after": {
+    "research_sources": 7,
+    "research_facts": 17267,
+    "research_player_bindings": 64127
+  },
+  "unchanged_evidence": true
+}
