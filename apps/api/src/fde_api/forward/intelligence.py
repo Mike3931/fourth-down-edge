@@ -189,9 +189,12 @@ def ingest_source(s: Session, *, dataset: str, season: int, payload: bytes,
         pfr = {b.provider_id: b.player_id for b in s.scalars(select(PlayerBinding).where(PlayerBinding.provider == "pfr"))}
         # Each natural row key must have exactly one meaning in this vintage.
         groups: dict[tuple[Any, ...], list[dict[str, str]]] = defaultdict(list)
+        roster_teams: dict[tuple[str, str], set[str]] = defaultdict(set)
         for row in rows:
             groups[(row.get("team"), row.get("gsis_id") or row.get("player_id") or row.get("pfr_player_id"), row.get("week"),
                     row.get("season_type") or row.get("game_type"))].append(row)
+            if dataset == "rosters" and row.get("gsis_id"):
+                roster_teams[(row["gsis_id"], row["week"])].add(row["team"])
         seen: set[str] = set()
         for natural, variants in groups.items():
             distinct = {digest(r) for r in variants}
@@ -208,6 +211,8 @@ def ingest_source(s: Session, *, dataset: str, season: int, payload: bytes,
                     raise ValueError("Missing canonical player identity")
                 if player and (player not in valid or player in blocked):
                     raise ValueError("Unresolved player identity")
+                if dataset == "rosters" and len(roster_teams[(str(player), row["week"])]) > 1:
+                    raise ValueError("Ambiguous same-week roster team assignment")
                 if dataset == "rosters" and row.get("espn_id") and espn.get(row["espn_id"]) != player:
                     raise ValueError("Roster provider identity disagreement")
                 week = int(row["week"])
@@ -236,10 +241,11 @@ def ingest_source(s: Session, *, dataset: str, season: int, payload: bytes,
                         player_id=player, week=week, canonical_game_id=gid, values=row))
                     seen.add(fact_key)
                     coverage["accepted_rows"] += 1
-            except (ValueError, KeyError):
+            except (ValueError, KeyError) as exc:
                 coverage["refused_rows"] += len(variants)
                 review(s, player, "INVALID_RESEARCH_ROW", {"source_id": key,
-                       "natural_key": list(natural), "row_hash": digest(row)}, captured_at)
+                       "natural_key": list(natural), "row_hash": digest(row),
+                       "refusal_reason": str(exc)}, captured_at)
     # Final coverage is inserted once, before immutable evidence triggers apply.
     s.add(batch)
     s.flush()

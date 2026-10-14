@@ -198,3 +198,12 @@ def test_full_schedule_results_are_governed_known_at_capture_and_conflicts_refus
     assert conflict.coverage["results_refused"] == 1
     assert _score_of(final_observation(session, canonical_game_id=row["game_id"],
                     data_mode=DataMode.LIVE_RESEARCH)) == (24, 20)
+
+
+def test_same_week_ambiguous_team_assignment_is_not_a_trade_resolution(session):
+    game = fixture(session)
+    ingest(session, "players", [player()])
+    source = ingest(session, "rosters", [roster("KC"), roster("BUF")])
+    assert source.coverage["accepted_rows"] == 0 and source.coverage["refused_rows"] == 2
+    assert all(t["roster_count"] == 0 for t in IntelligenceAt(session, NOW).game(game)["teams"])
+    assert all("Ambiguous" in r.evidence["refusal_reason"] for r in session.scalars(select(PlayerIdentityReview)))
