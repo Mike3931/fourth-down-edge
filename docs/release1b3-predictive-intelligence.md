@@ -1,6 +1,6 @@
 # Release 1B.3 — predictive research and market access
 
-Baseline: `90d18afb7e30ae8cf06e33db37b413825ed55a21`. Evaluated implementation: `4ab60d0dafa973edf57c76d9e3f294118ac440c7`. Source integration and deployment require separate review.
+Baseline: `90d18afb7e30ae8cf06e33db37b413825ed55a21`. Evaluated implementation: `31b7503f6ee0c9a40b5148aa15c57e7ae95a63a4`. Source integration and deployment require separate review.
 
 ## Implemented research workflow
 
@@ -54,4 +54,5 @@ Qualified singles require accepted point-in-time personnel/source coverage, an i
 
 ## Evidence and preservation
 
-[Executed comparison and screenshots](../qa/release1b3/README.md) include the full final report, both exploratory outputs, source hash, database readback and actual desktop/mobile views. The original database SHA-256 remains `133ff5b1a59229280ec19e84c59c314f200b377623b3bfa26de0fa583e2e5d0a`; all three unresolved historical evaluations and frozen studies remain unchanged. No schema migration was added. Final CI links and skips are recorded in the PR acceptance report.
+[Executed comparison and screenshots](../qa/release1b3/README.md) include the full final report, all exploratory outputs, source hash, database readback and actual desktop/mobile views. The original database SHA-256 remains `133ff5b1a59229280ec19e84c59c314f200b377623b3bfa26de0fa583e2e5d0a`; all three unresolved historical evaluations and frozen studies remain unchanged. No schema migration was added. Final CI links and skips are recorded in the PR acceptance report.
+

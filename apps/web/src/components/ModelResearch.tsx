@@ -13,6 +13,7 @@ const responseSchema = z.object({
     limitations: z.array(z.string()), recommended_for_review: z.array(z.string()),
     models: z.array(z.object({ name: z.string(), status, n: z.number().int().nonnegative(),
       metrics: z.object({ brier: metric, log_loss: metric, mae_margin: metric, mae_total: metric,
+        n_win_scored: z.number().int().nonnegative().optional(),
         log_loss_ci90: interval.nullable().optional(), calibration_intercept: metric.optional(),
         calibration_slope: metric.optional(), interval_80_coverage: z.object({margin: metric, total: metric}).optional(),
         closing_benchmark: z.object({n: z.number(), log_loss: metric, brier: metric,
@@ -58,6 +59,7 @@ export default function ModelResearch({ gameId }: { gameId?: string }) {
                 <h3 className="break-words font-medium text-ink">{model.name}</h3>
                 <p className="mt-1 text-warning">{model.status} · {model.n} games</p>
                 <p className="mt-2">Brier {number(model.metrics.brier)} · log loss {number(model.metrics.log_loss)}</p>
+                {model.metrics.n_win_scored != null && <p>Moneyline sample: {model.metrics.n_win_scored} non-tied outcomes.</p>}
                 <p>Margin error {number(model.metrics.mae_margin)} points · total error {number(model.metrics.mae_total)} points</p>
                 {model.metrics.closing_benchmark && <p className="mt-2">Closing-market benchmark: log loss {number(model.metrics.closing_benchmark.log_loss)} ({model.metrics.closing_benchmark.n} games); margin error {number(model.metrics.closing_benchmark.margin_mae)}, total error {number(model.metrics.closing_benchmark.total_mae)} points. Evaluation reference; prices were not candidate inputs.</p>}
                 {model.metrics.log_loss_ci90 && <p className="mt-2">90% week-block interval for log loss: {model.metrics.log_loss_ci90.map(number).join(' to ')}.</p>}

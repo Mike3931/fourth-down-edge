@@ -1,7 +1,7 @@
 # NFL singles research comparison
 
-Run: `cmp_daa05467efa8`
-Recorded: 2026-10-14T22:45:20.583576+00:00
+Run: `cmp_dd33163eb8a7`
+Recorded: 2026-10-14T23:00:23.806532+00:00
 
 RESEARCH ONLY — NO BET
 
@@ -21,7 +21,7 @@ Closing quotes are retrospective yardsticks. No candidate receives them.
 
 Log loss 90% week-block interval: [0.6832661942050758, 0.6942156974089981].
 80% distribution interval coverage: {'margin': 0.8022079116835327, 'total': 0.8169273229070837}.
-Calibration intercept/slope: 3.0235694005699845 / -12.987970464529713.
+Calibration intercept/slope: 3.0235694005699156 / -12.987970464529399.
 Paired log-loss difference vs baseline, 90% interval: [0.0, 0.0].
 
 ## naive-rolling-v1
@@ -32,7 +32,7 @@ Paired log-loss difference vs baseline, 90% interval: [0.0, 0.0].
 
 Log loss 90% week-block interval: [0.6334623564951762, 0.66315737281965].
 80% distribution interval coverage: {'margin': 0.8491260349586016, 'total': 0.8215271389144434}.
-Calibration intercept/slope: -0.011025842432944416 / 1.0383043816388506.
+Calibration intercept/slope: -0.011025842432944463 / 1.0383043816388506.
 Paired log-loss difference vs baseline, 90% interval: [-0.055074749094889054, -0.026450531148405638].
 
 ## team-ratings-v1
@@ -41,10 +41,10 @@ Paired log-loss difference vs baseline, 90% interval: [-0.055074749094889054, -0
 - Margin MAE does not beat closing-line benchmark on the same games
 - Total MAE does not beat closing-line benchmark on the same games
 
-Log loss 90% week-block interval: [0.627835553014826, 0.6574649532584824].
+Log loss 90% week-block interval: [0.6278257175455417, 0.657465562538101].
 80% distribution interval coverage: {'margin': 0.827046918123275, 'total': 0.828886844526219}.
-Calibration intercept/slope: -0.014543562643032798 / 1.0152275290829083.
-Paired log-loss difference vs baseline, 90% interval: [-0.060589229727236495, -0.03261480566745516].
+Calibration intercept/slope: -0.014465289394870124 / 1.0152175170459758.
+Paired log-loss difference vs baseline, 90% interval: [-0.06058609966017962, -0.03260881996795763].
 
 ## Boundaries
 
