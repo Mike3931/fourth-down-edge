@@ -6,7 +6,7 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from fde_api.db.forward_models import GameIdentityBinding, ScheduleObservation
+from fde_api.db.forward_models import GameIdentityBinding, GameIdentityReview, ScheduleObservation
 from fde_api.db.models import Player
 from fde_api.db.research_models import (
     PlayerBinding,
@@ -92,6 +92,76 @@ def test_revisions_repeat_ingestion_and_known_at_leakage(session):
     assert ingest(session, "rosters", [roster()], NOW + timedelta(hours=2)).id == old.id
     assert session.get(ResearchSource, old.id).captured_at == NOW
     assert len(list(session.scalars(select(ResearchFact).where(ResearchFact.source_id == old.id)))) == 1
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_payload_birth_date_conflict_cannot_partially_publish_identity(session, reverse):
+    rows = [{**player(espn="100"), "birth_date": ""}, player(),
+            {**player(espn="102"), "birth_date": "1996-01-01"}]
+    if reverse:
+        rows.reverse()
+    rows.append(player("00-0000002", "103"))
+    batch = ingest(session, "players", rows)
+    assert batch.coverage["mapped_players"] == 1
+    assert batch.coverage["conflicting_players"] == 1
+    assert session.get(Player, "00-0000001") is None
+    assert session.get(Player, "00-0000002") is not None
+    assert {b.player_id for b in session.scalars(select(PlayerBinding))} == {"00-0000002"}
+    flag = session.scalars(select(PlayerIdentityReview)).one()
+    assert flag.reason == "BIRTH_DATE_DISAGREEMENT"
+    assert flag.evidence["claims"] == ["1995-01-01", "1996-01-01"]
+    assert flag.evidence["source_id"] == batch.id
+    assert ingest(session, "players", rows, NOW + timedelta(minutes=1)).id == batch.id
+    assert len(list(session.scalars(select(PlayerIdentityReview)))) == 1
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_payload_birth_date_conflict_preserves_existing_identity_and_bindings(session, reverse):
+    first = ingest(session, "players", [player()])
+    original_name = session.get(Player, "00-0000001").name
+    before = [(b.provider, b.provider_id, b.player_id, dict(b.evidence), b.observed_at)
+              for b in session.scalars(select(PlayerBinding))]
+    rows = [player(espn="102"), {**player(espn="103"), "birth_date": "1996-01-01"}]
+    if reverse:
+        rows.reverse()
+    batch = ingest(session, "players", rows, NOW + timedelta(minutes=1))
+    assert batch.coverage["mapped_players"] == 0
+    assert batch.coverage["conflicting_players"] == 1
+    session.expire_all()
+    assert session.get(Player, "00-0000001").birth_date == "1995-01-01"
+    assert session.get(Player, "00-0000001").name == original_name
+    assert [(b.provider, b.provider_id, b.player_id, dict(b.evidence), b.observed_at)
+            for b in session.scalars(select(PlayerBinding))] == before
+    assert session.get(ResearchSource, first.id).captured_at == NOW
+    assert IntelligenceAt(session, NOW).blocked == set()
+    assert IntelligenceAt(session, NOW + timedelta(minutes=1)).blocked == {"00-0000001"}
+
+
+def test_final_result_conflict_is_scoped_to_affected_game(session):
+    valid = fixture(session)
+    ingest(session, "players", [player()])
+    ingest(session, "rosters", [roster()])
+    ingest(session, "player_stats", [stats(True)])
+    ingest(session, "team_stats", [stats()])
+    affected = ScheduleObservation(canonical_game_id="CONFLICT", data_mode="LIVE_RESEARCH",
+        season=2026, season_type="REG", week=6, home_team_id="TEN", away_team_id="HOU",
+        kickoff_utc=NOW + timedelta(days=1), provider="nflverse", provider_game_id="CONFLICT",
+        game_status="FINAL", content_hash="CONFLICT", observed_at=NOW)
+    session.add(affected)
+    session.add(GameIdentityReview(id="result-conflict", data_mode="LIVE_RESEARCH",
+        provider="nflverse", provider_game_id="CONFLICT", reason="RESULT_CONFLICT_OR_INVALID",
+        evidence={"canonical_game_id": "CONFLICT", "home_score": 99, "away_score": 20},
+        created_at=NOW + timedelta(seconds=1)))
+    session.flush()
+    warning = "Conflicting final-result inputs withheld pending review"
+    before = IntelligenceAt(session, NOW)
+    assert warning not in before.game(affected)["missing"]
+    after = IntelligenceAt(session, NOW + timedelta(seconds=1))
+    assert warning in after.game(affected)["missing"]
+    unaffected = after.game(valid)
+    assert warning not in unaffected["missing"]
+    assert unaffected["teams"][1]["players"][0]["metrics"]["passing_yards"] == 250
+    assert unaffected["teams"][1]["recent_games"][0]["canonical_game_id"] == "PAST"
 
 
 def test_trade_preserves_previous_assignment_and_does_not_mix_old_team_stats(session):

@@ -64,6 +64,12 @@ Primary references: [nflverse data/CC-BY attribution](https://github.com/nflvers
 
 ## Acceptance gates and next dependencies
 
+### Targeted pre-integration correction — 2026-10-14
+
+Normalization v7 audits all birth-date claims for each GSIS identity, including any recorded canonical birth date, before publishing players or provider bindings. Contradictory identities are withheld in full and receive append-only review evidence; unaffected identities remain ingestible. Previously recorded players, bindings and source vintages are retained. The version change produces a new prospective normalization vintage rather than altering earlier evidence.
+
+Final-result conflict warnings apply only to the affected canonical game. Conflicted historical result inputs remain excluded from research features, and review records remain subject to the research cutoff. Regression tests cover both payload orders, an initially missing birth date, repeat ingestion, preservation of existing identity/binding evidence, and two games with a conflict affecting only one. Full acceptance results for the corrective head are recorded in PR #4; this correction does not authorize deployment or historical conflict resolution.
+
 Require all mandatory existing CI gates, new PostgreSQL player-binding contention and immutable-trigger checks, PIT/identity/roster/correction/refusal regressions, frontend/build, browser and actual-engine checks. Local real-source acceptance must report actual counts/represented weeks, repeat ingestion, retained lineage and desktop/mobile evidence. These results and final source SHA belong in the PR and final acceptance report, not inferred from code existence.
 
 Remaining dependencies: accepted official availability/inactive coverage; complete applicable current-week data and routes; licensed/authorized exact TN singles/prop/alternate/TD quote semantics; exact SGP leg combinability/combined quote; qualified market-specific and joint models with out-of-sample/prospective calibration and approval. NO BET remains the correct outcome while these gates are closed. The original populated database has a different/newer migration lineage and must not be migrated/downgraded by this source branch. The three historical evaluation conflicts remain unresolved.

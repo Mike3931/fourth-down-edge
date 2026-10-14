@@ -36,7 +36,7 @@ from fde_api.ingest import _mirror
 from fde_api.pit.guards import assert_no_lookahead
 from fde_api.raw import RawArtifactStore
 
-VERSION = "nfl-intelligence-v6"
+VERSION = "nfl-intelligence-v7"
 BASE = "https://github.com/nflverse/nflverse-data/releases/download/"
 INTERVALS = {"schedule": 900, "players": 86400, "rosters": 21600,
              "team_stats": 21600, "player_stats": 21600, "snap_counts": 21600, "injuries": 21600}
@@ -92,16 +92,28 @@ def bind_players(s: Session, rows: list[dict[str, str]], source: str, now: datet
                 review(s, player, "PROVIDER_ID_COLLISION", {"provider": key[0],
                     "provider_id": key[1], "claims": sorted(ids), "source_id": source}, now)
     players = {p.id: p for p in s.scalars(select(Player))}
+    # Audit every row before publishing any identity or binding. A later row
+    # must not invalidate an identity already accepted from this same payload.
+    birth_dates: dict[str, set[str]] = defaultdict(set)
+    for row in rows:
+        gsis = row.get("gsis_id", "").strip()
+        if gsis and row.get("birth_date"):
+            birth_dates[gsis].add(row["birth_date"])
+    for gsis, dates in birth_dates.items():
+        old = players.get(gsis)
+        if old and old.birth_date:
+            dates.add(old.birth_date)
+        if len(dates) > 1:
+            bad.add(gsis)
+            review(s, gsis, "BIRTH_DATE_DISAGREEMENT", {"source_id": source,
+                   "existing": old.birth_date if old else None,
+                   "claims": sorted(dates)}, now)
     accepted = 0
     for row in rows:
         gsis = row.get("gsis_id", "").strip()
         if not gsis or len(gsis) > 16:
             continue
         old = players.get(gsis)
-        if old and old.birth_date and row.get("birth_date") and old.birth_date != row["birth_date"]:
-            bad.add(gsis)
-            review(s, gsis, "BIRTH_DATE_DISAGREEMENT", {"source_id": source,
-                   "existing": old.birth_date, "incoming": row["birth_date"]}, now)
         if gsis in bad:
             continue
         if old is None:
@@ -415,7 +427,7 @@ class IntelligenceAt:
 
     def game(self, game: ScheduleObservation) -> dict[str, Any]:
         missing = []
-        if self.invalid_games:
+        if game.canonical_game_id in self.invalid_games:
             missing.append("Conflicting final-result inputs withheld pending review")
         sources = []
         season = game.season
