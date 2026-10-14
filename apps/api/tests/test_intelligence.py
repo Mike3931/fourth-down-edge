@@ -146,13 +146,13 @@ def test_persisted_poll_intervals_failure_and_recovery(session, tmp_path, monkey
         return httpx.Response(503 if fail else 200, content=csv_bytes([player()]),
                               headers={"Last-Modified": "Tue, 13 Oct 2026 11:59:00 GMT"})
     client = httpx.Client(transport=httpx.MockTransport(response))
-    assert collect_intelligence(session, now=NOW, season=2026, client=client)["research_downloads"] == 1
-    assert collect_intelligence(session, now=NOW, season=2026, client=client)["research_not_due"] == 1
+    assert collect_intelligence(session, now=NOW, season=2026, client=client, clock=lambda: NOW)["research_downloads"] == 1
+    assert collect_intelligence(session, now=NOW, season=2026, client=client, clock=lambda: NOW)["research_not_due"] == 1
     fail = True
-    assert collect_intelligence(session, now=NOW + timedelta(seconds=61), season=2026, client=client)["research_failures"] == 1
+    assert collect_intelligence(session, now=NOW + timedelta(seconds=61), season=2026, client=client, clock=lambda: NOW)["research_failures"] == 1
     assert IntelligenceAt(session, NOW + timedelta(seconds=61)).polls[(2026, "players")].status == "FAILED"
     fail = False
-    assert collect_intelligence(session, now=NOW + timedelta(seconds=122), season=2026, client=client)["research_downloads"] == 1
+    assert collect_intelligence(session, now=NOW + timedelta(seconds=122), season=2026, client=client, clock=lambda: NOW)["research_downloads"] == 1
     assert len(list(session.scalars(select(ResearchSource)))) == 1
     assert len(list(session.scalars(select(ResearchPoll)))) == 3
 
@@ -207,3 +207,16 @@ def test_same_week_ambiguous_team_assignment_is_not_a_trade_resolution(session):
     assert source.coverage["accepted_rows"] == 0 and source.coverage["refused_rows"] == 2
     assert all(t["roster_count"] == 0 for t in IntelligenceAt(session, NOW).game(game)["teams"])
     assert all("Ambiguous" in r.evidence["refusal_reason"] for r in session.scalars(select(PlayerIdentityReview)))
+
+
+def test_network_response_is_known_when_received_not_when_poll_started(session, tmp_path, monkeypatch):
+    from fde_api.forward import intelligence
+    monkeypatch.setattr(intelligence, "INTERVALS", {"players": 60})
+    monkeypatch.setattr(intelligence.settings, "raw_dir", tmp_path)
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200,
+        content=csv_bytes([player()]), headers={"Last-Modified": "Tue, 13 Oct 2026 11:59:00 GMT"})))
+    received = NOW + timedelta(seconds=5)
+    collect_intelligence(session, now=NOW, season=2026, client=client, clock=lambda: received)
+    source = session.scalars(select(ResearchSource)).one()
+    assert source.captured_at == received
+    assert IntelligenceAt(session, NOW + timedelta(seconds=2)).sources == {}

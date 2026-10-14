@@ -12,6 +12,7 @@ import json
 import math
 import uuid
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from typing import Any
@@ -35,7 +36,7 @@ from fde_api.ingest import _mirror
 from fde_api.pit.guards import assert_no_lookahead
 from fde_api.raw import RawArtifactStore
 
-VERSION = "nfl-intelligence-v3"
+VERSION = "nfl-intelligence-v4"
 BASE = "https://github.com/nflverse/nflverse-data/releases/download/"
 INTERVALS = {"schedule": 900, "players": 86400, "rosters": 21600,
              "team_stats": 21600, "player_stats": 21600, "snap_counts": 21600, "injuries": 21600}
@@ -292,11 +293,13 @@ def capture_schedule_results(s: Session, rows: list[dict[str, str]], source: str
 
 
 def collect_intelligence(s: Session, *, now: datetime, season: int,
-                         client: httpx.Client | None = None) -> dict[str, int]:
+                         client: httpx.Client | None = None,
+                         clock: Callable[[], datetime] | None = None) -> dict[str, int]:
     """Source-specific persisted polling/backoff; independent failures never erase evidence."""
     counts = {"research_downloads": 0, "research_failures": 0, "research_not_due": 0}
     owns = client is None
     http = client or httpx.Client(follow_redirects=True, timeout=25)
+    clock = clock or (lambda: datetime.now(UTC))
     store = RawArtifactStore(settings.raw_dir)
     try:
         for dataset, interval in INTERVALS.items():
@@ -312,16 +315,18 @@ def collect_intelligence(s: Session, *, now: datetime, season: int,
                 with s.begin_nested():
                     response = http.get(source_url(dataset, season))
                     response.raise_for_status()
+                    received_at = max(now, clock())
                     header = response.headers.get("last-modified")
                     published = parsedate_to_datetime(header).astimezone(UTC) if header else None
                     batch = ingest_source(s, dataset=dataset, season=season, payload=response.content,
-                        captured_at=now, published_at=published, store=store)
+                        captured_at=received_at, published_at=published, store=store)
                     poll.source_id, poll.status = batch.id, "SUCCESS"
                     counts["research_downloads"] += 1
             except Exception as exc:
                 # No payload/key/credential is rendered; failed attempt stays discoverable.
                 poll.error = f"{type(exc).__name__}: source unavailable or rejected"
                 counts["research_failures"] += 1
+            poll.captured_at = max(now, clock())
             s.add(poll)
             s.flush()
     finally:
