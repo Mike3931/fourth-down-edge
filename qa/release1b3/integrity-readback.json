@@ -1,0 +1,87 @@
+{
+  "implementation_commit": "4ab60d0dafa973edf57c76d9e3f294118ac440c7",
+  "counts": {
+    "games": 4635,
+    "model_versions": 13,
+    "predictions": 3293,
+    "model_evaluations": 12,
+    "backtest_runs": 1,
+    "research_sources": 7,
+    "research_facts": 17289,
+    "research_player_bindings": 64129,
+    "research_player_reviews": 214,
+    "schedule_observations": 366,
+    "forward_ledger": 0
+  },
+  "original_database_sha256": "133ff5b1a59229280ec19e84c59c314f200b377623b3bfa26de0fa583e2e5d0a",
+  "models": [
+    [
+      "naive-homefield-v1_cmp_daa05467efa8_2022",
+      "research_only",
+      "4ab60d0dafa973edf57c76d9e3f294118ac440c7"
+    ],
+    [
+      "naive-rolling-v1_cmp_daa05467efa8_2022",
+      "research_only",
+      "4ab60d0dafa973edf57c76d9e3f294118ac440c7"
+    ],
+    [
+      "team-ratings-v1_cmp_daa05467efa8_2022",
+      "research_only",
+      "4ab60d0dafa973edf57c76d9e3f294118ac440c7"
+    ],
+    [
+      "naive-homefield-v1_cmp_daa05467efa8_2023",
+      "research_only",
+      "4ab60d0dafa973edf57c76d9e3f294118ac440c7"
+    ],
+    [
+      "naive-rolling-v1_cmp_daa05467efa8_2023",
+      "research_only",
+      "4ab60d0dafa973edf57c76d9e3f294118ac440c7"
+    ],
+    [
+      "team-ratings-v1_cmp_daa05467efa8_2023",
+      "research_only",
+      "4ab60d0dafa973edf57c76d9e3f294118ac440c7"
+    ],
+    [
+      "naive-homefield-v1_cmp_daa05467efa8_2024",
+      "research_only",
+      "4ab60d0dafa973edf57c76d9e3f294118ac440c7"
+    ],
+    [
+      "naive-rolling-v1_cmp_daa05467efa8_2024",
+      "research_only",
+      "4ab60d0dafa973edf57c76d9e3f294118ac440c7"
+    ],
+    [
+      "team-ratings-v1_cmp_daa05467efa8_2024",
+      "research_only",
+      "4ab60d0dafa973edf57c76d9e3f294118ac440c7"
+    ],
+    [
+      "naive-homefield-v1_cmp_daa05467efa8_2025",
+      "research_only",
+      "4ab60d0dafa973edf57c76d9e3f294118ac440c7"
+    ],
+    [
+      "naive-rolling-v1_cmp_daa05467efa8_2025",
+      "research_only",
+      "4ab60d0dafa973edf57c76d9e3f294118ac440c7"
+    ],
+    [
+      "team-ratings-v1_cmp_daa05467efa8_2025",
+      "research_only",
+      "4ab60d0dafa973edf57c76d9e3f294118ac440c7"
+    ],
+    [
+      "team-ratings-v1_cmp_daa05467efa8_current",
+      "research_only",
+      "4ab60d0dafa973edf57c76d9e3f294118ac440c7"
+    ]
+  ],
+  "source_hash": "85840e8d6a7299ea2a2f8f6cc19e6a7b6a8492c63b3396f877f020ede6ae9fd2",
+  "research_only": true,
+  "recommendations_enabled": false
+}
