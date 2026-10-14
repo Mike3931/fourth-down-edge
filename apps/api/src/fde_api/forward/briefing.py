@@ -195,6 +195,14 @@ def read_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
             expired = any(src["status"] == "OBSERVED" and src["published_at"]
                           and now - datetime.fromisoformat(src["published_at"]) > timedelta(hours=48)
                           for game in stored["games"] for src in game["intelligence"]["sources"])
+            expired = expired or any(game.get("weather") and game["inputs"]["environment"] == "SOURCE_TIMED_OBSERVATIONS_ONLY"
+                and game["weather"]["source_updated_at"]
+                and now - datetime.fromisoformat(game["weather"]["source_updated_at"]) > timedelta(hours=6)
+                for game in stored["games"])
+            expired = expired or any(item["published_at"]
+                and now - datetime.fromisoformat(item["published_at"]) > timedelta(hours=48)
+                for game in stored["games"] for team in game["intelligence"]["teams"]
+                for item in team["verified_availability"])
             if not cache_changed and not expired:
                 current = deepcopy(stored)
     if current is None:
