@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import polars as pl
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from fde_api.canonical.team_map import canonical_team_code
@@ -28,6 +29,7 @@ class RosterLoadResult:
 def load_rosters_parquet(session: Session, parquet_path: Path, *, season: int) -> RosterLoadResult:
     df = (
         pl.scan_parquet(parquet_path)
+        .filter(pl.col("season") == season)
         .select("season", "team", "position", "status", "full_name", "gsis_id", "birth_date", "rookie_year")
         .collect()
     )
@@ -39,7 +41,10 @@ def load_rosters_parquet(session: Session, parquet_path: Path, *, season: int) -
             skipped += 1
             continue
         team = canonical_team_code(row["team"])
-        session.merge(
+        # Legacy reference projection is insert-only. Current revisions belong
+        # to timestamped research vintages, never an overwritten seasonal row.
+        if session.get(Player, gsis) is None:
+            session.add(
             Player(
                 id=gsis,
                 name=row.get("full_name") or gsis,
@@ -53,7 +58,10 @@ def load_rosters_parquet(session: Session, parquet_path: Path, *, season: int) -
         if key in seen:
             continue
         seen.add(key)
-        session.merge(
+        existing = session.scalars(select(RosterEntry).where(RosterEntry.season == season,
+            RosterEntry.team_id == team, RosterEntry.player_id == gsis)).first()
+        if existing is None:
+            session.add(
             RosterEntry(
                 season=season,
                 team_id=team,

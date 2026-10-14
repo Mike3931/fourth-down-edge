@@ -9,7 +9,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from fde_api.db.models import Job
+from fde_api.db.research_models import GameResearchManifest
 from fde_api.forward.briefing import KIND, VERSION, prepare_briefing
+from fde_api.forward.intelligence import digest
 
 
 def run_cycle(factory: Callable[[], Session], capture: Callable[[], dict[str, int]],
@@ -25,6 +27,12 @@ def run_cycle(factory: Callable[[], Session], capture: Callable[[], dict[str, in
         counts = capture()
         with factory() as s:
             result = prepare_briefing(s, now=datetime.now(UTC))
+            cutoff = datetime.fromisoformat(result["as_of_at"])
+            for game in result["games"]:
+                identity = digest(game)
+                if s.get(GameResearchManifest, identity) is None:
+                    s.add(GameResearchManifest(id=identity, canonical_game_id=game["canonical_game_id"],
+                        cutoff=cutoff, created_at=datetime.now(UTC), payload=game))
             job = s.get(Job, job_id)
             assert job is not None
             job.status = "finished"

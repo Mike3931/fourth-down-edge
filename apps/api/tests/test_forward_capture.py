@@ -567,7 +567,7 @@ class TestInjuries:
     @pytest.mark.parametrize(
         ("designation", "practice", "expected"),
         [
-            ("OUT", "DNP", AvailabilityState.CONFIRMED_INACTIVE),
+            ("OUT", "DNP", AvailabilityState.EXPECTED_INACTIVE),
             ("DOUBTFUL", "DNP", AvailabilityState.DOUBTFUL),
             ("QUESTIONABLE", "DNP", AvailabilityState.GAME_TIME_DECISION),
             ("QUESTIONABLE", "LIMITED", AvailabilityState.ACTIVE_WITH_RESTRICTION_RISK),
