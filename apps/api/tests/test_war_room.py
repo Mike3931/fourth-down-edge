@@ -69,6 +69,30 @@ def test_read_is_not_a_research_run_and_never_writes(session):
     assert list(session.scalars(select(Job))) == []
 
 
+def test_recent_prepared_manifest_reused_and_new_identity_evidence_invalidates(session, monkeypatch):
+    from fde_api.db.research_models import PlayerIdentityReview
+    from fde_api.forward import briefing
+    schedule(session)
+    stored = prepare_briefing(session, now=NOW)
+    session.add(Job(id="prepared", kind=KIND, params={}, status="finished", created_at=NOW,
+                    finished_at=NOW, result={"briefing": stored}))
+    session.flush()
+    original = briefing.prepare_briefing
+    calls = []
+    def tracked(*args, **kwargs):
+        calls.append(True)
+        return original(*args, **kwargs)
+    monkeypatch.setattr(briefing, "prepare_briefing", tracked)
+    result = read_briefing(session, now=NOW + timedelta(minutes=1))
+    assert calls == [] and result["as_of_at"] == stored["as_of_at"]
+    assert "latest_run" not in stored  # Read decorations never mutate the frozen payload.
+    session.add(PlayerIdentityReview(id="new", player_id="PLAYER", reason="PROVIDER_ID_COLLISION",
+        evidence={}, observed_at=NOW + timedelta(seconds=30)))
+    session.flush()
+    read_briefing(session, now=NOW + timedelta(minutes=1))
+    assert calls == [True]
+
+
 def test_failed_attempt_is_not_hidden_by_old_success(session):
     schedule(session)
     session.add(Job(id="old", kind=KIND, params={}, status="finished",

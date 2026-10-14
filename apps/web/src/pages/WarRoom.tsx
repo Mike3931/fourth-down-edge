@@ -9,6 +9,7 @@ const changeLabels: Record<string, string> = {
   markets_observed: 'Market coverage changed', books_observed: 'Book coverage changed',
   injury_observations: 'Availability evidence changed', weather_captured_at: 'Weather forecast captured',
   quote_evidence: 'Published market observations changed', new_game: 'Game added to captured slate',
+  intelligence_evidence_hash: 'Team or player research changed',
 };
 
 export default function WarRoom() {
@@ -56,6 +57,7 @@ export default function WarRoom() {
           <p className="mt-2 text-sm text-ink-muted">{fmtInstant(game.kickoff_utc)} · {game.game_status}</p>
           <p className="mt-4 text-sm text-ink">{game.markets_observed.length ? `Published ${game.markets_observed.join(', ').toLowerCase()} observations` : 'No published market observations'}</p>
           <p className="mt-1 text-xs text-ink-muted">Source: {game.schedule.source} · first schedule capture {fmtAgoLive(game.schedule.captured_at)}</p>
+          {game.intelligence && <p className="mt-2 text-sm text-ink-muted">{game.intelligence.teams.map(team => `${team.team_id}: ${team.roster_count} mapped roster players, ${team.recent_games.length} recent games`).join(' · ')}. Open Game Lab for production and availability evidence.</p>}
           {game.weather && <p className="mt-2 text-xs text-ink-muted">{game.weather.source.toUpperCase()} forecast: {game.weather.temp_f == null ? 'temperature unavailable' : `${game.weather.temp_f}°F`}, {game.weather.wind_mph == null ? 'wind unavailable' : `wind ${game.weather.wind_mph} mph`} · {game.weather.source_updated_at ? `issued ${fmtAgoLive(game.weather.source_updated_at)}` : 'issue time unknown'} · captured {fmtAgoLive(game.weather.captured_at)}. No model adjustment.</p>}
           <details className="mt-3 text-sm text-ink-muted"><summary className="cursor-pointer text-ink">What is missing?</summary><ul className="mt-2 space-y-1">{game.missing.map(reason => <li key={reason}>{reason}</li>)}</ul><p className="mt-2">{game.research_records.length} recorded assessment(s), kept separate by study cohort. These do not qualify a current bet365 offer.</p></details>
           <Link className="mt-5 inline-block rounded-lg border border-accent/40 px-4 py-2 text-sm text-accent" to={`/live/game/${encodeURIComponent(game.canonical_game_id)}`}>Open Game Lab →</Link>

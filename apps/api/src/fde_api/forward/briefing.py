@@ -7,11 +7,12 @@ research cohort contains a candidate. Capture freshness is not price freshness.
 from __future__ import annotations
 
 from collections import defaultdict
+from copy import deepcopy
 from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from fde_api.db.forward_models import (
@@ -23,6 +24,9 @@ from fde_api.db.forward_models import (
     WeatherForecastVintage,
 )
 from fde_api.db.models import Job
+from fde_api.db.research_models import PlayerBinding, PlayerIdentityReview, ResearchPoll, ResearchSource
+from fde_api.forward.intelligence import VERSION as INTELLIGENCE_VERSION
+from fde_api.forward.intelligence import IntelligenceAt
 
 VERSION = "war-room-foundation-v1"
 TIMEZONE = "America/Chicago"
@@ -59,6 +63,7 @@ def prepare_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
     for injury in s.scalars(select(InjuryObservation).where(
         InjuryObservation.data_mode == mode, InjuryObservation.canonical_game_id.in_(ids),
         InjuryObservation.observed_at <= now,
+        InjuryObservation.entered_at <= now,
     )):
         injuries[injury.canonical_game_id].append(injury)
     weather: dict[str, WeatherForecastVintage] = {}
@@ -80,15 +85,18 @@ def prepare_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
         elif entry.as_of_at == previous[0].as_of_at:
             previous.append(entry)  # Equal-time conflicts require an owner, not an ID tiebreak.
     prepared = []
+    intelligence = IntelligenceAt(s, now)
     for game in games:
         assert game.kickoff_utc is not None
         gid = game.canonical_game_id
+        research_inputs = intelligence.game(game)
         latest: dict[tuple[str, str, str, float | None], OddsQuote] = {}
         for q in quotes[gid]:
             latest[(q.sportsbook, q.market, q.selection, q.line)] = q
         captured = list(latest.values())
         records = [e for group in assessments.values() for e in group if e.canonical_game_id == gid]
         missing = ["Verified bet365 Tennessee prices", "Approved market-specific model evidence"]
+        missing.extend(research_inputs["missing"])
         verified_injuries = [i for i in injuries[gid] if i.verification_status == "VERIFIED"
                             and i.source_category in {"OFFICIAL_VERIFIED", "LICENSED_PROVIDER"}
                             and i.source_updated_at is not None
@@ -113,6 +121,8 @@ def prepare_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
             "game_status": game.game_status, "today": game.kickoff_utc.astimezone(
                 ZoneInfo(TIMEZONE)).date() == local_day,
             "status": "DATA_INCOMPLETE", "missing": missing,
+            "intelligence": research_inputs,
+            "intelligence_evidence_hash": research_inputs["evidence_hash"],
             "schedule": {"source": game.provider, "record_id": game.id,
                          "captured_at": game.observed_at.isoformat(),
                          "source_updated_at": game.source_updated_at.isoformat()
@@ -126,6 +136,7 @@ def prepare_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
             "weather_captured_at": weather[gid].observed_at.isoformat() if gid in weather else None,
             "weather": None if gid not in weather else {
                 "source": weather[gid].provider,
+                "record_id": weather[gid].id,
                 "captured_at": weather[gid].observed_at.isoformat(),
                 "source_updated_at": _iso(weather[gid].source_updated_at),
                 "temp_f": weather[gid].temp_f, "wind_mph": weather[gid].wind_mph,
@@ -136,7 +147,10 @@ def prepare_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
             "research_records": [{"id": e.id, "status": e.status, "cohort": e.cohort,
                                   "model_version": e.model_version, "policy_version": e.policy_version,
                                   "as_of_at": e.as_of_at.isoformat()} for e in records],
-            "inputs": {"team_efficiency": "UNAVAILABLE", "player_usage": "UNAVAILABLE",
+            "inputs": {"team_efficiency": "OBSERVED_RESEARCH_ONLY" if any(
+                        t["recent_games"] for t in research_inputs["teams"]) else "UNAVAILABLE",
+                       "player_usage": "OBSERVED_RESEARCH_ONLY" if any(
+                        t["players"] for t in research_inputs["teams"]) else "UNAVAILABLE",
                        "availability": "VERIFIED_OBSERVATIONS_ONLY" if verified_injuries else "UNAVAILABLE",
                        "environment": "SOURCE_TIMED_OBSERVATIONS_ONLY" if fresh_weather else "UNAVAILABLE"},
         })
@@ -160,9 +174,39 @@ def prepare_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
 
 def read_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
     """Live read plus immutable completed run snapshots. Failed attempts stay visible."""
-    current = prepare_briefing(s, now=now)
     runs = list(s.scalars(select(Job).where(Job.kind == KIND, Job.created_at <= now)
                           .order_by(Job.created_at.desc(), Job.id.desc()).limit(3)))
+    current = None
+    if runs and runs[0].status == "finished" and runs[0].result and runs[0].finished_at:
+        stored = runs[0].result["briefing"]
+        cutoff = datetime.fromisoformat(stored["as_of_at"])
+        if (timedelta(0) <= now - cutoff < timedelta(minutes=15)
+                and cutoff.astimezone(ZoneInfo(TIMEZONE)).date() == now.astimezone(ZoneInfo(TIMEZONE)).date()
+                and stored.get("games") and all(g.get("intelligence", {}).get("version") == INTELLIGENCE_VERSION
+                                               for g in stored["games"])):
+            watermarks = (ScheduleObservation.observed_at, OddsQuote.observed_at,
+                InjuryObservation.entered_at, WeatherForecastVintage.observed_at,
+                ForwardLedgerEntry.created_at, GameIdentityReview.created_at,
+                ResearchSource.captured_at, ResearchPoll.captured_at,
+                PlayerBinding.observed_at, PlayerIdentityReview.observed_at)
+            # Future timestamps neither invalidate nor enter the cached cutoff.
+            cache_changed = any((latest := s.scalar(select(func.max(column)).where(column <= now))) is not None
+                          and latest > cutoff for column in watermarks)
+            expired = any(src["status"] == "OBSERVED" and src["published_at"]
+                          and now - datetime.fromisoformat(src["published_at"]) > timedelta(hours=48)
+                          for game in stored["games"] for src in game["intelligence"]["sources"])
+            expired = expired or any(game.get("weather") and game["inputs"]["environment"] == "SOURCE_TIMED_OBSERVATIONS_ONLY"
+                and game["weather"]["source_updated_at"]
+                and now - datetime.fromisoformat(game["weather"]["source_updated_at"]) > timedelta(hours=6)
+                for game in stored["games"])
+            expired = expired or any(item["published_at"]
+                and now - datetime.fromisoformat(item["published_at"]) > timedelta(hours=48)
+                for game in stored["games"] for team in game["intelligence"]["teams"]
+                for item in team["verified_availability"])
+            if not cache_changed and not expired:
+                current = deepcopy(stored)
+    if current is None:
+        current = prepare_briefing(s, now=now)
     current["latest_run"] = None if not runs else {
         "id": runs[0].id, "status": runs[0].status,
         "started_at": runs[0].started_at.isoformat() if runs[0].started_at else None,
@@ -178,8 +222,8 @@ def read_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
         for game in new_result["briefing"]["games"]:
             before = previous.get(game["canonical_game_id"])
             fields = ["kickoff_utc", "game_status", "markets_observed", "books_observed",
-                      "injury_observations", "weather_captured_at", "quote_evidence"]
-            changed = [field for field in fields if before and before[field] != game[field]]
+                      "injury_observations", "weather_captured_at", "quote_evidence", "intelligence_evidence_hash"]
+            changed = [field for field in fields if before and before.get(field) != game.get(field)]
             if before is None or changed:
                 current["changes"].append({"canonical_game_id": game["canonical_game_id"],
                                            "fields": changed or ["new_game"],

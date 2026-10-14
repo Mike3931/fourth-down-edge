@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { describeBookCoverage, describeConsensus, describeQuote } from '@fde/calculations';
 import EngineDown from '../components/EngineDown';
+import ResearchEvidence from '../components/ResearchEvidence';
 import { engineGet, useForwardCandidates, useForwardSlate } from '../lib/engine';
 import { fmtAgoLive, fmtInstant } from '../lib/format';
 import { useBriefing } from '../lib/briefing';
@@ -168,9 +169,11 @@ export default function LiveGameLab() {
         {!preparation.isPending && !inputs && <p className="mt-2 text-sm text-muted">Input preparation is unavailable for this game. The briefing covers the current seven-day window; no demo evidence was substituted.</p>}
         {inputs && <>
           <p className="mt-3 text-sm text-muted">{inputs.weather ? `${inputs.weather.source.toUpperCase()} forecast: ${inputs.weather.temp_f ?? 'unknown'}°F; wind ${inputs.weather.wind_mph ?? 'unknown'} mph. Captured ${fmtAgoLive(inputs.weather.captured_at)}; ${inputs.weather.source_updated_at ? `issued ${fmtAgoLive(inputs.weather.source_updated_at)}` : 'issue time unknown'}.` : 'No weather forecast prepared for this game.'} Forecasts are observations; no probability adjustment was made.</p>
-          <details className="mt-3 text-sm text-muted"><summary className="cursor-pointer text-fg">Missing evidence and qualification blockers</summary><ul className="mt-2 space-y-1">{inputs.missing.map(reason => <li key={reason}>{reason}</li>)}</ul><p className="mt-2">Missing reports do not mean players are healthy or confirmed active. Team efficiency and player usage inputs are not yet prepared by this worker.</p></details>
+          <details className="mt-3 text-sm text-muted"><summary className="cursor-pointer text-fg">Missing evidence and qualification blockers</summary><ul className="mt-2 space-y-1">{inputs.missing.map(reason => <li key={reason}>{reason}</li>)}</ul><p className="mt-2">Missing reports do not mean players are healthy or confirmed active.</p></details>
         </>}
       </section>
+
+      {inputs?.intelligence && <ResearchEvidence evidence={inputs.intelligence} />}
 
       <section aria-labelledby="market-title" className="rounded border border-border p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">

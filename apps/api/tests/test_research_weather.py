@@ -103,3 +103,35 @@ def test_identical_source_body_appends_new_period_after_reschedule(tmp_path, mon
         assert capture_forecast_for_game(s, canonical_game_id="same-game", venue=venue,
             kickoff_utc=starts[1], observed_at=NOW + timedelta(minutes=3),
             client=CoveringForecastClient(http, starts[1], NOW)) is None
+
+
+def test_live_weather_receipt_does_not_leak_into_request_start_cutoff(tmp_path, monkeypatch):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from fde_api.config import settings
+    from fde_api.db.forward_models import Venue
+    from fde_api.db.models import Base
+    from fde_api.forward.modes import DataMode
+    from fde_api.forward.weather import capture_forecast_for_game, forecast_as_of
+    monkeypatch.setattr(settings, "data_dir", tmp_path)
+    received = NOW + timedelta(seconds=5)
+    payload = {"properties": {"updated": (NOW + timedelta(seconds=3)).isoformat(), "periods": [{
+        "startTime": KICKOFF.isoformat(), "endTime": (KICKOFF + timedelta(hours=1)).isoformat(),
+        "temperature": 55, "temperatureUnit": "F", "windSpeed": "5 mph"}]}}
+    def response(request):
+        return httpx.Response(200, json={"properties": {"forecastHourly": "https://api.weather.gov/forecast"}}
+                              if "/points/" in str(request.url) else payload)
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    with Session(engine) as s, httpx.Client(transport=httpx.MockTransport(response)) as http:
+        venue = Venue(id="DEN", name="Denver", latitude=39.7, longitude=-105,
+            country="US", roof_type="OUTDOOR", source="test", verification_status="VERIFIED", updated_at=NOW)
+        s.add(venue)
+        s.flush()
+        row = capture_forecast_for_game(s, canonical_game_id="GAME", venue=venue,
+            kickoff_utc=KICKOFF, observed_at=NOW, capture_clock=lambda: received,
+            client=CoveringForecastClient(http, KICKOFF, NOW, lambda: received))
+        assert row.observed_at == received
+        assert forecast_as_of(s, canonical_game_id="GAME", data_mode=DataMode.LIVE_RESEARCH,
+                              as_of_at=NOW + timedelta(seconds=2)) is None

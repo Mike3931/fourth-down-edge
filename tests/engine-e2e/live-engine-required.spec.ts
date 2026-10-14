@@ -111,6 +111,13 @@ test('current public NFL captures navigate to Game Lab on desktop and mobile', a
   const slate = await response.json();
   const game = slate.games.find((g: { kickoff_utc: string }) => Date.parse(g.kickoff_utc) > Date.now());
   expect(game, 'current real capture must contain an upcoming fixture').toBeTruthy();
+  const prepared = await request.get('/research-api/v1/research/briefing');
+  expect(prepared.ok()).toBeTruthy();
+  const evidence = (await prepared.json()).games.find((g: { canonical_game_id: string }) => g.canonical_game_id === game.canonical_game_id)?.intelligence;
+  expect(evidence, 'public-source journey must include prepared player research').toBeTruthy();
+  expect(evidence.sources.some((s: { dataset: string }) => s.dataset === 'player_stats')).toBeTruthy();
+  expect(evidence.teams.some((t: { players: unknown[] }) => t.players.length > 0)).toBeTruthy();
+  expect(evidence.teams.every((t: { availability_complete: boolean }) => t.availability_complete === false)).toBeTruthy();
   await page.goto('/');
   await page.getByRole('button', { name: /enter local demo session/i }).click();
   await page.goto('/slate');
@@ -122,6 +129,9 @@ test('current public NFL captures navigate to Game Lab on desktop and mobile', a
   await expect(page).toHaveURL(new RegExp(`/live/game/${game.canonical_game_id}$`));
   await expect(page.getByRole('heading', { name: `Game Lab · ${game.away_team_id} @ ${game.home_team_id}` })).toBeVisible();
   await expect(page.getByRole('table', { name: 'Latest observed market prices' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'NFL team and player research' })).toBeVisible();
+  await page.getByText('Sources and timing', { exact: true }).click();
+  await expect(page.getByText('player stats', { exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'espn / LIVE', exact: true }).first()).toBeVisible();
   await expect(page.getByText('DEMONSTRATION DATA — NOT FOR REAL-MONEY DECISIONS')).toHaveCount(0);
   await page.screenshot({ path: 'qa/handoff-2026-10-12/game-lab-desktop.png', fullPage: true });

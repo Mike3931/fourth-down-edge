@@ -87,6 +87,8 @@ def test_cached_settings_cannot_redirect_worker_to_another_profile(tmp_path, mon
     import espn_live_capture
 
     monkeypatch.setattr(espn_live_capture, "fetch", lambda _: {"events": []})
+    from fde_api.forward import intelligence
+    monkeypatch.setattr(intelligence, "collect_intelligence", lambda *a, **kw: {"research_failures": 0})
     assert module.run(argparse.Namespace(cycles=1, interval=300), target) == 0
     assert protected.read_bytes() == b"do not open this profile"
     with sqlite3.connect(target) as db:

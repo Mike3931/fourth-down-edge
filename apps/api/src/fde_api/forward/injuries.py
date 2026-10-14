@@ -27,7 +27,7 @@ from fde_api.db.forward_models import AvailabilityAssessment, InjuryObservation
 from fde_api.forward.cohort import Cohort
 from fde_api.forward.domain_identity import IdentityResult, handled
 from fde_api.forward.modes import DataMode
-from fde_api.pit.guards import LookaheadError
+from fde_api.pit.guards import LookaheadError, assert_no_lookahead
 from fde_api.util import utc_now
 
 
@@ -56,10 +56,10 @@ PRODUCTION_SOURCE_CATEGORIES = frozenset(
 
 # The method a version of this assessor implements. A change here is
 # a legitimate new version of every assessment, never a conflict.
-AVAILABILITY_METHOD_VERSION = "availability-v0"
+AVAILABILITY_METHOD_VERSION = "availability-v1"
 
 VALID_PRACTICE = {"DNP", "LIMITED", "FULL", None}
-VALID_DESIGNATION = {"OUT", "DOUBTFUL", "QUESTIONABLE", "NONE", None}
+VALID_DESIGNATION = {"OUT", "DOUBTFUL", "QUESTIONABLE", "NONE", "INACTIVE", None}
 
 
 @dataclass(frozen=True)
@@ -132,6 +132,11 @@ def record_injury_observation(
         raise InjuryValidationError(f"invalid practice_status {practice_status!r}")
     if game_designation not in VALID_DESIGNATION:
         raise InjuryValidationError(f"invalid game_designation {game_designation!r}")
+    if source_updated_at is not None:
+        assert_no_lookahead(source_updated_at, observed_at, "injury source publication")
+    if game_designation == "INACTIVE" and (cat != SourceCategory.OFFICIAL_VERIFIED
+            or source_updated_at is None or not source_reference):
+        raise InjuryValidationError("INACTIVE requires a sourced, time-stamped verified official inactive list")
     if not player_id or not player_id.strip():
         raise InjuryValidationError("player_id is required; players are never matched by name")
 
@@ -193,6 +198,8 @@ def observations_as_of(
         InjuryObservation.canonical_game_id == canonical_game_id,
         InjuryObservation.data_mode == data_mode.value,
         InjuryObservation.observed_at <= as_of_at,
+        InjuryObservation.entered_at <= as_of_at,
+        (InjuryObservation.source_updated_at.is_(None)) | (InjuryObservation.source_updated_at <= as_of_at),
     )
     if production_only:
         stmt = stmt.where(InjuryObservation.source_category.in_([c.value for c in PRODUCTION_SOURCE_CATEGORIES]))
@@ -208,8 +215,12 @@ def classify(obs: InjuryObservation | None) -> AvailabilityState:
         return AvailabilityState.UNKNOWN
     d = (obs.game_designation or "").upper()
     p = (obs.practice_status or "").upper()
-    if d == "OUT":
+    if (d == "INACTIVE" and obs.source_category == SourceCategory.OFFICIAL_VERIFIED
+            and obs.verification_status == "VERIFIED" and obs.source_updated_at is not None
+            and obs.source_reference):
         return AvailabilityState.CONFIRMED_INACTIVE
+    if d == "OUT":
+        return AvailabilityState.EXPECTED_INACTIVE
     if d == "DOUBTFUL":
         return AvailabilityState.DOUBTFUL
     if d == "QUESTIONABLE":

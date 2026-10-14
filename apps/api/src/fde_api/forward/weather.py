@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -128,6 +129,7 @@ def capture_forecast_for_game(
     data_mode: DataMode = DataMode.LIVE_RESEARCH,
     observed_at: datetime,
     is_gameday_observation: bool = False,
+    capture_clock: Callable[[], datetime] | None = None,
 ) -> WeatherForecastVintage | None:
     """Capture one forecast vintage. Returns None when the content is
     identical to the newest existing vintage (no duplicate rows).
@@ -152,6 +154,10 @@ def capture_forecast_for_game(
         raise VenueNotSupported(f"{venue.name} has no NWS forecast endpoint")
 
     body, raw = client.fetch_forecast(grid["forecast_url"])
+    # Only the live research caller opts into a receipt clock. Scheduler replay
+    # callers retain their explicit observed_at; never inject wall time there.
+    if capture_clock is not None:
+        observed_at = max(observed_at, capture_clock())
     props = body.get("properties", {})
     periods = props.get("periods", [])
     period = _select_period(periods, kickoff_utc)

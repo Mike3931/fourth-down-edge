@@ -18,6 +18,7 @@ def main() -> int:
     parser.add_argument("--database-file", type=Path, required=True)
     parser.add_argument("--cycles", type=int, default=1)
     parser.add_argument("--interval", type=int, default=900)
+    parser.add_argument("--season", type=int, default=None)
     args = parser.parse_args()
     target = args.database_file.resolve()
     if target.name.lower() == "fde.db" or not target.is_file():
@@ -50,6 +51,7 @@ def run(args: argparse.Namespace, target: Path) -> int:
 
     from fde_api.config import settings
     from fde_api.db.engine import get_engine
+    from fde_api.forward.intelligence import collect_intelligence
     from fde_api.forward.research_runner import run_cycle
     from fde_api.forward.research_weather import collect_weather
     from fde_api.forward.workspace import authorize_database
@@ -69,14 +71,18 @@ def run(args: argparse.Namespace, target: Path) -> int:
         now = datetime.now(UTC)
         # UTC slack includes today's Chicago evening games; the view uses local days.
         dates = f"{now - timedelta(days=1):%Y%m%d}-{now + timedelta(days=7):%Y%m%d}"
-        def capture(window: str = dates) -> dict[str, int]:
+        def capture(window: str = dates, season: int = getattr(args, "season", None)
+                    or (now.year if now.month >= 8 else now.year - 1)) -> dict[str, int]:
             games = within_utc_window(discover(fetch(window)), window)
             counts = persist(games, data_mode_value="LIVE_RESEARCH")
             if counts["identity_refused"]:
                 raise ValueError("Game identity review required; no complete-slate claim")
             with factory() as s:
+                counts.update(collect_intelligence(s, now=datetime.now(UTC), season=season))
                 counts.update(collect_weather(s, now=datetime.now(UTC)))
                 s.commit()
+            if counts["research_failures"]:
+                raise ValueError("Research provider refresh failed; no current-source claim")
             return counts
 
         result = run_cycle(factory, capture, dates=dates)
