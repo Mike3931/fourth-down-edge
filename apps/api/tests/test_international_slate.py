@@ -93,7 +93,13 @@ class TestNineInternationalGames:
         intl = {g.canonical_game_id: g for g in current_slate(slate_session, 2026) if g.international}
         jax = intl["2026_05_PHI_JAX"]
         assert jax.international is True
-        assert jax.neutral_site is False  # league designation preserved
+        payload = _published_schedule()
+        assert payload is not None
+        source = next(r for r in csv.DictReader(io.StringIO(payload.decode()))
+                      if r["game_id"] == "2026_05_PHI_JAX")
+        # This is a provider observation, not proof of league designation.
+        # Current nflverse revisions label it Neutral; earlier releases said Home.
+        assert jax.neutral_site is (source["location"].strip().lower() == "neutral")
         assert jax.stadium_id == "INT_TOTTENHAM"
         assert jax.venue_timezone == "Europe/London"
 
@@ -108,14 +114,29 @@ class TestNineInternationalGames:
             assert g.venue_timezone is not None
             assert not g.venue_timezone.startswith("America/New_York")
 
-    def test_source_location_flag_alone_undercounts(self) -> None:
+    def test_source_location_flag_alone_undercounts(self, slate_session: Session) -> None:
         """Proves the old rule was wrong, so it cannot be reintroduced."""
         payload = _published_schedule()
         if payload is None:
             pytest.skip("no schedule artifact")
         rows = [r for r in csv.DictReader(io.StringIO(payload.decode())) if r["season"] == "2026"]
+        # Explicit test-only older-source scenario. Never rewrite the captured
+        # artifact or assume a mutable current download still carries this flag.
+        for row in rows:
+            if row["game_id"] == "2026_05_PHI_JAX":
+                row["location"] = "Home"
         by_flag = [r for r in rows if r["location"].strip().lower() == "neutral"]
         assert len(by_flag) == EXPECTED_INTERNATIONAL_GAMES - 1  # the flag misses one
+        out = io.StringIO()
+        writer = csv.DictWriter(out, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+        ingest_schedule(slate_session, out.getvalue().encode(), season=2026,
+                        observed_at=datetime(2026, 9, 2, 12, 0, tzinfo=UTC))
+        actual = {g.canonical_game_id: g for g in current_slate(slate_session, 2026) if g.international}
+        assert len(actual) == EXPECTED_INTERNATIONAL_GAMES
+        assert actual["2026_05_PHI_JAX"].neutral_site is False
+        assert actual["2026_05_PHI_JAX"].stadium_id == "INT_TOTTENHAM"
 
     def test_venue_resolution_is_name_first(self) -> None:
         # Home-designated game abroad still resolves to the overseas venue.
