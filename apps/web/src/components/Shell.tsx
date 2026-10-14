@@ -168,8 +168,8 @@ export default function Shell() {
             ) : onLiveScreen ? (
               <div className="flex items-center gap-1.5 text-xs text-ink-muted">
                 <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                Real captured data — no generated values on this screen. Capture
-                time and provider are stated per item below.
+                Captured NFL evidence and research estimates. Source timing,
+                model status and missing information are shown with the results.
               </div>
             ) : (
               <>
