@@ -59,7 +59,9 @@ def score_history(history: LeagueHistory) -> LeagueHistory:
         for team, opponent, home in ((g.home, g.away, True), (g.away, g.home, False)):
             rows.append(TeamGameRow(g.id, g.season, g.week, team, opponent, home,
                                    g.kickoff, g.result_observed_at, {}))
-    return LeagueHistory(history.games, rows)
+    # The existing fitter uses a stable kickoff sort. Supply a total order so
+    # simultaneous training updates never depend on database row order.
+    return LeagueHistory(sorted(history.games, key=lambda g: (g.kickoff, g.id)), rows)
 
 
 def replay(model: GamePredictor, games: list[GameRow]) -> dict[str, PredictedMoments]:

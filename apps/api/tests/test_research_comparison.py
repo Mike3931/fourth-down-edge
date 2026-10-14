@@ -11,10 +11,13 @@ from fde_api.backtest.research_comparison import (
     clean,
     read_comparison,
     run_comparison,
+    score_history,
     validation_status,
 )
 from fde_api.config import settings
 from fde_api.db.models import BacktestRun, ModelEvaluation, ModelVersion, OddsSnapshot, Prediction
+from fde_api.features.history import LeagueHistory
+from fde_api.models_ml.ratings import DynamicRatings
 
 NOW = datetime(2026, 10, 14, 12, tzinfo=UTC)
 
@@ -99,3 +102,15 @@ def test_cli_refuses_existing_database_before_loading_or_migrating(tmp_path):
     assert result.returncode == 2
     assert "existing databases are never adopted" in result.stderr
     assert database.read_bytes() == original
+
+
+def test_simultaneous_training_is_independent_of_database_order(league_session):
+    history = LeagueHistory.load(league_session)
+    forward = score_history(history)
+    reverse = score_history(LeagueHistory(list(reversed(history.games)), []))
+    assert [g.id for g in forward.games] == [g.id for g in reverse.games]
+    assert forward.games == sorted(forward.games, key=lambda g: (g.kickoff, g.id))
+    a, b = DynamicRatings(), DynamicRatings()
+    a.fit(forward.games, {}, forward)
+    b.fit(reverse.games, {}, reverse)
+    assert a.r == b.r and a.hfa == b.hfa and a.s == b.s
