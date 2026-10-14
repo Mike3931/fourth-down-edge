@@ -36,7 +36,7 @@ from fde_api.ingest import _mirror
 from fde_api.pit.guards import assert_no_lookahead
 from fde_api.raw import RawArtifactStore
 
-VERSION = "nfl-intelligence-v5"
+VERSION = "nfl-intelligence-v6"
 BASE = "https://github.com/nflverse/nflverse-data/releases/download/"
 INTERVALS = {"schedule": 900, "players": 86400, "rosters": 21600,
              "team_stats": 21600, "player_stats": 21600, "snap_counts": 21600, "injuries": 21600}

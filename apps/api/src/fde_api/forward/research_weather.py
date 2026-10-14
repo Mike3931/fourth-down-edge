@@ -1,7 +1,8 @@
 """Bounded NWS collection for verified outdoor US venues, never a model adjustment."""
 from __future__ import annotations
 
-from datetime import datetime
+from collections.abc import Callable
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -16,15 +17,17 @@ from fde_api.forward.weather import NwsClient, NwsUnavailable, capture_forecast_
 class CoveringForecastClient(NwsClient):
     """A nearest forecast outside kickoff is not a valid kickoff forecast."""
 
-    def __init__(self, client: httpx.Client, kickoff: datetime, now: datetime):
+    def __init__(self, client: httpx.Client, kickoff: datetime, now: datetime,
+                 clock: Callable[[], datetime] | None = None):
         super().__init__(client)
         self.kickoff, self.now = kickoff, now
+        self.clock = clock or (lambda: now)
 
     def fetch_forecast(self, forecast_url: str) -> tuple[dict[str, Any], bytes]:
         body, raw = super().fetch_forecast(forecast_url)
         props = body.get("properties", {})
         updated = props.get("updated") or props.get("updateTime")
-        if updated and datetime.fromisoformat(updated.replace("Z", "+00:00")) > self.now:
+        if updated and datetime.fromisoformat(updated.replace("Z", "+00:00")) > max(self.now, self.clock()):
             raise NwsUnavailable("Future source issuance")
         covers = False
         for period in props.get("periods", []):
@@ -38,7 +41,9 @@ class CoveringForecastClient(NwsClient):
         return body, raw
 
 
-def collect_weather(s: Session, *, now: datetime) -> dict[str, int]:
+def collect_weather(s: Session, *, now: datetime,
+                    clock: Callable[[], datetime] | None = None) -> dict[str, int]:
+    clock = clock or (lambda: datetime.now(UTC))
     counts = {"weather_captured": 0, "weather_unchanged": 0,
               "weather_unavailable": 0, "weather_not_attempted": 0}
     games = prepare_briefing(s, now=now)["games"]
@@ -75,7 +80,7 @@ def collect_weather(s: Session, *, now: datetime) -> dict[str, int]:
             try:
                 vintage = capture_forecast_for_game(s, canonical_game_id=game["canonical_game_id"],
                     venue=venue, kickoff_utc=kickoff, observed_at=now,
-                    client=CoveringForecastClient(http, kickoff, now))
+                    client=CoveringForecastClient(http, kickoff, now, clock), capture_clock=clock)
                 counts["weather_captured" if vintage else "weather_unchanged"] += 1
             except (NwsUnavailable, ValueError, KeyError, TypeError):
                 counts["weather_unavailable"] += 1
