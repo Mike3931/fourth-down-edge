@@ -7,11 +7,12 @@ research cohort contains a candidate. Capture freshness is not price freshness.
 from __future__ import annotations
 
 from collections import defaultdict
+from copy import deepcopy
 from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from fde_api.db.forward_models import (
@@ -23,6 +24,8 @@ from fde_api.db.forward_models import (
     WeatherForecastVintage,
 )
 from fde_api.db.models import Job
+from fde_api.db.research_models import PlayerBinding, PlayerIdentityReview, ResearchPoll, ResearchSource
+from fde_api.forward.intelligence import VERSION as INTELLIGENCE_VERSION
 from fde_api.forward.intelligence import IntelligenceAt
 
 VERSION = "war-room-foundation-v1"
@@ -171,9 +174,31 @@ def prepare_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
 
 def read_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
     """Live read plus immutable completed run snapshots. Failed attempts stay visible."""
-    current = prepare_briefing(s, now=now)
     runs = list(s.scalars(select(Job).where(Job.kind == KIND, Job.created_at <= now)
                           .order_by(Job.created_at.desc(), Job.id.desc()).limit(3)))
+    current = None
+    if runs and runs[0].status == "finished" and runs[0].result and runs[0].finished_at:
+        stored = runs[0].result["briefing"]
+        cutoff = datetime.fromisoformat(stored["as_of_at"])
+        if (timedelta(0) <= now - cutoff < timedelta(minutes=15)
+                and cutoff.astimezone(ZoneInfo(TIMEZONE)).date() == now.astimezone(ZoneInfo(TIMEZONE)).date()
+                and stored.get("games") and all(g.get("intelligence", {}).get("version") == INTELLIGENCE_VERSION
+                                               for g in stored["games"])):
+            watermarks = (ScheduleObservation.observed_at, OddsQuote.observed_at,
+                InjuryObservation.entered_at, WeatherForecastVintage.observed_at,
+                ForwardLedgerEntry.created_at, GameIdentityReview.created_at,
+                ResearchSource.captured_at, ResearchPoll.captured_at,
+                PlayerBinding.observed_at, PlayerIdentityReview.observed_at)
+            # Future timestamps neither invalidate nor enter the cached cutoff.
+            cache_changed = any((latest := s.scalar(select(func.max(column)).where(column <= now))) is not None
+                          and latest > cutoff for column in watermarks)
+            expired = any(src["status"] == "OBSERVED" and src["published_at"]
+                          and now - datetime.fromisoformat(src["published_at"]) > timedelta(hours=48)
+                          for game in stored["games"] for src in game["intelligence"]["sources"])
+            if not cache_changed and not expired:
+                current = deepcopy(stored)
+    if current is None:
+        current = prepare_briefing(s, now=now)
     current["latest_run"] = None if not runs else {
         "id": runs[0].id, "status": runs[0].status,
         "started_at": runs[0].started_at.isoformat() if runs[0].started_at else None,

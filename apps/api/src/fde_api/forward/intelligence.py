@@ -35,7 +35,7 @@ from fde_api.ingest import _mirror
 from fde_api.pit.guards import assert_no_lookahead
 from fde_api.raw import RawArtifactStore
 
-VERSION = "nfl-intelligence-v2"
+VERSION = "nfl-intelligence-v3"
 BASE = "https://github.com/nflverse/nflverse-data/releases/download/"
 INTERVALS = {"schedule": 900, "players": 86400, "rosters": 21600,
              "team_stats": 21600, "player_stats": 21600, "snap_counts": 21600, "injuries": 21600}
@@ -367,8 +367,8 @@ class IntelligenceAt:
         self.blocked = {r.player_id for r in s.scalars(select(PlayerIdentityReview).where(
             PlayerIdentityReview.observed_at <= now,
             PlayerIdentityReview.reason.in_(["PROVIDER_ID_COLLISION", "BIRTH_DATE_DISAGREEMENT"])))}
-        self.bound = {b.player_id for b in s.scalars(select(PlayerBinding).where(
-            PlayerBinding.provider == "gsis", PlayerBinding.observed_at <= now))}
+        self.bound = set(s.scalars(select(PlayerBinding.player_id).where(
+            PlayerBinding.provider == "gsis", PlayerBinding.observed_at <= now)))
         self.schedule: dict[str, ScheduleObservation] = {}
         from fde_api.db.forward_models import GameIdentityReview
         self.invalid_games = {r.evidence.get("canonical_game_id") for r in s.scalars(select(GameIdentityReview).where(
