@@ -220,3 +220,29 @@ def test_network_response_is_known_when_received_not_when_poll_started(session, 
     source = session.scalars(select(ResearchSource)).one()
     assert source.captured_at == received
     assert IntelligenceAt(session, NOW + timedelta(seconds=2)).sources == {}
+
+
+def test_statistics_cannot_claim_another_games_team_or_week(session):
+    fixture(session)
+    ingest(session, "players", [player()])
+    wrong_team = ingest(session, "player_stats", [{**stats(True), "team": "TEN"}])
+    assert wrong_team.coverage["accepted_rows"] == 0
+    assert wrong_team.coverage["refused_rows"] == 1
+    wrong_week = ingest(session, "player_stats", [{**stats(True), "week": "4"}], NOW + timedelta(seconds=1))
+    assert wrong_week.coverage["accepted_rows"] == 0
+    assert wrong_week.coverage["refused_rows"] == 1
+
+
+def test_normalization_upgrade_refreshes_without_backdating_old_evidence(session, tmp_path, monkeypatch):
+    from fde_api.forward import intelligence
+    monkeypatch.setattr(intelligence, "INTERVALS", {"players": 86400})
+    monkeypatch.setattr(intelligence.settings, "raw_dir", tmp_path)
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200,
+        content=csv_bytes([player()]), headers={"Last-Modified": "Tue, 13 Oct 2026 11:59:00 GMT"})))
+    collect_intelligence(session, now=NOW, season=2026, client=client, clock=lambda: NOW)
+    monkeypatch.setattr(intelligence, "VERSION", "test-new-normalization")
+    result = collect_intelligence(session, now=NOW + timedelta(seconds=1), season=2026,
+                                  client=client, clock=lambda: NOW + timedelta(seconds=1))
+    assert result["research_downloads"] == 1
+    assert len(list(session.scalars(select(ResearchSource)))) == 2
+    assert len(list(session.scalars(select(PlayerBinding)))) == 2  # GSIS plus ESPN; never duplicated.

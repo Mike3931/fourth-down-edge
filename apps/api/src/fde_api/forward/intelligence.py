@@ -36,7 +36,7 @@ from fde_api.ingest import _mirror
 from fde_api.pit.guards import assert_no_lookahead
 from fde_api.raw import RawArtifactStore
 
-VERSION = "nfl-intelligence-v4"
+VERSION = "nfl-intelligence-v5"
 BASE = "https://github.com/nflverse/nflverse-data/releases/download/"
 INTERVALS = {"schedule": 900, "players": 86400, "rosters": 21600,
              "team_stats": 21600, "player_stats": 21600, "snap_counts": 21600, "injuries": 21600}
@@ -163,6 +163,7 @@ def ingest_source(s: Session, *, dataset: str, season: int, payload: bytes,
         "publication_semantics": "Artifact release time, not per-player report issuance",
         "quality": "SECONDARY_PUBLIC", "complete_availability": False}
     coverage["identity_context_hash"] = dependencies
+    coverage["normalization_version"] = VERSION
     batch = ResearchSource(id=key, dataset=dataset, season=season, provider="nflverse",
         payload_hash=payload_hash, source_url=source_url(dataset, season),
         published_at=published_at, captured_at=captured_at, coverage=coverage)
@@ -188,6 +189,12 @@ def ingest_source(s: Session, *, dataset: str, season: int, payload: bytes,
             GameIdentityBinding.provider == "nflverse", GameIdentityBinding.data_mode == "LIVE_RESEARCH"))}
         espn = {b.provider_id: b.player_id for b in s.scalars(select(PlayerBinding).where(PlayerBinding.provider == "espn"))}
         pfr = {b.provider_id: b.player_id for b in s.scalars(select(PlayerBinding).where(PlayerBinding.provider == "pfr"))}
+        game_records: dict[str, ScheduleObservation] = {}
+        for game in s.scalars(select(ScheduleObservation).where(
+                ScheduleObservation.data_mode == "LIVE_RESEARCH", ScheduleObservation.season == season,
+                ScheduleObservation.observed_at <= captured_at).order_by(
+                    ScheduleObservation.observed_at, ScheduleObservation.id)):
+            game_records[game.canonical_game_id] = game
         # Each natural row key must have exactly one meaning in this vintage.
         groups: dict[tuple[Any, ...], list[dict[str, str]]] = defaultdict(list)
         roster_teams: dict[tuple[str, str], set[str]] = defaultdict(set)
@@ -222,6 +229,11 @@ def ingest_source(s: Session, *, dataset: str, season: int, payload: bytes,
                 gid = aliases.get(row.get("game_id", ""))
                 if dataset in {"team_stats", "player_stats", "snap_counts"} and gid is None:
                     raise ValueError("Game identity unresolved")
+                if dataset in {"team_stats", "player_stats", "snap_counts"}:
+                    linked_game = game_records.get(str(gid))
+                    if (linked_game is None or team not in {linked_game.home_team_id, linked_game.away_team_id}
+                            or linked_game.week != week):
+                        raise ValueError("Statistical game/team/week linkage disagreement")
                 if dataset == "injuries":
                     candidates = {g.canonical_game_id for g in s.scalars(select(ScheduleObservation).where(
                         ScheduleObservation.data_mode == "LIVE_RESEARCH", ScheduleObservation.season == season,
@@ -306,7 +318,9 @@ def collect_intelligence(s: Session, *, now: datetime, season: int,
             previous = s.scalars(select(ResearchPoll).where(ResearchPoll.dataset == dataset,
                 ResearchPoll.season == season).order_by(ResearchPoll.captured_at.desc(), ResearchPoll.id.desc())).first()
             delay = min(interval, 1800) if previous and previous.status == "FAILED" else interval
-            if previous and now < previous.captured_at + timedelta(seconds=delay):
+            old_source = s.get(ResearchSource, previous.source_id) if previous and previous.source_id else None
+            same_version = old_source is None or old_source.coverage.get("normalization_version") == VERSION
+            if previous and same_version and now < previous.captured_at + timedelta(seconds=delay):
                 counts["research_not_due"] += 1
                 continue
             poll = ResearchPoll(id=str(uuid.uuid4()), dataset=dataset, season=season,
@@ -518,6 +532,7 @@ class IntelligenceAt:
             if (r.team_id == team and r.week is not None and game.week is not None
                     and r.week < game.week and r.values.get("season_type", r.values.get("game_type", "REG")) == "REG"
                     and previous is not None and previous.game_status == "FINAL"
+                    and team in {previous.home_team_id, previous.away_team_id} and previous.week == r.week
                     and r.canonical_game_id not in self.invalid_games
                     and previous.kickoff_utc is not None and previous.kickoff_utc < self.now
                     and (r.player_id is None or r.player_id in self.bound)):
