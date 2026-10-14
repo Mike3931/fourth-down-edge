@@ -1,5 +1,31 @@
 import { expect, test } from '@playwright/test';
 
+test('captured model comparison links real-game research and refuses recommendation status', async ({ page, request }) => {
+  test.skip(process.env.FDE_E2E_MODEL_RESEARCH !== '1', 'Requires a separately executed genuine historical model study.');
+  const response = await request.get('/research-api/v1/research/model-comparison');
+  expect(response.ok()).toBeTruthy();
+  const { report } = await response.json();
+  expect(report.models).toHaveLength(3);
+  expect(report.models.every((m: {n: number}) => m.n >= 1000)).toBeTruthy();
+  expect(report.recommended_for_review).toHaveLength(0);
+  expect(report.models.some((m: {status: string}) => m.status === 'VALIDATION FAILED')).toBeTruthy();
+  await page.goto('/');
+  await page.getByRole('button', { name: /enter local demo session/i }).click();
+  await page.getByText('Model results and limitations (3 approaches)', {exact: true}).click();
+  await expect(page.getByText(/Closing-market benchmark:/).first()).toBeVisible();
+  await page.getByRole('region', {name: 'Statistical model research'}).screenshot({path:'qa/release1b3/model-war-room-desktop.png'});
+  const slate = await (await request.get('/research-api/v1/forward/slate')).json();
+  const game = slate.games.find((g: {kickoff_utc: string}) => Date.parse(g.kickoff_utc) > Date.now());
+  await page.goto(`/live/game/${game.canonical_game_id}`);
+  await page.getByText('Model results and limitations (3 approaches)', {exact: true}).click();
+  await expect(page.getByText('Stored research estimate · team-ratings-v1')).toBeVisible();
+  await expect(page.getByText(/Observed share of team opportunities:/).first()).toBeVisible();
+  await page.getByRole('region', {name: 'Statistical model research'}).screenshot({path:'qa/release1b3/model-game-lab-desktop.png'});
+  await page.setViewportSize({width:375,height:812});
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole('region', {name: 'Statistical model research'}).screenshot({path:'qa/release1b3/model-game-lab-mobile.png'});
+});
+
 /**
  * Separate, fail-closed acceptance gate. Unlike live-screens.spec.ts,
  * engine-down is NEVER acceptable in this test suite. The CI job must

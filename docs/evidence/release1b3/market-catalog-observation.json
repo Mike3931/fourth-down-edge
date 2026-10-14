@@ -1,0 +1,32 @@
+{
+  "schema_version": "fde-market-feasibility-v1",
+  "captured_at": "2026-10-14T11:58:55.0873611Z",
+  "source_url": "https://api.odds-api.io/v3/bookmakers",
+  "http_status": 200,
+  "authorization": "Documented credential-free public catalog; no account or key",
+  "content_sha256": "2938654fe1b28d0bd4c2bbaeb8599e1aa57750b9a2c09b2bc046bd873ede3071",
+  "catalog_entry_count": 429,
+  "response_subset": [
+    {
+      "name": "Bet365",
+      "active": true,
+      "createdAt": "2025-10-11T11:38:05.549931Z"
+    },
+    {
+      "name": "bet365 NJ",
+      "active": true,
+      "createdAt": "2025-10-14T06:32:00.244395Z"
+    }
+  ],
+  "scope": "Catalog metadata only; not a quote or sportsbook source timestamp",
+  "tn_coverage_verified": false,
+  "market_quotes_verified": 0,
+  "exact_sgp_quotes_verified": 0,
+  "decision": "INSUFFICIENT EVIDENCE",
+  "limitations": [
+    "International Bet365 and New Jersey catalog entries cannot establish Tennessee offers",
+    "No authenticated market endpoint called",
+    "No source sportsbook price time verified",
+    "No subscription, account, outreach or sportsbook session created"
+  ]
+}

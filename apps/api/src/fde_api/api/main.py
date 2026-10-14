@@ -152,6 +152,13 @@ def get_research_briefing(s: Db) -> dict[str, Any]:
     return read_briefing(s, now=utc_now())
 
 
+@app.get("/v1/research/model-comparison", dependencies=[Auth])
+def get_research_model_comparison(s: Db, canonical_game_id: str | None = None) -> dict[str, Any]:
+    from fde_api.backtest.research_comparison import read_comparison
+
+    return read_comparison(s, utc_now(), canonical_game_id)
+
+
 @app.get("/v1/research/identity-reviews", dependencies=[Auth])
 def get_identity_reviews(s: Db) -> dict[str, Any]:
     from fde_api.db.forward_models import GameIdentityReview

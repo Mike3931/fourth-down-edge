@@ -1,0 +1,87 @@
+{
+  "implementation_commit": "31b7503f6ee0c9a40b5148aa15c57e7ae95a63a4",
+  "counts": {
+    "games": 4635,
+    "model_versions": 13,
+    "predictions": 3293,
+    "model_evaluations": 12,
+    "backtest_runs": 1,
+    "research_sources": 7,
+    "research_facts": 17289,
+    "research_player_bindings": 64129,
+    "research_player_reviews": 214,
+    "schedule_observations": 366,
+    "forward_ledger": 0
+  },
+  "original_database_sha256": "133ff5b1a59229280ec19e84c59c314f200b377623b3bfa26de0fa583e2e5d0a",
+  "models": [
+    [
+      "naive-homefield-v1_cmp_dd33163eb8a7_2022",
+      "research_only",
+      "31b7503f6ee0c9a40b5148aa15c57e7ae95a63a4"
+    ],
+    [
+      "naive-rolling-v1_cmp_dd33163eb8a7_2022",
+      "research_only",
+      "31b7503f6ee0c9a40b5148aa15c57e7ae95a63a4"
+    ],
+    [
+      "team-ratings-v1_cmp_dd33163eb8a7_2022",
+      "research_only",
+      "31b7503f6ee0c9a40b5148aa15c57e7ae95a63a4"
+    ],
+    [
+      "naive-homefield-v1_cmp_dd33163eb8a7_2023",
+      "research_only",
+      "31b7503f6ee0c9a40b5148aa15c57e7ae95a63a4"
+    ],
+    [
+      "naive-rolling-v1_cmp_dd33163eb8a7_2023",
+      "research_only",
+      "31b7503f6ee0c9a40b5148aa15c57e7ae95a63a4"
+    ],
+    [
+      "team-ratings-v1_cmp_dd33163eb8a7_2023",
+      "research_only",
+      "31b7503f6ee0c9a40b5148aa15c57e7ae95a63a4"
+    ],
+    [
+      "naive-homefield-v1_cmp_dd33163eb8a7_2024",
+      "research_only",
+      "31b7503f6ee0c9a40b5148aa15c57e7ae95a63a4"
+    ],
+    [
+      "naive-rolling-v1_cmp_dd33163eb8a7_2024",
+      "research_only",
+      "31b7503f6ee0c9a40b5148aa15c57e7ae95a63a4"
+    ],
+    [
+      "team-ratings-v1_cmp_dd33163eb8a7_2024",
+      "research_only",
+      "31b7503f6ee0c9a40b5148aa15c57e7ae95a63a4"
+    ],
+    [
+      "naive-homefield-v1_cmp_dd33163eb8a7_2025",
+      "research_only",
+      "31b7503f6ee0c9a40b5148aa15c57e7ae95a63a4"
+    ],
+    [
+      "naive-rolling-v1_cmp_dd33163eb8a7_2025",
+      "research_only",
+      "31b7503f6ee0c9a40b5148aa15c57e7ae95a63a4"
+    ],
+    [
+      "team-ratings-v1_cmp_dd33163eb8a7_2025",
+      "research_only",
+      "31b7503f6ee0c9a40b5148aa15c57e7ae95a63a4"
+    ],
+    [
+      "team-ratings-v1_cmp_dd33163eb8a7_current",
+      "research_only",
+      "31b7503f6ee0c9a40b5148aa15c57e7ae95a63a4"
+    ]
+  ],
+  "source_hash": "85840e8d6a7299ea2a2f8f6cc19e6a7b6a8492c63b3396f877f020ede6ae9fd2",
+  "research_only": true,
+  "recommendations_enabled": false
+}

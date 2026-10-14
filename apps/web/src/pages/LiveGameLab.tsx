@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { describeBookCoverage, describeConsensus, describeQuote } from '@fde/calculations';
 import EngineDown from '../components/EngineDown';
 import ResearchEvidence from '../components/ResearchEvidence';
+import ModelResearch from '../components/ModelResearch';
 import { engineGet, useForwardCandidates, useForwardSlate } from '../lib/engine';
 import { fmtAgoLive, fmtInstant } from '../lib/format';
 import { useBriefing } from '../lib/briefing';
@@ -174,6 +175,7 @@ export default function LiveGameLab() {
       </section>
 
       {inputs?.intelligence && <ResearchEvidence evidence={inputs.intelligence} />}
+      <ModelResearch gameId={game.canonical_game_id} />
 
       <section aria-labelledby="market-title" className="rounded border border-border p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">

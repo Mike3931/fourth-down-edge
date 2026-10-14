@@ -25,6 +25,7 @@ export default function ResearchEvidence({ evidence }: { evidence: Intelligence 
           : `${value(player.metrics.carries)} carries · ${value(player.metrics.rushing_yards)} rushing yards`}</p>
         <p className="text-sm text-muted">{value(player.metrics.targets)} targets · {value(player.metrics.receptions)} receptions · {value(player.metrics.receiving_yards)} receiving yards</p>
         <p className="text-xs text-muted">{player.snap_share == null ? 'Matched offensive snap share unavailable' : `${(player.snap_share * 100).toFixed(0)}% of offensive snaps in that completed game`}</p>
+        {player.usage && <p className="mt-1 text-xs text-muted">Observed share of team opportunities: {Object.entries(player.usage.shares).filter(([, item]) => item.share != null && item.player_count !== 0).map(([field, item]) => `${field} ${(item.share! * 100).toFixed(0)}%`).join(' · ') || 'Unavailable'}. One completed game; future role and routes remain unverified.</p>}
       </li>)}</ul>
       <h4 className="mt-4 font-medium text-fg">Availability</h4>
       <p className="mt-1 text-sm text-warning">Complete official report and inactive-list coverage is unverified. Missing reports do not mean healthy or active.</p>

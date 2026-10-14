@@ -83,6 +83,9 @@ def test_revisions_repeat_ingestion_and_known_at_leakage(session):
     view = IntelligenceAt(session, NOW).game(game)
     kc = view["teams"][1]
     assert kc["players"][0]["metrics"]["passing_yards"] == 250
+    assert kc["players"][0]["usage"]["shares"]["attempts"]["share"] == 1
+    assert kc["players"][0]["usage"]["route_participation"] is None
+    assert kc["players"][0]["usage"]["projected_opportunity"] is None
     assert kc["recent_games"][0]["canonical_game_id"] == "PAST"
     assert not kc["availability_complete"]
     assert IntelligenceAt(session, NOW - timedelta(seconds=1)).game(game)["teams"][1]["players"] == []
