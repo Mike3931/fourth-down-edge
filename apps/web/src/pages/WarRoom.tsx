@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import EngineDown from '../components/EngineDown';
+import ModelResearch from '../components/ModelResearch';
 import { useBriefing } from '../lib/briefing';
 import { fmtInstant, fmtAgoLive } from '../lib/format';
 
@@ -45,6 +46,7 @@ export default function WarRoom() {
           <div className="rounded-lg bg-bg p-4"><h3 className="font-medium text-ink">Best SGP</h3><p className="mt-2 text-sm text-ink-muted">Unavailable. Exact combined pricing, permitted legs and a validated joint model are required.</p></div>
         </div></details>
       </section>
+      <ModelResearch />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {[['Games today', data.today_count], ['Games with published observations', data.observed_market_games], ['Verified bet365 opportunities', data.verified_bet365_count]].map(([label, count]) => <div key={label} className={panel}><p className="text-xs text-ink-muted">{label}</p><p className="mt-2 text-3xl font-semibold text-ink">{count}</p></div>)}
       </div>
