@@ -180,3 +180,21 @@ def test_identical_payload_recovers_after_identity_is_known_without_backdating(s
     assert recovered.coverage["accepted_rows"] == 1
     assert IntelligenceAt(session, NOW).game(game)["teams"][1]["roster_count"] == 0
     assert IntelligenceAt(session, NOW + timedelta(minutes=2)).game(game)["teams"][1]["roster_count"] == 1
+
+
+def test_full_schedule_results_are_governed_known_at_capture_and_conflicts_refused(session):
+    from fde_api.forward.modes import DataMode
+    from fde_api.forward.results import _score_of, final_observation
+    row = {"game_id": "2026_05_BUF_KC", "season": "2026", "week": "5", "game_type": "REG",
+           "home_team": "KC", "away_team": "BUF", "gameday": "2026-10-11", "gametime": "08:00",
+           "home_score": "24", "away_score": "20"}
+    batch = ingest(session, "schedule", [row])
+    assert batch.coverage["results_recorded"] == 1
+    assert final_observation(session, canonical_game_id=row["game_id"], data_mode=DataMode.LIVE_RESEARCH,
+                             as_of=NOW - timedelta(seconds=1)) is None
+    original = final_observation(session, canonical_game_id=row["game_id"], data_mode=DataMode.LIVE_RESEARCH)
+    assert _score_of(original) == (24, 20)
+    conflict = ingest(session, "schedule", [{**row, "home_score": "99"}], NOW + timedelta(minutes=1))
+    assert conflict.coverage["results_refused"] == 1
+    assert _score_of(final_observation(session, canonical_game_id=row["game_id"],
+                    data_mode=DataMode.LIVE_RESEARCH)) == (24, 20)

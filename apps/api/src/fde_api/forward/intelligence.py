@@ -35,7 +35,7 @@ from fde_api.ingest import _mirror
 from fde_api.pit.guards import assert_no_lookahead
 from fde_api.raw import RawArtifactStore
 
-VERSION = "nfl-intelligence-v1"
+VERSION = "nfl-intelligence-v2"
 BASE = "https://github.com/nflverse/nflverse-data/releases/download/"
 INTERVALS = {"schedule": 900, "players": 86400, "rosters": 21600,
              "team_stats": 21600, "player_stats": 21600, "snap_counts": 21600, "injuries": 21600}
@@ -176,6 +176,7 @@ def ingest_source(s: Session, *, dataset: str, season: int, payload: bytes,
         from fde_api.forward.schedule import ingest_schedule
         outcome = ingest_schedule(s, payload, season=season, observed_at=captured_at)
         coverage.update(outcome.as_dict())
+        coverage.update(capture_schedule_results(s, rows, key, captured_at))
     elif dataset == "players":
         coverage.update(bind_players(s, rows, key, captured_at))
     else:
@@ -245,6 +246,43 @@ def ingest_source(s: Session, *, dataset: str, season: int, payload: bytes,
     s.add_all(pending_facts)
     s.flush()
     return batch
+
+
+def capture_schedule_results(s: Session, rows: list[dict[str, str]], source: str,
+                             now: datetime) -> dict[str, int]:
+    """Published final scores enter through the existing governed observation path."""
+    from fde_api.db.forward_models import GameIdentityReview
+    from fde_api.forward.modes import DataMode
+    from fde_api.forward.results import ResultObservation, ingest_result
+
+    counts = {"results_recorded": 0, "results_unchanged": 0, "results_refused": 0}
+    for row in rows:
+        if not row.get("home_score") or not row.get("away_score"):
+            continue
+        binding = s.get(GameIdentityBinding, ("LIVE_RESEARCH", "nflverse", row["game_id"]))
+        if binding is None:
+            continue
+        try:
+            home, away = float(row["home_score"]), float(row["away_score"])
+            if not home.is_integer() or not away.is_integer() or min(home, away) < 0:
+                raise ValueError("Invalid final score")
+            _, disposition = ingest_result(s, ResultObservation(binding.canonical_game_id,
+                int(home), int(away), now, "nflverse"), data_mode=DataMode.LIVE_RESEARCH)
+            if disposition == "refused":
+                raise ValueError("Result refused")
+            counts["results_unchanged" if disposition == "unchanged" else "results_recorded"] += 1
+        except ValueError:
+            evidence = {"canonical_game_id": binding.canonical_game_id, "source_id": source,
+                        "source_game_id": row["game_id"], "home_score": row["home_score"],
+                        "away_score": row["away_score"]}
+            key = digest(evidence)
+            if s.get(GameIdentityReview, key) is None:
+                s.add(GameIdentityReview(id=key, data_mode="LIVE_RESEARCH", provider="nflverse",
+                    provider_game_id=row["game_id"], reason="RESULT_CONFLICT_OR_INVALID",
+                    evidence=evidence, created_at=now))
+            counts["results_refused"] += 1
+    s.flush()
+    return counts
 
 
 def collect_intelligence(s: Session, *, now: datetime, season: int,
@@ -326,6 +364,10 @@ class IntelligenceAt:
         self.bound = {b.player_id for b in s.scalars(select(PlayerBinding).where(
             PlayerBinding.provider == "gsis", PlayerBinding.observed_at <= now))}
         self.schedule: dict[str, ScheduleObservation] = {}
+        from fde_api.db.forward_models import GameIdentityReview
+        self.invalid_games = {r.evidence.get("canonical_game_id") for r in s.scalars(select(GameIdentityReview).where(
+            GameIdentityReview.data_mode == "LIVE_RESEARCH", GameIdentityReview.created_at <= now,
+            GameIdentityReview.reason == "RESULT_CONFLICT_OR_INVALID"))}
         for game in s.scalars(select(ScheduleObservation).where(
             ScheduleObservation.data_mode == "LIVE_RESEARCH", ScheduleObservation.observed_at <= now).order_by(
                 ScheduleObservation.observed_at, ScheduleObservation.id)):
@@ -348,6 +390,8 @@ class IntelligenceAt:
 
     def game(self, game: ScheduleObservation) -> dict[str, Any]:
         missing = []
+        if self.invalid_games:
+            missing.append("Conflicting final-result inputs withheld pending review")
         sources = []
         season = game.season
         usable: dict[str, list[ResearchFact]] = {}
@@ -463,6 +507,7 @@ class IntelligenceAt:
             if (r.team_id == team and r.week is not None and game.week is not None
                     and r.week < game.week and r.values.get("season_type", r.values.get("game_type", "REG")) == "REG"
                     and previous is not None and previous.game_status == "FINAL"
+                    and r.canonical_game_id not in self.invalid_games
                     and previous.kickoff_utc is not None and previous.kickoff_utc < self.now
                     and (r.player_id is None or r.player_id in self.bound)):
                 result.append(r)
