@@ -4,6 +4,7 @@ import httpx
 import pytest
 from sqlalchemy import select
 
+from fde_api.db.models import Player
 from fde_api.db.research_models import PlayerBinding, ResearchFact, ResearchPoll
 from fde_api.forward.official_reports import collect_official, ingest_official
 from test_prospective import NOW, cohort  # noqa: F401
@@ -30,6 +31,12 @@ def test_official_page_preserves_unmapped_out_without_inactive_or_issue_time(coh
             evidence={"review": "explicit"},
         )
     )
+    s.flush()
+    # An NFL slug alone cannot partially publish a canonical player identity.
+    assert ingest_official(s,HTML,captured_at=NOW+timedelta(minutes=1),season=2020).id==source.id
+    s.add(Player(id="00-0000001",name="Explicit canonical test player"))
+    s.add(PlayerBinding(provider="gsis",provider_id="00-0000001",player_id="00-0000001",
+        observed_at=NOW,evidence={"review":"explicit GSIS identity"}))
     s.flush()
     mapped = ingest_official(s, HTML, captured_at=NOW + timedelta(minutes=2), season=2020)
     assert mapped.id != source.id and mapped.coverage["mapped_players"] == 1

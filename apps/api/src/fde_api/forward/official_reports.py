@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from fde_api.canonical.team_map import CANONICAL_TEAMS
 from fde_api.config import settings
+from fde_api.db.models import Player
 from fde_api.db.research_models import (
     PlayerBinding,
     PlayerIdentityReview,
@@ -92,6 +93,9 @@ def ingest_official(s: Session, payload: bytes, *, captured_at: datetime, season
             select(PlayerIdentityReview.player_id).where(PlayerIdentityReview.observed_at <= captured_at)
         )
     )
+    canonical_players = set(s.scalars(select(Player.id)))
+    gsis = set(s.scalars(select(PlayerBinding.player_id).where(
+        PlayerBinding.provider=="gsis", PlayerBinding.observed_at<=captured_at)))
     bindings = {
         r.provider_id: r.player_id
         for r in s.scalars(
@@ -99,7 +103,7 @@ def ingest_official(s: Session, payload: bytes, *, captured_at: datetime, season
                 PlayerBinding.provider == "nfl", PlayerBinding.observed_at <= captured_at
             )
         )
-        if r.player_id not in blocked
+        if r.player_id not in blocked and r.player_id in canonical_players and r.player_id in gsis
     }
     from fde_api.forward.prospective import schedule_at
 
