@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 
-def authorize_database(target: Path) -> None:
+def authorize_database(target: Path, *, prospective: bool = False) -> None:
     target = target.resolve()
     protected = [Path.home() / "NFL/apps/api/data/fde.db"]
     protected += [Path(p) for p in os.environ.get("FDE_PROTECTED_DATABASES", "").split(os.pathsep) if p]
@@ -27,14 +27,22 @@ def authorize_database(target: Path) -> None:
             tokens = [row[0] for row in db.execute("SELECT id FROM research_workspace")]
             if tokens != [attestation["workspace_id"]]:
                 raise ValueError("Workspace identity mismatch")
+            purpose = db.execute('SELECT purpose FROM research_workspace').fetchone()[0] if prospective else None
+            if prospective and (purpose != "PROSPECTIVE" or attestation.get("purpose") != purpose):
+                raise ValueError("Explicit prospective workspace authorization required")
             for table in ("forward_ledger", "backtest_runs", "model_evaluations"):
-                if db.execute(f'SELECT 1 FROM "{table}" LIMIT 1').fetchone():
+                where = " WHERE scope NOT LIKE 'prospective:%'" if prospective and table == "model_evaluations" else ""
+                if db.execute(f'SELECT 1 FROM "{table}"{where} LIMIT 1').fetchone():
                     raise ValueError("Historical research records prohibit worker writes")
+            if prospective and db.execute("SELECT 1 FROM model_versions WHERE name NOT LIKE 'pros-%' OR approval_status != 'research_only' LIMIT 1").fetchone():
+                raise ValueError("Only unpromoted prospective models are writable")
     except (OSError, KeyError, TypeError, json.JSONDecodeError, sqlite3.Error) as exc:
         raise ValueError("Missing or invalid fresh-workspace authorization") from exc
 
 
-def initialize_workspace(target: Path) -> None:
+def initialize_workspace(target: Path, *, purpose: str = "CAPTURE_ONLY") -> None:
+    if purpose not in {"CAPTURE_ONLY", "PROSPECTIVE"}:
+        raise ValueError("Unknown workspace purpose")
     target = target.resolve()
     target.parent.mkdir(parents=True, exist_ok=True)
     # Never adopt a populated DB, even if it is renamed or its filename seems safe.
@@ -53,9 +61,9 @@ def initialize_workspace(target: Path) -> None:
                    check=True, capture_output=True)
     token = str(uuid.uuid4())
     with Session(get_engine(database_url)) as s:
-        s.add(ResearchWorkspace(id=token, created_at=datetime.now(UTC)))
+        s.add(ResearchWorkspace(id=token, created_at=datetime.now(UTC), purpose=purpose))
         s.commit()
     stat = target.stat()
     marker = target.with_name(target.name + ".research-workspace.json")
     with marker.open("x") as output:
-        json.dump({"workspace_id": token, "file_identity": [stat.st_dev, stat.st_ino]}, output)
+        json.dump({"workspace_id": token, "file_identity": [stat.st_dev, stat.st_ino], "purpose": purpose}, output)

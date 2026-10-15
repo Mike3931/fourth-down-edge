@@ -29,6 +29,10 @@ export default function ResearchEvidence({ evidence }: { evidence: Intelligence 
       </li>)}</ul>
       <h4 className="mt-4 font-medium text-fg">Availability</h4>
       <p className="mt-1 text-sm text-warning">Complete official report and inactive-list coverage is unverified. Missing reports do not mean healthy or active.</p>
+      {evidence.official_reports?.some(r=>r.team_id===team.team_id) && <details className="mt-3 text-sm text-muted"><summary className="cursor-pointer text-fg">Official NFL page observations</summary>
+        <p className="mt-2">Report issuance time and complete inactive coverage remain unknown. Unresolved NFL player slugs are not joined to GSIS identities by name.</p>
+        <ul className="mt-2 space-y-2">{evidence.official_reports.filter(r=>r.team_id===team.team_id).map(r=><li key={r.source_row_id}>{r.name}: {r.practice||'Practice unknown'}; {r.designation||'Designation unknown'}. {r.identity_status==='MAPPED'?'Explicit identity binding recorded':'Player identity unresolved'}. Not an official inactive confirmation.</li>)}</ul>
+      </details>}
       {team.verified_availability.map(item => <p key={item.player_id} className="mt-2 text-sm text-muted">Verified recorded report: {item.player_id} · {item.practice ?? 'Practice unknown'} · {item.designation ?? 'Designation unknown'}. Issued {item.published_at ? fmtInstant(item.published_at) : 'unknown'}; captured {fmtInstant(item.captured_at)}.</p>)}
       {team.availability.length > 0 && <details className="mt-3 text-sm text-muted"><summary className="cursor-pointer text-fg">Secondary injury observations ({team.availability.length})</summary><ul className="mt-2 space-y-2">{team.availability.map(item => <li key={item.player_id}>{item.name}: {item.practice ?? 'Practice unknown'}; {item.designation ?? 'Designation unknown'}. Report issue time unverified; not a confirmed inactive.</li>)}</ul></details>}
     </article>)}</div>

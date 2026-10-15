@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import time
 from datetime import UTC, datetime, timedelta
@@ -19,7 +20,14 @@ def main() -> int:
     parser.add_argument("--cycles", type=int, default=1)
     parser.add_argument("--interval", type=int, default=900)
     parser.add_argument("--season", type=int, default=None)
+    parser.add_argument("--prospective", action="store_true", help="Requires a NEW explicitly prospective workspace")
+    parser.add_argument("--skip-official-capture", action="store_true", help="Compatibility flag; NFL.com retrieval is always disabled pending documented authorization")
+    parser.add_argument("--checkpoint-hours", type=float, nargs=4, default=[168, 72, 24, 1.5],
+                        metavar=("EARLY", "H72", "H24", "FINAL"))
     args = parser.parse_args()
+    if (any(not math.isfinite(h) or h <= 0 for h in args.checkpoint_hours)
+            or any(a <= b for a,b in zip(args.checkpoint_hours,args.checkpoint_hours[1:], strict=False))):
+        parser.error("Checkpoint hours must be finite, positive and strictly descending")
     target = args.database_file.resolve()
     if target.name.lower() == "fde.db" or not target.is_file():
         parser.error("Use an existing migrated isolated database, never the original fde.db")
@@ -28,7 +36,7 @@ def main() -> int:
     from fde_api.forward.workspace import authorize_database
 
     try:
-        authorize_database(target)
+        authorize_database(target, prospective=args.prospective)
     except ValueError as exc:
         parser.error(str(exc))
     lock = target.with_name(target.name + ".research.lock")
@@ -52,6 +60,8 @@ def run(args: argparse.Namespace, target: Path) -> int:
     from fde_api.config import settings
     from fde_api.db.engine import get_engine
     from fde_api.forward.intelligence import collect_intelligence
+    from fde_api.forward.official_reports import collect_official
+    from fde_api.forward.prospective import CHECKPOINTS, run_forecast_cycle
     from fde_api.forward.research_runner import run_cycle
     from fde_api.forward.research_weather import collect_weather
     from fde_api.forward.workspace import authorize_database
@@ -67,7 +77,7 @@ def run(args: argparse.Namespace, target: Path) -> int:
 
     exit_code = 0
     for cycle in range(args.cycles):
-        authorize_database(target)
+        authorize_database(target, prospective=getattr(args, "prospective", False))
         now = datetime.now(UTC)
         # UTC slack includes today's Chicago evening games; the view uses local days.
         dates = f"{now - timedelta(days=1):%Y%m%d}-{now + timedelta(days=7):%Y%m%d}"
@@ -78,14 +88,23 @@ def run(args: argparse.Namespace, target: Path) -> int:
             if counts["identity_refused"]:
                 raise ValueError("Game identity review required; no complete-slate claim")
             with factory() as s:
-                counts.update(collect_intelligence(s, now=datetime.now(UTC), season=season))
+                counts.update(collect_intelligence(s, now=datetime.now(UTC), season=season,
+                    include_history=getattr(args, "prospective", False)))
                 counts.update(collect_weather(s, now=datetime.now(UTC)))
+                if getattr(args, "prospective", False):
+                    counts.update(collect_official(s, season=season, now=datetime.now(UTC)))
                 s.commit()
             if counts["research_failures"]:
                 raise ValueError("Research provider refresh failed; no current-source claim")
             return counts
 
         result = run_cycle(factory, capture, dates=dates)
+        if getattr(args, "prospective", False):
+            result["prospective"] = run_forecast_cycle(factory,
+                checkpoints=dict(zip(CHECKPOINTS, args.checkpoint_hours, strict=True)),
+                capture_succeeded=result["status"] == "finished")
+            if result["prospective"]["status"] == "failed":
+                exit_code = 2
         print(json.dumps(result))
         if result["status"] == "failed":
             exit_code = 2

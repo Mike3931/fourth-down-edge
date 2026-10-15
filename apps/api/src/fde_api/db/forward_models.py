@@ -52,6 +52,7 @@ class ResearchWorkspace(Base):
     __tablename__ = "research_workspace"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     created_at: Mapped[datetime] = mapped_column()
+    purpose: Mapped[str] = mapped_column(String(24), server_default="CAPTURE_ONLY")
 
 
 class DomainIdentityMixin:

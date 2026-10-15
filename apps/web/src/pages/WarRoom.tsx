@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import EngineDown from '../components/EngineDown';
 import ModelResearch from '../components/ModelResearch';
+import ProspectiveResearch from '../components/ProspectiveResearch';
 import { useBriefing } from '../lib/briefing';
 import { fmtInstant, fmtAgoLive } from '../lib/format';
 
@@ -47,6 +48,7 @@ export default function WarRoom() {
         </div></details>
       </section>
       <ModelResearch />
+      <ProspectiveResearch />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {[['Games today', data.today_count], ['Games with published observations', data.observed_market_games], ['Verified bet365 opportunities', data.verified_bet365_count]].map(([label, count]) => <div key={label} className={panel}><p className="text-xs text-ink-muted">{label}</p><p className="mt-2 text-3xl font-semibold text-ink">{count}</p></div>)}
       </div>
