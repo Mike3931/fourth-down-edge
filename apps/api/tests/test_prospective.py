@@ -81,6 +81,8 @@ def test_actual_time_lineage_retry_and_new_evidence_are_immutable(cohort):
     s.commit()
     before = {p.id: (p.outputs.copy(), p.as_of_at, p.model_version_id) for p in s.scalars(select(Prediction))}
     assert generate_forecasts(s, now=NOW + timedelta(minutes=1))["created"] == 0
+    assert generate_forecasts(s, now=NOW+timedelta(minutes=1),checkpoints={
+        "PROS_EARLY":168,"PROS_72H":72,"PROS_24H":24,"PROS_FINAL":1.5})["created"]==0
     s.add(
         ResearchSource(
             id="new",

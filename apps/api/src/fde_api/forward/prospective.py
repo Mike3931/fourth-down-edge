@@ -157,7 +157,7 @@ def generate_forecasts(
     # Injectable clock is for controlled tests only; CLI has no historical-time option.
     actual_execution = now is None
     now = now or datetime.now(UTC)
-    checkpoints = CHECKPOINTS if checkpoints is None else checkpoints
+    checkpoints = {key: float(value) for key,value in (CHECKPOINTS if checkpoints is None else checkpoints).items()}
     states, blocked = schedule_at(s, now)
     completed, training_ids = [], []
     for g in states.values():
