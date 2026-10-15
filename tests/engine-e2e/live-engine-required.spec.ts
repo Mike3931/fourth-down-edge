@@ -1,5 +1,39 @@
 import { expect, test } from '@playwright/test';
 
+test('prospective tracking uses the real API and preserves research-only provenance',async({page,request})=>{
+  const response=await request.get('/research-api/v1/research/prospective');
+  expect(response.ok()).toBeTruthy();
+  const data=await response.json();
+  expect(data.decision).toBe('NO BET');
+  expect(data.status).toBe('RESEARCH ONLY');
+  expect(data.count).toBe(data.records.length);
+  if(process.env.FDE_E2E_PROSPECTIVE!=='1') return;
+  expect(data.count).toBeGreaterThan(0);
+  expect(data.evaluated_forecasts).toBe(0);
+  for(const record of data.records){
+    expect(record.outputs.research_only).toBe(true);
+    expect(record.outputs.approval_status).toBe('research_only');
+    expect(Date.parse(record.created_at)).toBeLessThan(Date.parse(record.outputs.scheduled_kickoff));
+    expect(record.model_version).toMatch(/^pros-/);
+  }
+  await page.goto('/');
+  await page.getByRole('button',{name:/enter local demo session/i}).click();
+  const panel=page.getByRole('region',{name:'Pregame forecast tracking'});
+  await expect(panel.getByText(/No settled prospective sample yet/)).toBeVisible();
+  await panel.getByRole('heading',{name:'Recorded before kickoff'}).scrollIntoViewIfNeeded();
+  await page.screenshot({path:'qa/release1b4/war-room-desktop.png'});
+  const slate=await(await request.get('/research-api/v1/forward/slate')).json();
+  const game=slate.games.find((g:{canonical_game_id:string})=>data.records.some((r:{game_id:string})=>r.game_id===g.canonical_game_id));
+  await page.goto(`/live/game/${game.canonical_game_id}`);
+  await expect(panel.getByText(/Home win/).first()).toBeVisible();
+  await panel.getByRole('heading',{name:'Recorded before kickoff'}).scrollIntoViewIfNeeded();
+  await page.screenshot({path:'qa/release1b4/game-lab-desktop.png'});
+  await page.setViewportSize({width:375,height:812});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await panel.getByRole('heading',{name:'Recorded before kickoff'}).scrollIntoViewIfNeeded();
+  await page.screenshot({path:'qa/release1b4/game-lab-mobile.png'});
+});
+
 test('captured model comparison links real-game research and refuses recommendation status', async ({ page, request }) => {
   test.skip(process.env.FDE_E2E_MODEL_RESEARCH !== '1', 'Requires a separately executed genuine historical model study.');
   const response = await request.get('/research-api/v1/research/model-comparison');

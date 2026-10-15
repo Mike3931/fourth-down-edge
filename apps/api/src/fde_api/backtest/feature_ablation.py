@@ -24,7 +24,9 @@ from fde_api.registry import register_model
 
 def run_ablation(s: Session, *, seasons: list[int], source_hash: str) -> dict[str, Any]:
     history = score_history(LeagueHistory.load(s))
-    builder = CoreV1Builder(history)
+    # This ablation uses schedule rest only. Do not compute unused team/QB
+    # aggregates over the full history (or imply they were accepted inputs).
+    builder = CoreV1Builder(LeagueHistory([], []))
     raw = {
         g.id: builder.build(g, PredictionHorizon.PREGAME).values
         for g in history.games

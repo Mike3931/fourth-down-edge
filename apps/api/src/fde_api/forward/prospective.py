@@ -60,7 +60,8 @@ def schedule_at(s: Session, now: datetime) -> tuple[dict[str, ScheduleObservatio
     ):
         blocked.update(
             str(v)
-            for v in [review.evidence.get("canonical_game_id"), *review.evidence.get("candidate_ids", [])]
+            for v in [review.evidence.get("canonical_game_id"), *review.evidence.get("candidates", []),
+                      *review.evidence.get("candidate_ids", [])]
             if v
         )
         # Provider-specific identity ambiguity blocks every linked observation.

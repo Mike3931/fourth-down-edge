@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import time
 from datetime import UTC, datetime, timedelta
@@ -24,6 +25,9 @@ def main() -> int:
     parser.add_argument("--checkpoint-hours", type=float, nargs=4, default=[168, 72, 24, 1.5],
                         metavar=("EARLY", "H72", "H24", "FINAL"))
     args = parser.parse_args()
+    if (any(not math.isfinite(h) or h <= 0 for h in args.checkpoint_hours)
+            or any(a <= b for a,b in zip(args.checkpoint_hours,args.checkpoint_hours[1:], strict=False))):
+        parser.error("Checkpoint hours must be finite, positive and strictly descending")
     target = args.database_file.resolve()
     if target.name.lower() == "fde.db" or not target.is_file():
         parser.error("Use an existing migrated isolated database, never the original fde.db")

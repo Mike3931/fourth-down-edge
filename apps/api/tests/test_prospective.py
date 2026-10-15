@@ -232,3 +232,29 @@ def test_checkpoint_is_actual_due_window_not_backfilled():
     assert checkpoint(NOW, NOW, CHECKPOINTS) is None
     with pytest.raises(ValueError):
         checkpoint(kickoff, NOW, {"PROS_EARLY": float("nan")})
+
+
+def test_ambiguous_cross_provider_candidate_list_blocks_matching_canonical_game(cohort):
+    cohort.add(GameIdentityReview(id="foreign-ambiguous",data_mode="LIVE_RESEARCH",provider="other",
+        provider_game_id="not-current-provider",reason="AMBIGUOUS_MATCH",evidence={"candidates":[GAME]},created_at=NOW))
+    cohort.flush()
+    assert generate_forecasts(cohort,now=NOW)["created"]==0
+
+
+def test_capture_failure_cannot_publish_new_forecasts_and_model_failure_rolls_back(cohort,monkeypatch):
+    from sqlalchemy.orm import sessionmaker
+
+    from fde_api.db.models import Job
+    from fde_api.forward import prospective
+    factory=sessionmaker(bind=cohort.get_bind())
+    result=prospective.run_forecast_cycle(factory,checkpoints=CHECKPOINTS,capture_succeeded=False)
+    assert result["forecasts"]["created"]==0
+    def broken(*args,**kwargs):
+        raise ValueError("controlled fit failure")
+    monkeypatch.setattr(prospective,"generate_forecasts",broken)
+    result=prospective.run_forecast_cycle(factory,checkpoints=CHECKPOINTS,capture_succeeded=True)
+    assert result["status"]=="failed"
+    cohort.expire_all()
+    job=cohort.get(Job,result["run_id"])
+    assert job.status=="failed" and "rolled back" in job.error
+    assert list(cohort.scalars(select(Prediction)))==[]
