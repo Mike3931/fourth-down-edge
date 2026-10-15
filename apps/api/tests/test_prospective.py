@@ -234,6 +234,22 @@ def test_reschedule_keeps_identity_and_creates_new_schedule_evidence(cohort):
     assert len(list(s.scalars(select(Prediction)))) == 6
 
 
+def test_earlier_revised_kickoff_keeps_older_eligible_forecast_in_performance(cohort):
+    s=cohort
+    generate_forecasts(s,now=NOW)
+    s.add(ResearchSource(id="changed",dataset="injuries",season=2020,provider="nflverse",payload_hash="x",
+        source_url="https://example.test",published_at=None,captured_at=NOW+timedelta(hours=2),coverage={}))
+    s.flush()
+    generate_forecasts(s,now=NOW+timedelta(hours=2))
+    finaltime=NOW+timedelta(days=3)
+    schedule(s,status="FINAL",at=finaltime,kickoff=NOW+timedelta(hours=1),summary="final 24-17 from nflverse")
+    assert evaluate_forecasts(s,now=finaltime)["evaluations_added"]==3
+    report=read_prospective(s,now=finaltime)
+    assert report["performance"] and all(row["n"]==1 for row in report["performance"])
+    assert report["evaluated_forecasts"]==3
+    assert sum(not row["eligible_pregame_record"] for row in report["records"])==3
+
+
 def test_checkpoint_is_actual_due_window_not_backfilled():
     kickoff = NOW + timedelta(hours=20)
     assert checkpoint(kickoff, NOW, CHECKPOINTS) == "PROS_24H"

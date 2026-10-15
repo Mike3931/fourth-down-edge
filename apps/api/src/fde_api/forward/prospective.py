@@ -520,7 +520,8 @@ def read_prospective(s: Session, *, now: datetime, game_id: str | None = None) -
     # All earlier versions and their individual evaluations remain inspectable.
     latest = {}
     for p in valid:
-        latest[(p.game_id, p.outputs["approach"], p.horizon)] = p
+        if p.id in latest_eval:
+            latest[(p.game_id, p.outputs["approach"], p.horizon)] = p
     grouped: dict[tuple[str, str, str, str], list[tuple[Prediction, dict[str, Any]]]] = defaultdict(list)
     for p in latest.values():
         e = latest_eval.get(p.id)
@@ -575,6 +576,9 @@ def read_prospective(s: Session, *, now: datetime, game_id: str | None = None) -
         old = prior.get((p.game_id, p.outputs["approach"]))
         frozen = features.get(p.feature_snapshot_id) if p.feature_snapshot_id else None
         version = versions.get(p.model_version_id)
+        pregame = bool(g and g.kickoff_utc and p.created_at < g.kickoff_utc
+                       and p.created_at < datetime.fromisoformat(p.outputs["scheduled_kickoff"])
+                       and p.created_at == p.as_of_at)
         records.append(
             {
                 "id": p.id,
@@ -593,8 +597,11 @@ def read_prospective(s: Session, *, now: datetime, game_id: str | None = None) -
                     "limitations": version.known_limitations if version else None,
                 },
                 "evaluation": latest_eval.get(p.id),
+                "eligible_pregame_record": pregame,
                 "state": "REVIEW REQUIRED"
                 if p.game_id in blocked
+                else "NOT ELIGIBLE: REVISED KICKOFF"
+                if not pregame
                 else "RESULT DISPUTED"
                 if g and g.game_status == "FINAL" and finals[p.game_id] is None
                 else g.game_status
