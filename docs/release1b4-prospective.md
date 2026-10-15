@@ -13,7 +13,7 @@ uv run python scripts/run_research.py --database-file data/my_new_prospective.db
 
 No services are installed. The existing foreground worker lock, 96-cycle maximum, polling/backoff and minimum 300-second interval apply. Only explicitly initialized PROSPECTIVE workspaces permit capture alongside prospective evaluations. Existing attested capture workspaces cannot be upgraded by editing a marker: purpose is recorded immutably in the database and matched to file identity/token/marker. Original profiles, copied/renamed profiles, frozen backtest studies, legacy evaluations and ledger-bearing databases remain refused. No populated original database is adopted or migrated.
 
-Default checkpoint windows are early-week (168h), 72h, 24h and final (90m). `--checkpoint-hours EARLY H72 H24 FINAL` configures their hours. Only the most recent due window is attempted; missed horizons are not backfilled. Final capture requires complete official availability and fresh schedule evidence, so it remains withheld under the currently incomplete feed. The actual execution timestamp is stored, never the intended checkpoint time. `--skip-official-capture` explicitly leaves official coverage unknown and supports a controlled comparison before adding the actual public official source.
+Default checkpoint windows are early-week (168h), 72h, 24h and final (90m). `--checkpoint-hours EARLY H72 H24 FINAL` configures their hours. Only the most recent due window is attempted; missed horizons are not backfilled. Final capture requires complete official availability and fresh schedule evidence, so it remains withheld under the currently incomplete feed. The actual execution timestamp is stored, never the intended checkpoint time. `--skip-official-capture` remains a compatibility flag; automatic NFL.com retrieval is disabled regardless of this flag. No runtime setting enables it.
 
 ## Existing analytical infrastructure reused
 
@@ -35,7 +35,7 @@ Ties are excluded from binary moneyline scores, counted separately, and retained
 
 ## Official availability
 
-The public NFL injury page is captured with original bytes/hash and actual receipt time at bounded intervals. It supplies practice/game designations by team/week and NFL player slug. Explicit existing NFL-slug-to-GSIS bindings may link players; names never create bindings. Unmapped evidence remains visible and does not partially publish a player identity. Ambiguous team/week game linkage is withheld. Raw content and identity/schedule context determine new immutable evidence versions.
+Automatic NFL.com injury-page collection is disabled pending documented prior written authorization. See [the enforced access boundary, exact authorization requirement and alternative-source investigation](release1b4-official-access.md). The retained offline parser handles original bytes/hash, actual receipt time, practice/game designations by team/week and NFL player slug. Explicit existing NFL-slug-to-GSIS bindings may link players; names never create bindings. Unmapped evidence remains visible and does not partially publish a player identity. Ambiguous team/week game linkage is withheld. Raw content and identity/schedule context determine new immutable evidence versions.
 
 The page does not establish per-report issue times or a complete official inactive feed. HTTP artifact timing is not substituted for issue time. OUT does not become INACTIVE; an absent row does not become healthy/active. `official_reports` remain OFFICIAL_PAGE_UNTIMED, separate from verified structured reports, secondary nflverse injury evidence and model assumptions. Complete availability remains false and final-checkpoint publication stays blocked. Source outages retain earlier observations with refresh failure labels.
 
@@ -46,3 +46,4 @@ The page does not establish per-report issue times or a complete official inacti
 See [Tennessee pricing decision](release1b4-market-access.md) and [SGP prerequisites](release1b4-sgp-prerequisites.md). No TN market or exact combined SGP quote is accepted. Authorized rights and representative samples are required before an adapter; no subscriptions, outreach, credentials or restricted access were activated.
 
 Execution evidence, final test counts, actual captured pregame records, restart/source-addition preservation checks and remaining limitations will accompany the PR acceptance report. Actual future outcomes cannot be manufactured to complete validation; prospective performance remains empty until real uncontested finals arrive.
+

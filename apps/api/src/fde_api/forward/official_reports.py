@@ -1,4 +1,4 @@
-"""Public official injury-page observations, never inferred healthy/inactive status.
+"""Retained official injury-page parser; automated retrieval is disabled.
 
 The page has NFL player slugs, not GSIS IDs or per-report issue timestamps.
 Unmapped rows remain evidence; they cannot establish an identity or verified status.
@@ -186,9 +186,23 @@ def ingest_official(s: Session, payload: bytes, *, captured_at: datetime, season
     return source
 
 
+def automated_retrieval_authorized() -> bool:
+    """Fail closed: no documented NFL.com collection rights are on file.
+
+    Deliberately not an environment setting or CLI switch. Activation requires
+    documented prior written consent and a separately reviewed implementation;
+    see docs/release1b4-official-access.md. HTTP success is not permission.
+    """
+    return False
+
+
 def collect_official(
     s: Session, *, season: int, now: datetime, client: httpx.Client | None = None
 ) -> dict[str, int]:
+    # Before DB queries, poll writes, client creation, or any request. Retained
+    # evidence stays untouched and a disabled source is not a successful poll.
+    if not automated_retrieval_authorized():
+        return {"official_disabled_pending_authorization": 1}
     previous = s.scalars(
         select(ResearchPoll)
         .where(ResearchPoll.dataset == DATASET, ResearchPoll.season == season)

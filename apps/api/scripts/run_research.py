@@ -21,7 +21,7 @@ def main() -> int:
     parser.add_argument("--interval", type=int, default=900)
     parser.add_argument("--season", type=int, default=None)
     parser.add_argument("--prospective", action="store_true", help="Requires a NEW explicitly prospective workspace")
-    parser.add_argument("--skip-official-capture", action="store_true", help="Keep official coverage unknown; useful for source acceptance comparisons")
+    parser.add_argument("--skip-official-capture", action="store_true", help="Compatibility flag; NFL.com retrieval is always disabled pending documented authorization")
     parser.add_argument("--checkpoint-hours", type=float, nargs=4, default=[168, 72, 24, 1.5],
                         metavar=("EARLY", "H72", "H24", "FINAL"))
     args = parser.parse_args()
@@ -91,7 +91,7 @@ def run(args: argparse.Namespace, target: Path) -> int:
                 counts.update(collect_intelligence(s, now=datetime.now(UTC), season=season,
                     include_history=getattr(args, "prospective", False)))
                 counts.update(collect_weather(s, now=datetime.now(UTC)))
-                if getattr(args, "prospective", False) and not getattr(args, "skip_official_capture", False):
+                if getattr(args, "prospective", False):
                     counts.update(collect_official(s, season=season, now=datetime.now(UTC)))
                 s.commit()
             if counts["research_failures"]:
