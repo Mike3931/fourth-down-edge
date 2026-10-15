@@ -319,7 +319,8 @@ def capture_schedule_results(s: Session, rows: list[dict[str, str]], source: str
 
 def collect_intelligence(s: Session, *, now: datetime, season: int,
                          client: httpx.Client | None = None,
-                         clock: Callable[[], datetime] | None = None) -> dict[str, int]:
+                         clock: Callable[[], datetime] | None = None,
+                         include_history: bool = False) -> dict[str, int]:
     """Source-specific persisted polling/backoff; independent failures never erase evidence."""
     counts = {"research_downloads": 0, "research_failures": 0, "research_not_due": 0}
     owns = client is None
@@ -347,6 +348,10 @@ def collect_intelligence(s: Session, *, now: datetime, season: int,
                     published = parsedate_to_datetime(header).astimezone(UTC) if header else None
                     batch = ingest_source(s, dataset=dataset, season=season, payload=response.content,
                         captured_at=received_at, published_at=published, store=store)
+                    if dataset == "schedule" and include_history:
+                        from fde_api.forward.training_history import capture_training_history
+                        capture_training_history(s, payload=response.content, season=season,
+                                                 captured_at=received_at, store=store)
                     poll.source_id, poll.status = batch.id, "SUCCESS"
                     counts["research_downloads"] += 1
             except Exception as exc:

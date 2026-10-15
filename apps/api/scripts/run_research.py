@@ -88,7 +88,8 @@ def run(args: argparse.Namespace, target: Path) -> int:
             if counts["identity_refused"]:
                 raise ValueError("Game identity review required; no complete-slate claim")
             with factory() as s:
-                counts.update(collect_intelligence(s, now=datetime.now(UTC), season=season))
+                counts.update(collect_intelligence(s, now=datetime.now(UTC), season=season,
+                    include_history=getattr(args, "prospective", False)))
                 counts.update(collect_weather(s, now=datetime.now(UTC)))
                 if getattr(args, "prospective", False) and not getattr(args, "skip_official_capture", False):
                     counts.update(collect_official(s, season=season, now=datetime.now(UTC)))
