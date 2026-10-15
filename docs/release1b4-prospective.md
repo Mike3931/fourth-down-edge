@@ -46,4 +46,3 @@ The page does not establish per-report issue times or a complete official inacti
 See [Tennessee pricing decision](release1b4-market-access.md) and [SGP prerequisites](release1b4-sgp-prerequisites.md). No TN market or exact combined SGP quote is accepted. Authorized rights and representative samples are required before an adapter; no subscriptions, outreach, credentials or restricted access were activated.
 
 Execution evidence, final test counts, actual captured pregame records, restart/source-addition preservation checks and remaining limitations will accompany the PR acceptance report. Actual future outcomes cannot be manufactured to complete validation; prospective performance remains empty until real uncontested finals arrive.
-
