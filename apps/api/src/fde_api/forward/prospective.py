@@ -60,8 +60,11 @@ def schedule_at(s: Session, now: datetime) -> tuple[dict[str, ScheduleObservatio
     ):
         blocked.update(
             str(v)
-            for v in [review.evidence.get("canonical_game_id"), *review.evidence.get("candidates", []),
-                      *review.evidence.get("candidate_ids", [])]
+            for v in [
+                review.evidence.get("canonical_game_id"),
+                *review.evidence.get("candidates", []),
+                *review.evidence.get("candidate_ids", []),
+            ]
             if v
         )
         # Provider-specific identity ambiguity blocks every linked observation.
@@ -157,7 +160,9 @@ def generate_forecasts(
     # Injectable clock is for controlled tests only; CLI has no historical-time option.
     actual_execution = now is None
     now = now or datetime.now(UTC)
-    checkpoints = {key: float(value) for key,value in (CHECKPOINTS if checkpoints is None else checkpoints).items()}
+    checkpoints = {
+        key: float(value) for key, value in (CHECKPOINTS if checkpoints is None else checkpoints).items()
+    }
     states, blocked = schedule_at(s, now)
     completed, training_ids = [], []
     for g in states.values():
@@ -188,24 +193,42 @@ def generate_forecasts(
         if horizon is None:
             continue
         schedule_poll = intel.polls.get((g.season, "schedule"))
-        schedule_received = schedule_poll.captured_at if schedule_poll and schedule_poll.status == "SUCCESS" else g.observed_at
+        schedule_received = (
+            schedule_poll.captured_at
+            if schedule_poll and schedule_poll.status == "SUCCESS"
+            else g.observed_at
+        )
         if g.canonical_game_id in blocked or now - schedule_received > timedelta(hours=24):
             result["withheld"].append(f"{g.canonical_game_id}: ambiguous identity or stale schedule")
             continue
         canonical = s.get(Game, g.canonical_game_id)
-        if canonical is not None and (canonical.home_team_id, canonical.away_team_id) != (g.home_team_id, g.away_team_id):
+        if canonical is not None and (canonical.home_team_id, canonical.away_team_id) != (
+            g.home_team_id,
+            g.away_team_id,
+        ):
             result["withheld"].append(f"{g.canonical_game_id}: canonical team identity conflict")
             continue
         if canonical is None:
-            if len(g.canonical_game_id)>24 or any(team not in CANONICAL_TEAMS for team in (g.home_team_id,g.away_team_id)):
+            if len(g.canonical_game_id) > 24 or any(
+                team not in CANONICAL_TEAMS for team in (g.home_team_id, g.away_team_id)
+            ):
                 result["withheld"].append(f"{g.canonical_game_id}: unsupported canonical identity")
                 continue
-            for team in (g.home_team_id,g.away_team_id):
-                if s.get(Team,team) is None:
-                    s.add(Team(id=team,name=CANONICAL_TEAMS[team]))
+            for team in (g.home_team_id, g.away_team_id):
+                if s.get(Team, team) is None:
+                    s.add(Team(id=team, name=CANONICAL_TEAMS[team]))
             s.flush()
-            s.add(Game(id=g.canonical_game_id,season=g.season,week=g.week,game_type=g.season_type,
-                kickoff_utc=g.kickoff_utc,home_team_id=g.home_team_id,away_team_id=g.away_team_id))
+            s.add(
+                Game(
+                    id=g.canonical_game_id,
+                    season=g.season,
+                    week=g.week,
+                    game_type=g.season_type,
+                    kickoff_utc=g.kickoff_utc,
+                    home_team_id=g.home_team_id,
+                    away_team_id=g.away_team_id,
+                )
+            )
             s.flush()
         research = intel.game(g)
         if horizon == "PROS_FINAL" and (
@@ -218,14 +241,25 @@ def generate_forecasts(
             continue
         # Capture evidence even when its effect is unvalidated, without using it numerically.
         evidence = {k: v for k, v in research.items() if k not in {"cutoff", "manifest_hash"}}
-        weather = s.scalars(select(WeatherForecastVintage).where(
-            WeatherForecastVintage.data_mode=="LIVE_RESEARCH",WeatherForecastVintage.canonical_game_id==g.canonical_game_id,
-            WeatherForecastVintage.observed_at<=now).order_by(WeatherForecastVintage.observed_at.desc(),WeatherForecastVintage.id.desc())).first()
-        if weather and (weather.source_updated_at is None or weather.source_updated_at<=now):
-            evidence["weather_observation"] = {"id":weather.id,"captured_at":weather.observed_at.isoformat(),
-                "issued_at":weather.source_updated_at.isoformat() if weather.source_updated_at else None,
-                "raw_hash":weather.raw_hash,"temp_f":weather.temp_f,"wind_mph":weather.wind_mph,
-                "used_numerically":False}
+        weather = s.scalars(
+            select(WeatherForecastVintage)
+            .where(
+                WeatherForecastVintage.data_mode == "LIVE_RESEARCH",
+                WeatherForecastVintage.canonical_game_id == g.canonical_game_id,
+                WeatherForecastVintage.observed_at <= now,
+            )
+            .order_by(WeatherForecastVintage.observed_at.desc(), WeatherForecastVintage.id.desc())
+        ).first()
+        if weather and (weather.source_updated_at is None or weather.source_updated_at <= now):
+            evidence["weather_observation"] = {
+                "id": weather.id,
+                "captured_at": weather.observed_at.isoformat(),
+                "issued_at": weather.source_updated_at.isoformat() if weather.source_updated_at else None,
+                "raw_hash": weather.raw_hash,
+                "temp_f": weather.temp_f,
+                "wind_mph": weather.wind_mph,
+                "used_numerically": False,
+            }
         signature = digest(
             {"training": training_key, "schedule": g.id, "evidence": evidence, "checkpoints": checkpoints}
         )
@@ -451,6 +485,25 @@ def read_prospective(s: Session, *, now: datetime, game_id: str | None = None) -
     if game_id:
         predictions = [p for p in predictions if p.game_id == game_id]
     valid = [p for p in predictions if p.outputs.get("prospective_version") == VERSION]
+    by_id = {p.id: p for p in valid}
+    features = {
+        f.id: f
+        for f in s.scalars(
+            select(FeatureSnapshot).where(
+                FeatureSnapshot.id.in_({p.feature_snapshot_id for p in valid if p.feature_snapshot_id})
+            )
+        )
+    }
+    versions = {
+        v.id: v
+        for v in s.scalars(
+            select(ModelVersion).where(ModelVersion.id.in_({p.model_version_id for p in valid}))
+        )
+    }
+    finals = {
+        gid: verified_final(s, states[gid], now, blocked) if gid in states else None
+        for gid in {p.game_id for p in valid}
+    }
     ids = {p.id for p in valid}
     latest_eval = {}
     for ev in s.scalars(
@@ -460,8 +513,7 @@ def read_prospective(s: Session, *, now: datetime, game_id: str | None = None) -
     ):
         pid = ev.metrics.get("prediction_id")
         if pid in ids:
-            g = states.get(next(p.game_id for p in valid if p.id == pid))
-            current_final = verified_final(s, g, now, blocked) if g else None
+            current_final = finals[by_id[pid].game_id]
             if current_final and current_final[0].id == ev.metrics.get("result_observation_id"):
                 latest_eval[pid] = ev.metrics
     # One most recent evidence version per game/approach/horizon for headline metrics.
@@ -509,7 +561,7 @@ def read_prospective(s: Session, *, now: datetime, game_id: str | None = None) -
         )
     records = []
     prior: dict[tuple[str, str], Prediction] = {}
-    latest_approach = {(p.game_id,p.outputs["approach"]):p.id for p in valid}
+    latest_approach = {(p.game_id, p.outputs["approach"]): p.id for p in valid}
     for p in valid:
         g = states.get(p.game_id)
         current = (
@@ -518,11 +570,11 @@ def read_prospective(s: Session, *, now: datetime, game_id: str | None = None) -
             and g.kickoff_utc is not None
             and g.kickoff_utc > now
             and p.outputs.get("scheduled_kickoff") == g.kickoff_utc.isoformat()
-            and latest_approach[(p.game_id,p.outputs["approach"])] == p.id
+            and latest_approach[(p.game_id, p.outputs["approach"])] == p.id
         )
         old = prior.get((p.game_id, p.outputs["approach"]))
-        frozen = s.get(FeatureSnapshot,p.feature_snapshot_id) if p.feature_snapshot_id else None
-        version = s.get(ModelVersion,p.model_version_id)
+        frozen = features.get(p.feature_snapshot_id) if p.feature_snapshot_id else None
+        version = versions.get(p.model_version_id)
         records.append(
             {
                 "id": p.id,
@@ -532,14 +584,22 @@ def read_prospective(s: Session, *, now: datetime, game_id: str | None = None) -
                 "created_at": p.created_at.isoformat(),
                 "outputs": p.outputs,
                 "feature_snapshot_id": p.feature_snapshot_id,
-                "lineage": {"training_cutoff": frozen.values.get("training_cutoff") if frozen else None,
-                    "source_versions": frozen.values.get("research",{}).get("sources",[]) if frozen else [],
-                    "parameters":version.hyperparameters if version else {},
-                    "artifact_hash":version.artifact_hash if version else None,
-                    "code_commit":version.code_commit if version else None,
-                    "limitations":version.known_limitations if version else None},
+                "lineage": {
+                    "training_cutoff": frozen.values.get("training_cutoff") if frozen else None,
+                    "source_versions": frozen.values.get("research", {}).get("sources", []) if frozen else [],
+                    "parameters": version.hyperparameters if version else {},
+                    "artifact_hash": version.artifact_hash if version else None,
+                    "code_commit": version.code_commit if version else None,
+                    "limitations": version.known_limitations if version else None,
+                },
                 "evaluation": latest_eval.get(p.id),
-                "state": "REVIEW REQUIRED" if p.game_id in blocked else g.game_status if g else "UNKNOWN",
+                "state": "REVIEW REQUIRED"
+                if p.game_id in blocked
+                else "RESULT DISPUTED"
+                if g and g.game_status == "FINAL" and finals[p.game_id] is None
+                else g.game_status
+                if g
+                else "UNKNOWN",
                 "current": bool(
                     current and p.game_id not in blocked and now - p.created_at < timedelta(hours=24)
                 ),

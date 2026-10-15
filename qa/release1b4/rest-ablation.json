@@ -1,0 +1,757 @@
+{
+  "run_id": "abl_51de3b8c273f",
+  "scope": "EXPLORATORY_REUSED_SEASONS",
+  "source_hash": "85840e8d6a7299ea2a2f8f6cc19e6a7b6a8492c63b3396f877f020ede6ae9fd2",
+  "created_at": "2026-10-15T00:08:41.630921+00:00",
+  "folds": [
+    {
+      "test_season": 2022,
+      "features": [],
+      "train_n": 2939,
+      "validation_n": 272,
+      "trials": [
+        {
+          "alpha": 25.0,
+          "validation_log_loss": 0.6957468951193164
+        },
+        {
+          "alpha": 100.0,
+          "validation_log_loss": 0.6957468951193164
+        }
+      ],
+      "selected_alpha": 25.0,
+      "metrics": {
+        "n": 271,
+        "n_win_scored": 269,
+        "log_loss": 0.6856827671452933,
+        "log_loss_ci90": [
+          0.6777782315696853,
+          0.69351885423007
+        ],
+        "brier": 0.24627676861554257,
+        "calibration_intercept": -1.971346763888413,
+        "calibration_slope": 10.025885156681499,
+        "reliability": [
+          {
+            "bin_low": 0.5,
+            "bin_high": 0.6000000000000001,
+            "predicted": 0.5550809397963231,
+            "observed": 0.5613382899628253,
+            "count": 269
+          }
+        ],
+        "crps_margin": 6.957228542841469,
+        "crps_total": 7.877292368000792,
+        "win_rate_observed": 0.5613382899628253,
+        "mae_margin": 9.534710594692369,
+        "mae_total": 11.254796415918067,
+        "spread": {
+          "n": 0,
+          "pushes_excluded": 0,
+          "brier": null,
+          "log_loss": null,
+          "reliability": [],
+          "benchmark": "0.5 conditional on no push; closing line used for evaluation only"
+        },
+        "total": {
+          "n": 0,
+          "pushes_excluded": 0,
+          "brier": null,
+          "log_loss": null,
+          "reliability": [],
+          "benchmark": "0.5 conditional on no push; closing line used for evaluation only"
+        },
+        "closing_benchmark": {
+          "n": 0,
+          "log_loss": null,
+          "brier": null,
+          "candidate_log_loss_same_sample": null,
+          "paired_log_loss_delta_ci90": null,
+          "margin_n": 0,
+          "margin_mae": null,
+          "candidate_margin_mae_same_sample": null,
+          "total_n": 0,
+          "total_mae": null,
+          "candidate_total_mae_same_sample": null
+        },
+        "interval_80_coverage": {
+          "margin": 0.8634686346863468,
+          "total": 0.8191881918819188
+        }
+      },
+      "calibration_parameters": {
+        "a": 0.06322224190016582,
+        "b": 0.014289934955703775
+      },
+      "calibrated_moneyline": {
+        "brier": 0.24824004341050587,
+        "log_loss": 0.6896260759404668
+      },
+      "model_version_id": "abl_51de3b8c273f_2022_intercept",
+      "status": "RESEARCH ONLY"
+    },
+    {
+      "test_season": 2022,
+      "features": [
+        "home_rest_days",
+        "away_rest_days"
+      ],
+      "train_n": 2939,
+      "validation_n": 272,
+      "trials": [
+        {
+          "alpha": 25.0,
+          "validation_log_loss": 0.695118968578373
+        },
+        {
+          "alpha": 100.0,
+          "validation_log_loss": 0.6951359178034763
+        }
+      ],
+      "selected_alpha": 25.0,
+      "metrics": {
+        "n": 271,
+        "n_win_scored": 269,
+        "log_loss": 0.6845135476948343,
+        "log_loss_ci90": [
+          0.6765685139886671,
+          0.6922637398897613
+        ],
+        "brier": 0.24570423858211993,
+        "calibration_intercept": -0.7062765593786258,
+        "calibration_slope": 4.2554721244149585,
+        "reliability": [
+          {
+            "bin_low": 0.5,
+            "bin_high": 0.6000000000000001,
+            "predicted": 0.5558362037529431,
+            "observed": 0.5613382899628253,
+            "count": 269
+          }
+        ],
+        "crps_margin": 6.949727633732652,
+        "crps_total": 7.887975876330057,
+        "win_rate_observed": 0.5613382899628253,
+        "mae_margin": 9.52121627879535,
+        "mae_total": 11.282128645449417,
+        "spread": {
+          "n": 0,
+          "pushes_excluded": 0,
+          "brier": null,
+          "log_loss": null,
+          "reliability": [],
+          "benchmark": "0.5 conditional on no push; closing line used for evaluation only"
+        },
+        "total": {
+          "n": 0,
+          "pushes_excluded": 0,
+          "brier": null,
+          "log_loss": null,
+          "reliability": [],
+          "benchmark": "0.5 conditional on no push; closing line used for evaluation only"
+        },
+        "closing_benchmark": {
+          "n": 0,
+          "log_loss": null,
+          "brier": null,
+          "candidate_log_loss_same_sample": null,
+          "paired_log_loss_delta_ci90": null,
+          "margin_n": 0,
+          "margin_mae": null,
+          "candidate_margin_mae_same_sample": null,
+          "total_n": 0,
+          "total_mae": null,
+          "candidate_total_mae_same_sample": null
+        },
+        "interval_80_coverage": {
+          "margin": 0.8634686346863468,
+          "total": 0.8154981549815498
+        }
+      },
+      "calibration_parameters": {
+        "a": -0.7075261058422829,
+        "b": 3.414130110658686
+      },
+      "calibrated_moneyline": {
+        "brier": 0.24714484056480568,
+        "log_loss": 0.6873789035271773
+      },
+      "model_version_id": "abl_51de3b8c273f_2022_rest",
+      "status": "RESEARCH ONLY"
+    },
+    {
+      "test_season": 2023,
+      "features": [],
+      "train_n": 3224,
+      "validation_n": 271,
+      "trials": [
+        {
+          "alpha": 25.0,
+          "validation_log_loss": 0.6856701165326453
+        },
+        {
+          "alpha": 100.0,
+          "validation_log_loss": 0.6856701165326453
+        }
+      ],
+      "selected_alpha": 25.0,
+      "metrics": {
+        "n": 272,
+        "n_win_scored": 272,
+        "log_loss": 0.6870541779528879,
+        "log_loss_ci90": [
+          0.677278039477045,
+          0.6966521480640472
+        ],
+        "brier": 0.24695968370992122,
+        "calibration_intercept": 0.5271523792971025,
+        "calibration_slope": -1.3567386607657586,
+        "reliability": [
+          {
+            "bin_low": 0.5,
+            "bin_high": 0.6000000000000001,
+            "predicted": 0.556086104513062,
+            "observed": 0.5551470588235294,
+            "count": 272
+          }
+        ],
+        "crps_margin": 8.047920029488846,
+        "crps_total": 7.753042562022169,
+        "win_rate_observed": 0.5551470588235294,
+        "mae_margin": 11.088557182529664,
+        "mae_total": 11.006980560464529,
+        "spread": {
+          "n": 0,
+          "pushes_excluded": 0,
+          "brier": null,
+          "log_loss": null,
+          "reliability": [],
+          "benchmark": "0.5 conditional on no push; closing line used for evaluation only"
+        },
+        "total": {
+          "n": 0,
+          "pushes_excluded": 0,
+          "brier": null,
+          "log_loss": null,
+          "reliability": [],
+          "benchmark": "0.5 conditional on no push; closing line used for evaluation only"
+        },
+        "closing_benchmark": {
+          "n": 0,
+          "log_loss": null,
+          "brier": null,
+          "candidate_log_loss_same_sample": null,
+          "paired_log_loss_delta_ci90": null,
+          "margin_n": 0,
+          "margin_mae": null,
+          "candidate_margin_mae_same_sample": null,
+          "total_n": 0,
+          "total_mae": null,
+          "candidate_total_mae_same_sample": null
+        },
+        "interval_80_coverage": {
+          "margin": 0.8051470588235294,
+          "total": 0.7977941176470589
+        }
+      },
+      "calibration_parameters": {
+        "a": 0.23487882770940083,
+        "b": 0.052461949567736595
+      },
+      "calibrated_moneyline": {
+        "brier": 0.24699744763360812,
+        "log_loss": 0.6871307866668616
+      },
+      "model_version_id": "abl_51de3b8c273f_2023_intercept",
+      "status": "RESEARCH ONLY"
+    },
+    {
+      "test_season": 2023,
+      "features": [
+        "home_rest_days",
+        "away_rest_days"
+      ],
+      "train_n": 3224,
+      "validation_n": 271,
+      "trials": [
+        {
+          "alpha": 25.0,
+          "validation_log_loss": 0.6846313649076832
+        },
+        {
+          "alpha": 100.0,
+          "validation_log_loss": 0.684649269569867
+        }
+      ],
+      "selected_alpha": 25.0,
+      "metrics": {
+        "n": 272,
+        "n_win_scored": 272,
+        "log_loss": 0.6868036307306145,
+        "log_loss_ci90": [
+          0.6772405539781865,
+          0.6958919460459398
+        ],
+        "brier": 0.24683764474596365,
+        "calibration_intercept": -0.05991076498298849,
+        "calibration_slope": 1.2512822575750147,
+        "reliability": [
+          {
+            "bin_low": 0.5,
+            "bin_high": 0.6000000000000001,
+            "predicted": 0.5559920783584174,
+            "observed": 0.5551470588235294,
+            "count": 272
+          }
+        ],
+        "crps_margin": 8.057700327693308,
+        "crps_total": 7.765782928542883,
+        "win_rate_observed": 0.5551470588235294,
+        "mae_margin": 11.108881985183908,
+        "mae_total": 11.019895018588628,
+        "spread": {
+          "n": 0,
+          "pushes_excluded": 0,
+          "brier": null,
+          "log_loss": null,
+          "reliability": [],
+          "benchmark": "0.5 conditional on no push; closing line used for evaluation only"
+        },
+        "total": {
+          "n": 0,
+          "pushes_excluded": 0,
+          "brier": null,
+          "log_loss": null,
+          "reliability": [],
+          "benchmark": "0.5 conditional on no push; closing line used for evaluation only"
+        },
+        "closing_benchmark": {
+          "n": 0,
+          "log_loss": null,
+          "brier": null,
+          "candidate_log_loss_same_sample": null,
+          "paired_log_loss_delta_ci90": null,
+          "margin_n": 0,
+          "margin_mae": null,
+          "candidate_margin_mae_same_sample": null,
+          "total_n": 0,
+          "total_mae": null,
+          "candidate_total_mae_same_sample": null
+        },
+        "interval_80_coverage": {
+          "margin": 0.8014705882352942,
+          "total": 0.7941176470588235
+        }
+      },
+      "calibration_parameters": {
+        "a": -0.7055718019808246,
+        "b": 4.213263309079367
+      },
+      "calibrated_moneyline": {
+        "brier": 0.24755395320657936,
+        "log_loss": 0.6882621816385539
+      },
+      "model_version_id": "abl_51de3b8c273f_2023_rest",
+      "status": "RESEARCH ONLY"
+    },
+    {
+      "test_season": 2024,
+      "features": [],
+      "train_n": 3508,
+      "validation_n": 272,
+      "trials": [
+        {
+          "alpha": 25.0,
+          "validation_log_loss": 0.6870552347642696
+        },
+        {
+          "alpha": 100.0,
+          "validation_log_loss": 0.6870552347642696
+        }
+      ],
+      "selected_alpha": 25.0,
+      "metrics": {
+        "n": 272,
+        "n_win_scored": 272,
+        "log_loss": 0.6921685850842778,
+        "log_loss_ci90": [
+          0.6799904197327233,
+          0.7054158517252896
+        ],
+        "brier": 0.2495054947745319,
+        "calibration_intercept": 6.379721651022302,
+        "calibration_slope": -26.998931061324036,
+        "reliability": [
+          {
+            "bin_low": 0.5,
+            "bin_high": 0.6000000000000001,
+            "predicted": 0.5575897880900286,
+            "observed": 0.5330882352941176,
+            "count": 272
+          }
+        ],
+        "crps_margin": 8.079254313633992,
+        "crps_total": 7.290813433503509,
+        "win_rate_observed": 0.5330882352941176,
+        "mae_margin": 11.099186896981013,
+        "mae_total": 10.044117647058824,
+        "spread": {
+          "n": 0,
+          "pushes_excluded": 0,
+          "brier": null,
+          "log_loss": null,
+          "reliability": [],
+          "benchmark": "0.5 conditional on no push; closing line used for evaluation only"
+        },
+        "total": {
+          "n": 0,
+          "pushes_excluded": 0,
+          "brier": null,
+          "log_loss": null,
+          "reliability": [],
+          "benchmark": "0.5 conditional on no push; closing line used for evaluation only"
+        },
+        "closing_benchmark": {
+          "n": 0,
+          "log_loss": null,
+          "brier": null,
+          "candidate_log_loss_same_sample": null,
+          "paired_log_loss_delta_ci90": null,
+          "margin_n": 0,
+          "margin_mae": null,
+          "candidate_margin_mae_same_sample": null,
+          "total_n": 0,
+          "total_mae": null,
+          "candidate_total_mae_same_sample": null
+        },
+        "interval_80_coverage": {
+          "margin": 0.7647058823529411,
+          "total": 0.8382352941176471
+        }
+      },
+      "calibration_parameters": {
+        "a": 0.21070116902238914,
+        "b": 0.047674351556918224
+      },
+      "calibrated_moneyline": {
+        "brier": 0.24939441210067195,
+        "log_loss": 0.6919435541290561
+      },
+      "model_version_id": "abl_51de3b8c273f_2024_intercept",
+      "status": "RESEARCH ONLY"
+    },
+    {
+      "test_season": 2024,
+      "features": [
+        "home_rest_days",
+        "away_rest_days"
+      ],
+      "train_n": 3508,
+      "validation_n": 272,
+      "trials": [
+        {
+          "alpha": 25.0,
+          "validation_log_loss": 0.6867050456272327
+        },
+        {
+          "alpha": 100.0,
+          "validation_log_loss": 0.68672081459197
+        }
+      ],
+      "selected_alpha": 25.0,
+      "metrics": {
+        "n": 272,
+        "n_win_scored": 272,
+        "log_loss": 0.692642243623381,
+        "log_loss_ci90": [
+          0.6807817665594266,
+          0.7059135046177911
+        ],
+        "brier": 0.2497338176066077,
+        "calibration_intercept": 0.36341486997270744,
+        "calibration_slope": -1.00688572917867,
+        "reliability": [
+          {
+            "bin_low": 0.5,
+            "bin_high": 0.6000000000000001,
+            "predicted": 0.5570412026726576,
+            "observed": 0.5330882352941176,
+            "count": 272
+          }
+        ],
+        "crps_margin": 8.079723470123616,
+        "crps_total": 7.2918840525714685,
+        "win_rate_observed": 0.5330882352941176,
+        "mae_margin": 11.111400904724466,
+        "mae_total": 10.055175365367903,
+        "spread": {
+          "n": 0,
+          "pushes_excluded": 0,
+          "brier": null,
+          "log_loss": null,
+          "reliability": [],
+          "benchmark": "0.5 conditional on no push; closing line used for evaluation only"
+        },
+        "total": {
+          "n": 0,
+          "pushes_excluded": 0,
+          "brier": null,
+          "log_loss": null,
+          "reliability": [],
+          "benchmark": "0.5 conditional on no push; closing line used for evaluation only"
+        },
+        "closing_benchmark": {
+          "n": 0,
+          "log_loss": null,
+          "brier": null,
+          "candidate_log_loss_same_sample": null,
+          "paired_log_loss_delta_ci90": null,
+          "margin_n": 0,
+          "margin_mae": null,
+          "candidate_margin_mae_same_sample": null,
+          "total_n": 0,
+          "total_mae": null,
+          "candidate_total_mae_same_sample": null
+        },
+        "interval_80_coverage": {
+          "margin": 0.7647058823529411,
+          "total": 0.8382352941176471
+        }
+      },
+      "calibration_parameters": {
+        "a": -0.10171462026986415,
+        "b": 1.431369544623788
+      },
+      "calibrated_moneyline": {
+        "brier": 0.24985981820246478,
+        "log_loss": 0.6929092934785805
+      },
+      "model_version_id": "abl_51de3b8c273f_2024_rest",
+      "status": "RESEARCH ONLY"
+    },
+    {
+      "test_season": 2025,
+      "features": [],
+      "train_n": 3793,
+      "validation_n": 272,
+      "trials": [
+        {
+          "alpha": 25.0,
+          "validation_log_loss": 0.6922235039631763
+        },
+        {
+          "alpha": 100.0,
+          "validation_log_loss": 0.6922235039631763
+        }
+      ],
+      "selected_alpha": 25.0,
+      "metrics": {
+        "n": 272,
+        "n_win_scored": 271,
+        "log_loss": 0.6908673174536216,
+        "log_loss_ci90": [
+          0.6781971506591143,
+          0.7033757604664115
+        ],
+        "brier": 0.24885771422456518,
+        "calibration_intercept": 0.08566398652630383,
+        "calibration_slope": 0.300390625,
+        "reliability": [
+          {
+            "bin_low": 0.5,
+            "bin_high": 0.6000000000000001,
+            "predicted": 0.5576905523651661,
+            "observed": 0.5387453874538746,
+            "count": 271
+          }
+        ],
+        "crps_margin": 7.994194872997164,
+        "crps_total": 7.79936093097827,
+        "win_rate_observed": 0.5387453874538746,
+        "mae_margin": 11.051511287171694,
+        "mae_total": 10.970775450401563,
+        "spread": {
+          "n": 0,
+          "pushes_excluded": 0,
+          "brier": null,
+          "log_loss": null,
+          "reliability": [],
+          "benchmark": "0.5 conditional on no push; closing line used for evaluation only"
+        },
+        "total": {
+          "n": 0,
+          "pushes_excluded": 0,
+          "brier": null,
+          "log_loss": null,
+          "reliability": [],
+          "benchmark": "0.5 conditional on no push; closing line used for evaluation only"
+        },
+        "closing_benchmark": {
+          "n": 0,
+          "log_loss": null,
+          "brier": null,
+          "candidate_log_loss_same_sample": null,
+          "paired_log_loss_delta_ci90": null,
+          "margin_n": 0,
+          "margin_mae": null,
+          "candidate_margin_mae_same_sample": null,
+          "total_n": 0,
+          "total_mae": null,
+          "candidate_total_mae_same_sample": null
+        },
+        "interval_80_coverage": {
+          "margin": 0.7757352941176471,
+          "total": 0.8125
+        }
+      },
+      "calibration_parameters": {
+        "a": 0.12568600252407944,
+        "b": 0.029368893266382135
+      },
+      "calibrated_moneyline": {
+        "brier": 0.248530948051895,
+        "log_loss": 0.6902063810927016
+      },
+      "model_version_id": "abl_51de3b8c273f_2025_intercept",
+      "status": "RESEARCH ONLY"
+    },
+    {
+      "test_season": 2025,
+      "features": [
+        "home_rest_days",
+        "away_rest_days"
+      ],
+      "train_n": 3793,
+      "validation_n": 272,
+      "trials": [
+        {
+          "alpha": 25.0,
+          "validation_log_loss": 0.6927628900021028
+        },
+        {
+          "alpha": 100.0,
+          "validation_log_loss": 0.6927453758162537
+        }
+      ],
+      "selected_alpha": 100.0,
+      "metrics": {
+        "n": 272,
+        "n_win_scored": 271,
+        "log_loss": 0.6906136476056063,
+        "log_loss_ci90": [
+          0.677973813594242,
+          0.7032250241870751
+        ],
+        "brier": 0.24873232265911657,
+        "calibration_intercept": -0.14496497421624072,
+        "calibration_slope": 1.2931094317331997,
+        "reliability": [
+          {
+            "bin_low": 0.5,
+            "bin_high": 0.6000000000000001,
+            "predicted": 0.5577880319231784,
+            "observed": 0.5387453874538746,
+            "count": 271
+          }
+        ],
+        "crps_margin": 7.97651343936069,
+        "crps_total": 7.792824064285181,
+        "win_rate_observed": 0.5387453874538746,
+        "mae_margin": 11.037022580510476,
+        "mae_total": 10.965306263514982,
+        "spread": {
+          "n": 0,
+          "pushes_excluded": 0,
+          "brier": null,
+          "log_loss": null,
+          "reliability": [],
+          "benchmark": "0.5 conditional on no push; closing line used for evaluation only"
+        },
+        "total": {
+          "n": 0,
+          "pushes_excluded": 0,
+          "brier": null,
+          "log_loss": null,
+          "reliability": [],
+          "benchmark": "0.5 conditional on no push; closing line used for evaluation only"
+        },
+        "closing_benchmark": {
+          "n": 0,
+          "log_loss": null,
+          "brier": null,
+          "candidate_log_loss_same_sample": null,
+          "paired_log_loss_delta_ci90": null,
+          "margin_n": 0,
+          "margin_mae": null,
+          "candidate_margin_mae_same_sample": null,
+          "total_n": 0,
+          "total_mae": null,
+          "candidate_total_mae_same_sample": null
+        },
+        "interval_80_coverage": {
+          "margin": 0.7757352941176471,
+          "total": 0.8125
+        }
+      },
+      "calibration_parameters": {
+        "a": 0.3833304884466201,
+        "b": -1.083874411216952
+      },
+      "calibrated_moneyline": {
+        "brier": 0.24886049195808216,
+        "log_loss": 0.6908686267667088
+      },
+      "model_version_id": "abl_51de3b8c273f_2025_rest",
+      "status": "RESEARCH ONLY"
+    }
+  ],
+  "limitations": [
+    "Previously examined test seasons are not unseen confirmation.",
+    "Mutable historical rest metadata and approximate result times are not archived PIT evidence.",
+    "Efficiency, pace, QB, availability and weather effects lack accepted multi-season feature vintages here.",
+    "All unsuccessful trials retained. No prospective candidate or model is promoted."
+  ],
+  "feature_columns": [
+    "home_epa_per_play_adj",
+    "home_epa_per_dropback_adj",
+    "home_rush_epa_per_play_adj",
+    "home_success_rate_adj",
+    "home_early_down_epa_adj",
+    "home_neutral_epa_adj",
+    "home_explosive_rate_adj",
+    "home_sack_rate_adj",
+    "home_int_rate_adj",
+    "home_def_epa_allowed",
+    "home_pace_plays",
+    "home_expected_possessions",
+    "home_special_teams_epa",
+    "home_red_zone_td_rate",
+    "home_sos_epa",
+    "home_uncertainty",
+    "home_qb_pass_eff",
+    "home_qb_sack_avoidance",
+    "away_epa_per_play_adj",
+    "away_epa_per_dropback_adj",
+    "away_rush_epa_per_play_adj",
+    "away_success_rate_adj",
+    "away_early_down_epa_adj",
+    "away_neutral_epa_adj",
+    "away_explosive_rate_adj",
+    "away_sack_rate_adj",
+    "away_int_rate_adj",
+    "away_def_epa_allowed",
+    "away_pace_plays",
+    "away_expected_possessions",
+    "away_special_teams_epa",
+    "away_red_zone_td_rate",
+    "away_sos_epa",
+    "away_uncertainty",
+    "away_qb_pass_eff",
+    "away_qb_sack_avoidance",
+    "home_rest_days",
+    "away_rest_days",
+    "away_travel_miles",
+    "away_tz_change_hours"
+  ],
+  "recommended_for_review": []
+}

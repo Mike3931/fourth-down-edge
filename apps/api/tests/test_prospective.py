@@ -17,8 +17,8 @@ from fde_api.forward.prospective import (
     read_prospective,
 )
 
-NOW = datetime(2099, 10, 14, 12, tzinfo=UTC)
-GAME = "2099_06_SEA_DEN"
+NOW = datetime(2020, 10, 14, 12, tzinfo=UTC)
+GAME = "2020_06_SEA_DEN"
 
 
 def schedule(s, gid=GAME, *, status="SCHEDULED", at=NOW, kickoff=None, summary=None, provider="nflverse"):
@@ -27,7 +27,7 @@ def schedule(s, gid=GAME, *, status="SCHEDULED", at=NOW, kickoff=None, summary=N
         canonical_game_id=gid,
         provider=provider,
         provider_game_id=gid,
-        season=2099,
+        season=2020,
         season_type="REG",
         week=6,
         home_team_id="DEN",
@@ -52,7 +52,7 @@ def cohort(session, tmp_path, monkeypatch):
     session.add(
         Game(
             id=GAME,
-            season=2099,
+            season=2020,
             week=6,
             game_type="REG",
             kickoff_utc=NOW + timedelta(hours=48),
@@ -81,13 +81,19 @@ def test_actual_time_lineage_retry_and_new_evidence_are_immutable(cohort):
     s.commit()
     before = {p.id: (p.outputs.copy(), p.as_of_at, p.model_version_id) for p in s.scalars(select(Prediction))}
     assert generate_forecasts(s, now=NOW + timedelta(minutes=1))["created"] == 0
-    assert generate_forecasts(s, now=NOW+timedelta(minutes=1),checkpoints={
-        "PROS_EARLY":168,"PROS_72H":72,"PROS_24H":24,"PROS_FINAL":1.5})["created"]==0
+    assert (
+        generate_forecasts(
+            s,
+            now=NOW + timedelta(minutes=1),
+            checkpoints={"PROS_EARLY": 168, "PROS_72H": 72, "PROS_24H": 24, "PROS_FINAL": 1.5},
+        )["created"]
+        == 0
+    )
     s.add(
         ResearchSource(
             id="new",
             dataset="injuries",
-            season=2099,
+            season=2020,
             provider="nflverse",
             payload_hash="hash",
             source_url="https://example.test",
@@ -126,7 +132,7 @@ def test_future_results_and_source_revisions_cannot_enter_prior_forecast(cohort)
         ResearchSource(
             id="future-source",
             dataset="injuries",
-            season=2099,
+            season=2020,
             provider="nflverse",
             payload_hash="x",
             source_url="https://example.test",
@@ -237,26 +243,38 @@ def test_checkpoint_is_actual_due_window_not_backfilled():
 
 
 def test_ambiguous_cross_provider_candidate_list_blocks_matching_canonical_game(cohort):
-    cohort.add(GameIdentityReview(id="foreign-ambiguous",data_mode="LIVE_RESEARCH",provider="other",
-        provider_game_id="not-current-provider",reason="AMBIGUOUS_MATCH",evidence={"candidates":[GAME]},created_at=NOW))
+    cohort.add(
+        GameIdentityReview(
+            id="foreign-ambiguous",
+            data_mode="LIVE_RESEARCH",
+            provider="other",
+            provider_game_id="not-current-provider",
+            reason="AMBIGUOUS_MATCH",
+            evidence={"candidates": [GAME]},
+            created_at=NOW,
+        )
+    )
     cohort.flush()
-    assert generate_forecasts(cohort,now=NOW)["created"]==0
+    assert generate_forecasts(cohort, now=NOW)["created"] == 0
 
 
-def test_capture_failure_cannot_publish_new_forecasts_and_model_failure_rolls_back(cohort,monkeypatch):
+def test_capture_failure_cannot_publish_new_forecasts_and_model_failure_rolls_back(cohort, monkeypatch):
     from sqlalchemy.orm import sessionmaker
 
     from fde_api.db.models import Job
     from fde_api.forward import prospective
-    factory=sessionmaker(bind=cohort.get_bind())
-    result=prospective.run_forecast_cycle(factory,checkpoints=CHECKPOINTS,capture_succeeded=False)
-    assert result["forecasts"]["created"]==0
-    def broken(*args,**kwargs):
+
+    factory = sessionmaker(bind=cohort.get_bind())
+    result = prospective.run_forecast_cycle(factory, checkpoints=CHECKPOINTS, capture_succeeded=False)
+    assert result["forecasts"]["created"] == 0
+
+    def broken(*args, **kwargs):
         raise ValueError("controlled fit failure")
-    monkeypatch.setattr(prospective,"generate_forecasts",broken)
-    result=prospective.run_forecast_cycle(factory,checkpoints=CHECKPOINTS,capture_succeeded=True)
-    assert result["status"]=="failed"
+
+    monkeypatch.setattr(prospective, "generate_forecasts", broken)
+    result = prospective.run_forecast_cycle(factory, checkpoints=CHECKPOINTS, capture_succeeded=True)
+    assert result["status"] == "failed"
     cohort.expire_all()
-    job=cohort.get(Job,result["run_id"])
-    assert job.status=="failed" and "rolled back" in job.error
-    assert list(cohort.scalars(select(Prediction)))==[]
+    job = cohort.get(Job, result["run_id"])
+    assert job.status == "failed" and "rolled back" in job.error
+    assert list(cohort.scalars(select(Prediction))) == []

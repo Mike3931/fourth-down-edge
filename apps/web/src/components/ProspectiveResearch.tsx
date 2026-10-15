@@ -27,7 +27,7 @@ const schema = z.object({ version: z.literal('prospective-scores-v1'), status: z
 const value = (n:number|null) => n == null ? 'Not yet available' : n.toFixed(3);
 
 export default function ProspectiveResearch({gameId}:{gameId?:string}) {
-  const query = useQuery({queryKey:['engine','prospective',gameId??'all'],retry:false,staleTime:30_000,
+  const query = useQuery({queryKey:['engine','prospective',gameId??'all'],retry:false,staleTime:30_000,refetchInterval:60_000,
     queryFn:async()=>schema.parse(await engineGet<unknown>(`/v1/research/prospective${gameId?`?canonical_game_id=${encodeURIComponent(gameId)}`:''}`)),
   });
   const data = query.error ? undefined : query.data;
