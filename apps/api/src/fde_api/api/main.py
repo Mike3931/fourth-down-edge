@@ -159,6 +159,13 @@ def get_research_model_comparison(s: Db, canonical_game_id: str | None = None) -
     return read_comparison(s, utc_now(), canonical_game_id)
 
 
+@app.get("/v1/research/prospective", dependencies=[Auth])
+def get_prospective_research(s: Db, canonical_game_id: str | None = None) -> dict[str, Any]:
+    from fde_api.forward.prospective import read_prospective
+
+    return read_prospective(s, now=utc_now(), game_id=canonical_game_id)
+
+
 @app.get("/v1/research/identity-reviews", dependencies=[Auth])
 def get_identity_reviews(s: Db) -> dict[str, Any]:
     from fde_api.db.forward_models import GameIdentityReview

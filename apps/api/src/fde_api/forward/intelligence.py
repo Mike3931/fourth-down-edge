@@ -530,11 +530,22 @@ class IntelligenceAt:
                     for r in official],
                 "availability_complete": False})
         missing.append("Route participation and complete game-day participation coverage unavailable")
+        official_page = self.sources.get((season, "official_injuries"))
+        official_reports = []
+        if official_page:
+            official_poll = self.polls.get((season, "official_injuries"))
+            sources.append({"dataset": "official_injuries", "source_id": official_page.id,
+                "published_at": None, "captured_at": official_page.captured_at.isoformat(),
+                "status": "REFRESH_FAILED" if official_poll and official_poll.status != "SUCCESS" else "PUBLICATION_UNKNOWN", "source_url": official_page.source_url,
+                "coverage": official_page.coverage})
+            official_reports = [{"source_row_id": r.id, "team_id": r.team_id, "player_id": r.player_id,
+                **r.values} for r in self.facts[official_page.id]
+                if r.canonical_game_id == game.canonical_game_id and r.week == game.week]
         content = {"version": VERSION, "canonical_game_id": game.canonical_game_id,
             "cutoff": self.now.isoformat(), "sources": sources, "teams": teams,
             "missing": sorted(set(missing)), "identity_review_count": len(self.blocked),
             "evidence_ids": sorted(set(evidence_ids)), "model_features": "NOT_PROMOTED",
-            "readiness": "RESEARCH_ONLY_INCOMPLETE"}
+            "readiness": "RESEARCH_ONLY_INCOMPLETE", "official_reports": official_reports}
         content["manifest_hash"] = digest(content)
         content["evidence_hash"] = digest([content["evidence_ids"], [src["source_id"] for src in sources]])
         return content
