@@ -18,7 +18,7 @@ async function stubCapturedGame(page: Page, quotes: unknown[] = []) {
         venue: 'Test Venue', neutral_site: false, game_status: 'SCHEDULED', schedule_provider: 'nflverse' }],
     }),
   }));
-  await page.route('**/research-api/v1/forward/live', (route) => route.fulfill({
+  await page.route('**/research-api/v1/forward/live*', (route) => route.fulfill({
     contentType: 'application/json',
     body: JSON.stringify({
       data_mode: 'LIVE_RESEARCH', generated_at_utc: observed, not_a_claim: 'Not a price offer.',
@@ -86,6 +86,31 @@ test('a captured quote is described as history, not offered as an available wage
   await expect(page.getByRole('columnheader', { name: 'Captured by app' })).toBeVisible();
 });
 
+test('distinct captured spread lines remain visible instead of silently collapsing', async ({ page }) => {
+  const base = Date.now();
+  await stubCapturedGame(page, [
+    { sportsbook: 'test book', market: 'SPREAD', selection: 'HOME', line: -2.5,
+      american: -110, provider: 'fixture', provider_mode: 'SANDBOX',
+      observed_at: new Date(base - 4 * 60_000).toISOString() },
+    { sportsbook: 'test book', market: 'SPREAD', selection: 'HOME', line: -3.5,
+      american: +120, provider: 'fixture', provider_mode: 'SANDBOX',
+      observed_at: new Date(base - 3 * 60_000).toISOString() },
+    { sportsbook: 'test book', market: 'SPREAD', selection: 'HOME', line: -2.5,
+      american: -105, provider: 'fixture', provider_mode: 'SANDBOX',
+      observed_at: new Date(base - 2 * 60_000).toISOString() },
+  ]);
+  await login(page);
+  await page.goto('/live/game/FDE-REAL-TEST-GAME');
+  const prices = page.getByRole('table', { name: 'Latest observed market prices' });
+  await expect(prices).toBeVisible();
+  // The old -2.5 version is superseded, but -3.5 is a distinct line.
+  await expect(prices.locator('tbody tr')).toHaveCount(2);
+  await expect(prices.getByRole('cell', { name: 'HOU -2.5' })).toBeVisible();
+  await expect(prices.getByRole('cell', { name: 'HOU -3.5' })).toBeVisible();
+  await expect(prices.getByRole('cell', { name: '-105' })).toBeVisible();
+  await expect(prices.getByRole('cell', { name: '+120' })).toBeVisible();
+});
+
 test('Game Lab requests scoped assessments and distinguishes truncation from absence', async ({ page }) => {
   await stubCapturedGame(page);
   let requestedGame: string | null = null;
@@ -126,6 +151,22 @@ test('same-time contradictory sportsbook quotes are not silently accepted', asyn
   await expect(page.getByText(/Conflicting source observations at the same timestamp/)).toBeVisible();
 });
 
+
+test('Game Lab requests only its selected game market history', async ({ page }) => {
+  await stubCapturedGame(page);
+  const marketRequests: string[] = [];
+  page.on('request', request => {
+    const url = new URL(request.url());
+    if (url.pathname.endsWith('/v1/forward/live')) {
+      marketRequests.push(url.searchParams.get('canonical_game_id') ?? '');
+    }
+  });
+  await login(page);
+  await page.goto('/live/game/FDE-REAL-TEST-GAME');
+  await expect(page.getByRole('heading', { name: /Game Lab · TEN @ HOU/ })).toBeVisible();
+  await expect.poll(() => marketRequests.length).toBeGreaterThan(0);
+  expect(marketRequests.every(id => id === 'FDE-REAL-TEST-GAME')).toBe(true);
+});
 
 test('Game Lab supports mobile, refresh and accessible navigation', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });

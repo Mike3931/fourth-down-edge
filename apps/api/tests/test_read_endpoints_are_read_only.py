@@ -143,6 +143,77 @@ def test_upcoming_slate_survives_large_history_and_is_paginated(client):
     assert api.get("/v1/forward/slate?limit=-1").status_code == 422
 
 
+def test_scoped_market_history_is_bounded_and_read_only(client):
+    """One Game Lab GET must not read other games or lose old captured evidence."""
+    api, factory = client
+    old_game = "READONLY_HISTORICAL"
+    with factory() as s:
+        s.add(ScheduleObservation(
+            data_mode="LIVE_RESEARCH", canonical_game_id=old_game, provider="t",
+            provider_game_id="historical", season=2026, season_type="REG", week=1,
+            home_team_id="ARI", away_team_id="CAR", kickoff_utc=NOW - timedelta(days=8),
+            game_status="SCHEDULED", content_hash="historical", observed_at=NOW - timedelta(days=9),
+        ))
+        s.add(OddsQuote(
+            data_mode="LIVE_RESEARCH", canonical_game_id=old_game, provider="t",
+            provider_mode="LIVE", sportsbook="draftkings", market="SPREAD",
+            selection="HOME", line=-1.5, american=-110, decimal_odds=1.91,
+            is_live=False, observed_at=NOW - timedelta(days=9), raw_hash="historical-quote",
+        ))
+        s.commit()
+    before = _census(factory)
+    unscoped = api.get("/v1/forward/live")
+    assert unscoped.status_code == 200
+    assert [g["canonical_game_id"] for g in unscoped.json()["games"]] == [GAME]
+
+    current = api.get(f"/v1/forward/live?canonical_game_id={GAME}")
+    assert current.status_code == 200
+    assert [g["canonical_game_id"] for g in current.json()["games"]] == [GAME]
+    assert len(current.json()["games"][0]["quotes"]) == 6
+
+    historical = api.get(f"/v1/forward/live?canonical_game_id={old_game}")
+    assert historical.status_code == 200
+    assert [g["canonical_game_id"] for g in historical.json()["games"]] == [old_game]
+    assert len(historical.json()["games"][0]["quotes"]) == 1
+    assert historical.json()["games"][0]["quotes"][0]["currently_available_offer"] is False
+
+    unknown = api.get("/v1/forward/live?canonical_game_id=NOT_CAPTURED")
+    assert unknown.status_code == 200 and unknown.json()["games"] == []
+    assert _census(factory) == before
+
+
+def test_live_market_window_filters_after_latest_revision(client):
+    """A rescheduled game must not reappear under its superseded kickoff."""
+    api, factory = client
+    with factory() as s:
+        for gid, old_kick, new_kick in (
+            ("MOVED_OUT", NOW + timedelta(hours=4), NOW + timedelta(days=14)),
+            ("MOVED_IN", NOW + timedelta(days=14), NOW + timedelta(hours=8)),
+        ):
+            for i, (kick, observed) in enumerate(((old_kick, NOW - timedelta(hours=2)),
+                                                    (new_kick, NOW - timedelta(hours=1)))):
+                s.add(ScheduleObservation(
+                    data_mode="LIVE_RESEARCH", canonical_game_id=gid,
+                    provider="t", provider_game_id=gid, season=2026, season_type="REG",
+                    week=7, home_team_id="ARI", away_team_id="CAR",
+                    kickoff_utc=kick, game_status="SCHEDULED",
+                    content_hash=f"{gid}:{i}", observed_at=observed,
+                ))
+        s.commit()
+    before = _census(factory)
+    unscoped = api.get("/v1/forward/live")
+    assert unscoped.status_code == 200
+    ids = {g["canonical_game_id"] for g in unscoped.json()["games"]}
+    assert "MOVED_OUT" not in ids
+    assert "MOVED_IN" in ids
+    selected = api.get("/v1/forward/live?canonical_game_id=MOVED_OUT")
+    assert selected.status_code == 200
+    assert [g["canonical_game_id"] for g in selected.json()["games"]] == ["MOVED_OUT"]
+    assert selected.json()["games"][0]["kickoff_utc"] == (
+        NOW + timedelta(days=14)).isoformat()
+    assert _census(factory) == before
+
+
 def test_quote_capture_time_is_not_a_sportsbook_offer(client):
     api, _ = client
     quote = api.get("/v1/forward/live").json()["games"][0]["quotes"][0]
