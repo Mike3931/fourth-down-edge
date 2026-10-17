@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="5.367" timestamp="2026-10-17T06:28:18.180447-05:00" hostname="Mike"><testcase classname="tests.test_chain_direct.TestDirectAndSchedulerChainsAgree" name="test_the_semantic_hashes_match" time="5.240" /></testsuite></testsuites>

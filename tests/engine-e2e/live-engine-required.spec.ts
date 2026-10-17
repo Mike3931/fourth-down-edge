@@ -1,4 +1,56 @@
 import { expect, test } from '@playwright/test';
+import { mkdirSync, writeFileSync } from 'node:fs';
+
+test('populated operational workspace supports repeated navigation and refresh within two seconds', async ({page,request}) => {
+  test.skip(process.env.FDE_E2E_OPERATIONAL !== '1', 'Requires the populated authorized operational workspace.');
+  const forecasts=await (await request.get('/research-api/v1/research/prospective')).json();
+  expect(forecasts.count).toBeGreaterThan(0);
+  expect(forecasts.evaluated_forecasts).toBeGreaterThan(0);
+  expect(forecasts.decision).toBe('NO BET');
+  const slate=await (await request.get('/research-api/v1/forward/slate')).json();
+  const game=slate.games.find((g:{kickoff_utc:string;canonical_game_id:string}) =>
+    Date.parse(g.kickoff_utc)>Date.now() && forecasts.records.some((r:{game_id:string})=>r.game_id===g.canonical_game_id));
+  expect(game).toBeTruthy();
+  const times:{action:string;ms:number}[]=[];
+  let start=Date.now();
+  await page.goto('/');
+  await page.getByRole('button',{name:/enter local demo session/i}).click();
+  await expect(page.getByText(/Engine connected/)).toBeVisible();
+  times.push({action:'cold War Room',ms:Date.now()-start});
+  for(let repeat=1;repeat<=2;repeat++){
+    start=Date.now();
+    await page.getByRole('link',{name:'Slate',exact:true}).click();
+    await expect(page.getByRole('table',{name:'Ingested fixtures'})).toBeVisible();
+    times.push({action:`${repeat}: Slate`,ms:Date.now()-start});
+    start=Date.now();
+    await page.getByRole('link',{name:`${game.away_team_id} @ ${game.home_team_id}`,exact:true}).click();
+    await expect(page.getByRole('region',{name:'Pregame forecast tracking'}).getByText(/Home win/).first()).toBeVisible();
+    await expect(page.getByRole('region',{name:'NFL team and player research'})).toBeVisible();
+    times.push({action:`${repeat}: Game Lab evidence and forecasts`,ms:Date.now()-start});
+    const calls:string[]=[];
+    const listener=(r:{url:()=>string})=>calls.push(r.url());
+    page.on('request',listener);
+    start=Date.now();
+    const refreshed=page.waitForResponse(r=>r.url().endsWith('/research-api/v1/forward/live') && r.ok());
+    await page.getByRole('button',{name:'Refresh analysis',exact:true}).click();
+    await refreshed;
+    await expect(page.getByRole('button',{name:'Refresh analysis',exact:true})).toBeEnabled();
+    times.push({action:`${repeat}: Game Lab refresh`,ms:Date.now()-start});
+    expect(calls.some(url=>url.endsWith('/research-api/v1/research/briefing'))).toBe(false);
+    page.off('request',listener);
+    start=Date.now();
+    await page.getByRole('link',{name:'War Room',exact:true}).click();
+    await expect(page.getByText(/Engine connected/)).toBeVisible();
+    times.push({action:`${repeat}: return War Room`,ms:Date.now()-start});
+  }
+  start=Date.now();
+  await page.getByRole('link',{name:'Candidates',exact:true}).click();
+  await expect(page.getByText(/not a wager/i).first()).toBeVisible();
+  times.push({action:'Candidates',ms:Date.now()-start});
+  mkdirSync('qa/operational-recovery-20261017',{recursive:true});
+  writeFileSync('qa/operational-recovery-20261017/browser-journey-times.json',JSON.stringify(times,null,2));
+  for(const timing of times.filter(t=>!t.action.startsWith('cold'))) expect(timing.ms,timing.action).toBeLessThan(2000);
+});
 
 test('prospective tracking uses the real API and preserves research-only provenance',async({page,request})=>{
   const response=await request.get('/research-api/v1/research/prospective');

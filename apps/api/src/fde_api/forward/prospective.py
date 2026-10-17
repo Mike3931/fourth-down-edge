@@ -22,6 +22,7 @@ from fde_api.db.forward_models import GameIdentityReview, ScheduleObservation, W
 from fde_api.db.models import FeatureSnapshot, Game, Job, ModelEvaluation, ModelVersion, Prediction, Team
 from fde_api.evaluation import brier, calibration_line, log_loss, reliability_bins
 from fde_api.features.history import GameRow, LeagueHistory
+from fde_api.forward.forecast_integrity import eligibility, freeze_forecast
 from fde_api.forward.intelligence import IntelligenceAt, digest
 from fde_api.forward.modes import DataMode
 from fde_api.forward.results import _score_of, final_observation
@@ -41,14 +42,22 @@ LIMITATIONS = [
 ]
 
 
-def schedule_at(s: Session, now: datetime) -> tuple[dict[str, ScheduleObservation], set[str]]:
+def schedule_at(s: Session, now: datetime, game_ids: set[str] | None = None) -> tuple[dict[str, ScheduleObservation], set[str]]:
     if now.tzinfo is None:
         raise ValueError("Aware execution time required")
+    from sqlalchemy import or_
+
+    from fde_api.forward.read_queries import latest_schedule
+
     states = {}
+    stmt = latest_schedule(
+        ScheduleObservation.data_mode == "LIVE_RESEARCH", ScheduleObservation.observed_at <= now,
+        or_(ScheduleObservation.source_updated_at.is_(None), ScheduleObservation.source_updated_at <= now),
+    )
+    if game_ids is not None:
+        stmt = stmt.where(ScheduleObservation.canonical_game_id.in_(game_ids))
     for row in s.scalars(
-        select(ScheduleObservation)
-        .where(ScheduleObservation.data_mode == "LIVE_RESEARCH", ScheduleObservation.observed_at <= now)
-        .order_by(ScheduleObservation.observed_at, ScheduleObservation.id)
+        stmt
     ):
         if row.source_updated_at is None or row.source_updated_at <= now:
             states[row.canonical_game_id] = row
@@ -92,6 +101,11 @@ def verified_final(
         or now < obs.kickoff_utc
         or (obs.source_updated_at is not None and obs.source_updated_at > now)
     ):
+        return None
+    canonical = s.get(Game, game.canonical_game_id)
+    if (obs.home_team_id, obs.away_team_id, obs.kickoff_utc) != (game.home_team_id, game.away_team_id, game.kickoff_utc):
+        return None
+    if canonical and (canonical.home_team_id, canonical.away_team_id) != (game.home_team_id, game.away_team_id):
         return None
     home, away = _score_of(obs)
     if home is None or away is None or min(home, away) < 0:
@@ -355,6 +369,9 @@ def generate_forecasts(
                     outputs=outputs,
                 )
             )
+            s.flush()
+            published = s.get(Prediction, "pros-p-" + digest([feature_id, version.id])[:48])
+            freeze_forecast(s, published, now=datetime.now(UTC) if actual_execution else now)
             model.name = base_name
             result["created"] += 1
         if actual_execution and datetime.now(UTC) >= g.kickoff_utc:
@@ -419,6 +436,8 @@ def evaluate_forecasts(s: Session, *, now: datetime | None = None) -> dict[str, 
         feature = s.get(FeatureSnapshot, p.feature_snapshot_id) if p.feature_snapshot_id else None
         if not g or not feature or p.outputs.get("prospective_version") != VERSION:
             continue
+        if eligibility(s, p, g):
+            continue
         original_kickoff = datetime.fromisoformat(feature.values["kickoff_at_creation"])
         if (
             p.created_at != p.as_of_at
@@ -443,6 +462,15 @@ def evaluate_forecasts(s: Session, *, now: datetime | None = None) -> dict[str, 
             "result_observation_id": obs.id,
             "result_observed_at": obs.observed_at.isoformat(),
             "verification": "PUBLIC_PROVIDER_UNCONTESTED",
+            "evaluated_at": now.isoformat(),
+            "actual_margin": margin,
+            "actual_total": total,
+            "margin_signed_error": o["expected_margin"] - margin,
+            "total_signed_error": o["expected_total"] - total,
+            "predicted_winner": "HOME" if probability > .5 else "AWAY" if probability < .5 else "UNDECIDED",
+            "actual_winner": "TIE" if tied else "HOME" if home > away else "AWAY",
+            "winner_correct": None if tied or probability == .5 else (probability > .5) == (home > away),
+            "predicted_winner_probability": max(probability, 1 - probability),
             "home_score": home,
             "away_score": away,
             "is_tie": tied,
@@ -463,6 +491,8 @@ def evaluate_forecasts(s: Session, *, now: datetime | None = None) -> dict[str, 
                 id=key,
                 model_version_id=p.model_version_id,
                 scope="prospective:" + p.horizon,
+                prediction_id=p.id,
+                result_observation_id=obs.id,
                 metrics=metrics,
                 sample_size=1,
                 created_at=now,
@@ -474,17 +504,18 @@ def evaluate_forecasts(s: Session, *, now: datetime | None = None) -> dict[str, 
 
 
 def read_prospective(s: Session, *, now: datetime, game_id: str | None = None) -> dict[str, Any]:
-    states, blocked = schedule_at(s, now)
+    stmt = select(Prediction).where(Prediction.horizon.in_(CHECKPOINTS), Prediction.created_at <= now)
+    if game_id:
+        stmt = stmt.where(Prediction.game_id == game_id)
     predictions = list(
         s.scalars(
-            select(Prediction)
-            .where(Prediction.horizon.in_(CHECKPOINTS), Prediction.created_at <= now)
-            .order_by(Prediction.created_at, Prediction.id)
+            stmt.order_by(Prediction.created_at, Prediction.id)
         )
     )
     if game_id:
         predictions = [p for p in predictions if p.game_id == game_id]
     valid = [p for p in predictions if p.outputs.get("prospective_version") == VERSION]
+    states, blocked = schedule_at(s, now, {p.game_id for p in valid})
     by_id = {p.id: p for p in valid}
     features = {
         f.id: f
@@ -514,7 +545,8 @@ def read_prospective(s: Session, *, now: datetime, game_id: str | None = None) -
         pid = ev.metrics.get("prediction_id")
         if pid in ids:
             current_final = finals[by_id[pid].game_id]
-            if current_final and current_final[0].id == ev.metrics.get("result_observation_id"):
+            if (current_final and current_final[0].id == ev.metrics.get("result_observation_id")
+                    and eligibility(s, by_id[pid], states.get(by_id[pid].game_id)) is None):
                 latest_eval[pid] = ev.metrics
     # One most recent evidence version per game/approach/horizon for headline metrics.
     # All earlier versions and their individual evaluations remain inspectable.
@@ -576,9 +608,18 @@ def read_prospective(s: Session, *, now: datetime, game_id: str | None = None) -
         old = prior.get((p.game_id, p.outputs["approach"]))
         frozen = features.get(p.feature_snapshot_id) if p.feature_snapshot_id else None
         version = versions.get(p.model_version_id)
-        pregame = bool(g and g.kickoff_utc and p.created_at < g.kickoff_utc
+        integrity_issue = eligibility(s, p, g)
+        pregame = bool(integrity_issue is None and g and g.kickoff_utc and p.created_at < g.kickoff_utc
                        and p.created_at < datetime.fromisoformat(p.outputs["scheduled_kickoff"])
                        and p.created_at == p.as_of_at)
+        evaluation_state = (
+            "BLOCKED" if integrity_issue or p.game_id in blocked
+            or (g and g.game_status == "FINAL" and finals[p.game_id] is None)
+            else "EVALUATED" if p.id in latest_eval
+            else "FINAL - PENDING EVALUATION" if finals.get(p.game_id)
+            else "PREGAME" if g and g.kickoff_utc and now < g.kickoff_utc
+            else "AWAITING VERIFIED FINAL"
+        )
         records.append(
             {
                 "id": p.id,
@@ -597,7 +638,9 @@ def read_prospective(s: Session, *, now: datetime, game_id: str | None = None) -
                     "limitations": version.known_limitations if version else None,
                 },
                 "evaluation": latest_eval.get(p.id),
-                "eligible_pregame_record": pregame,
+                "eligible_pregame_record": pregame and integrity_issue is None,
+                "evaluation_state": evaluation_state,
+                "verification_warning": integrity_issue or ("Final providers disagree or result is incomplete" if g and g.game_status == "FINAL" and finals[p.game_id] is None else None),
                 "state": "REVIEW REQUIRED"
                 if p.game_id in blocked
                 else "NOT ELIGIBLE: REVISED KICKOFF"
@@ -608,7 +651,7 @@ def read_prospective(s: Session, *, now: datetime, game_id: str | None = None) -
                 if g
                 else "UNKNOWN",
                 "current": bool(
-                    current and p.game_id not in blocked and now - p.created_at < timedelta(hours=24)
+                    current and integrity_issue is None and p.game_id not in blocked and now - p.created_at < timedelta(hours=24)
                 ),
                 "change": None
                 if old is None

@@ -22,8 +22,8 @@ export const ENGINE_BASE =
 // bearer token to anyone who loaded the page - verified by building with
 // one set and grepping the output. The dev proxy attaches the header
 // server-side instead, from a variable Vite never sees.
-export async function engineGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${ENGINE_BASE}${path}`);
+export async function engineGet<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(`${ENGINE_BASE}${path}`, { signal });
   if (!res.ok) throw new Error(`Engine returned ${res.status} ${res.statusText}`);
   return (await res.json()) as T;
 }

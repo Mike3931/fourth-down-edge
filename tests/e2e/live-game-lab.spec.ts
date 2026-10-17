@@ -144,6 +144,41 @@ test('Game Lab supports mobile, refresh and accessible navigation', async ({ pag
   await expect(page.getByRole('navigation', { name: 'Primary' })).toBeVisible();
 });
 
+test('unavailable prepared inputs do not block viewing or refreshing available game data', async ({ page }) => {
+  await stubCapturedGame(page);
+  await page.route('**/research-api/v1/research/briefing*', route => route.abort());
+  await login(page);
+  await page.goto('/live/game/FDE-REAL-TEST-GAME');
+  await expect(page.getByRole('heading', {name: /Game Lab · TEN @ HOU/})).toBeVisible();
+  await expect(page.getByText(/Input preparation is unavailable/)).toBeVisible();
+  await expect(page.getByRole('button', {name: 'Refresh analysis'})).toBeEnabled();
+  await page.getByRole('button', {name: 'Refresh analysis'}).click();
+  await expect(page.getByRole('button', {name: 'Refresh analysis'})).toBeEnabled();
+  await expect(page.getByText(/No demo evidence was substituted/i)).toBeVisible();
+});
+
+test('pending prepared inputs keep their loading state while game refresh remains usable', async ({page}) => {
+  await stubCapturedGame(page);
+  let release!:()=>void;
+  const pending=new Promise<void>(resolve=>{release=resolve;});
+  await page.route('**/research-api/v1/research/briefing?canonical_game_id=*',async route=>{
+    await pending;
+    await route.fulfill({status:503,body:'Controlled unavailable preparation'});
+  });
+  try {
+    await login(page);
+    await page.goto('/live/game/FDE-REAL-TEST-GAME');
+    await expect(page.getByRole('heading',{name:/Game Lab · TEN @ HOU/})).toBeVisible();
+    await expect(page.getByText('Retrieving prepared evidence…')).toBeVisible();
+    await expect(page.getByRole('button',{name:'Refresh analysis'})).toBeEnabled();
+    await page.getByRole('button',{name:'Refresh analysis'}).click();
+    await expect(page.getByRole('button',{name:'Refresh analysis'})).toBeEnabled();
+    await expect(page.getByText('Retrieving prepared evidence…')).toBeVisible();
+    release();
+    await expect(page.getByText(/Input preparation is unavailable/)).toBeVisible();
+  } finally {release();}
+});
+
 test('Game Lab recovers from a schedule failure without a demo fallback', async ({ page }) => {
   await stubCapturedGame(page);
   await page.route('**/research-api/v1/forward/slate*', (route) => route.fulfill({ status: 503, body: 'Unavailable' }));

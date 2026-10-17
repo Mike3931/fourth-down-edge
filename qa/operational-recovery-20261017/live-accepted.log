@@ -1,0 +1,20 @@
+[WebServer] (node:15740) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 10 tests using 1 worker
+
+(node:30556) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  1 tests\engine-e2e\live-engine-required.spec.ts:4:5 › populated operational workspace supports repeated navigation and refresh within two seconds (11.9s)
+  ok  2 tests\engine-e2e\live-engine-required.spec.ts:55:5 › prospective tracking uses the real API and preserves research-only provenance (709ms)
+  -   3 tests\engine-e2e\live-engine-required.spec.ts:89:5 › captured model comparison links real-game research and refuses recommendation status
+  ok  4 tests\engine-e2e\live-engine-required.spec.ts:123:5 › the real backend responds with a migrated database (73ms)
+  ok  5 tests\engine-e2e\live-engine-required.spec.ts:139:5 › the War Room uses the real engine rather than the demo fallback (2.5s)
+  ok  6 tests\engine-e2e\live-engine-required.spec.ts:155:5 › War Room briefing matches the actual backend on desktop and mobile (3.8s)
+  ok  7 tests\engine-e2e\live-engine-required.spec.ts:184:5 › the live schedule comes from the backend, even when no games are seeded (901ms)
+  ok  8 tests\engine-e2e\live-engine-required.spec.ts:193:5 › data-health endpoint is reachable and its UI is not a demo (1.1s)
+  ok  9 tests\engine-e2e\live-engine-required.spec.ts:208:5 › research candidate and captured-market API endpoints fail closed, not mock-backed (449ms)
+  ok 10 tests\engine-e2e\live-engine-required.spec.ts:219:5 › current public NFL captures navigate to Game Lab on desktop and mobile (5.2s)
+
+  1 skipped
+  9 passed (30.0s)

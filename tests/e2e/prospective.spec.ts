@@ -41,3 +41,24 @@ test('failed refresh and promoted payload cannot leave cached forecasts visible'
     await expect(panel.getByText(/Home win 55.0%/)).toHaveCount(0);
   }
 });
+
+test('evaluation states distinguish blocked, pending and evaluated records',async({page})=>{
+  let state='FINAL - PENDING EVALUATION';
+  await page.route('**/research-api/v1/research/prospective',r=>r.fulfill({json:{...payload,
+    evaluated_forecasts:state==='EVALUATED'?1:0,
+    records:[{...payload.records[0],current:false,state:'FINAL',evaluation_state:state,
+      verification_warning:state==='BLOCKED'?'Missing pregame freeze attestation':null,
+      evaluation:state==='EVALUATED'?{home_score:17,away_score:14,actual_margin:3,actual_total:31,
+        brier:.2,margin_signed_error:-1,total_signed_error:14,winner_correct:true,
+        evaluated_at:new Date().toISOString(),verification:'PUBLIC_PROVIDER_UNCONTESTED'}:null}]}}));
+  await page.goto('/');await page.getByRole('button',{name:/enter local demo session/i}).click();
+  const panel=page.getByRole('region',{name:'Pregame forecast tracking'});
+  await expect(panel.getByText(state,{exact:true})).toBeVisible();
+  state='BLOCKED';await panel.getByRole('button',{name:'Refresh forecasts'}).click();
+  await expect(panel.getByText('Missing pregame freeze attestation',{exact:true})).toBeVisible();
+  await expect(panel.getByText('Final score:',{exact:false})).toHaveCount(0);
+  state='EVALUATED';await panel.getByRole('button',{name:'Refresh forecasts'}).click();
+  await expect(panel.getByText('EVALUATED',{exact:true})).toBeVisible();
+  await expect(panel.getByText(/Actual home margin 3.000/)).toBeVisible();
+  await expect(panel.getByText(/Research only · NO BET/)).toBeVisible();
+});

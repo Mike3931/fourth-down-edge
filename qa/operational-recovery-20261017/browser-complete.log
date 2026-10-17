@@ -1,0 +1,57 @@
+[WebServer] (node:34972) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:16520) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 36 tests using 6 workers
+
+(node:7224) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:26268) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:11596) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:12776) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:23412) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:22008) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok  2 tests\e2e\war-room.spec.ts:10:5 › War Room is the real-data front door on desktop and mobile (1.3s)
+  ok  5 tests\e2e\prospective.spec.ts:18:5 › pregame research explains estimates, uncertainty, missing data and NO BET on mobile (1.4s)
+  ok  4 tests\e2e\model-research.spec.ts:24:5 › model comparison preserves failed evidence and NO BET on mobile (1.4s)
+  ok  6 tests\e2e\live-game-lab.spec.ts:48:5 › a real fixture links to an engine-backed Game Lab with no invented price (1.7s)
+  ok  3 tests\e2e\live-screens.spec.ts:39:9 › engine-backed screens › Research Candidates shows engine data or says the engine is down (1.8s)
+  ok  7 tests\e2e\war-room.spec.ts:23:5 › an outage hides cached findings after refresh (862ms)
+  ok  9 tests\e2e\model-research.spec.ts:37:5 › failed model refresh hides retained numerical findings (947ms)
+  ok  8 tests\e2e\prospective.spec.ts:32:5 › failed refresh and promoted payload cannot leave cached forecasts visible (972ms)
+  ok 10 tests\e2e\live-game-lab.spec.ts:64:5 › unknown canonical game never substitutes a fictional demo (916ms)
+  ok 12 tests\e2e\war-room.spec.ts:35:5 › malformed or falsely qualified response fails closed (744ms)
+  ok 13 tests\e2e\model-research.spec.ts:52:5 › unapproved status and missing evidence cannot imply model qualification (872ms)
+  ok 14 tests\e2e\prospective.spec.ts:45:5 › evaluation states distinguish blocked, pending and evaluated records (1.0s)
+  ok 15 tests\e2e\live-game-lab.spec.ts:73:5 › a captured quote is described as history, not offered as an available wager (999ms)
+  ok 11 tests\e2e\live-screens.spec.ts:39:9 › engine-backed screens › Forward Test shows engine data or says the engine is down (2.0s)
+  ok 16 tests\e2e\live-game-lab.spec.ts:89:5 › Game Lab requests scoped assessments and distinguishes truncation from absence (781ms)
+  ok  1 tests\e2e\journey.spec.ts:11:7 › Fourth Down Edge core journey › sign in → slate → game lab → manual price → paper bet → portfolio → settlement → audit (4.9s)
+  ok 18 tests\e2e\live-game-lab.spec.ts:107:5 › future-dated source observations are explicitly flagged (676ms)
+  ok 19 tests\e2e\live-game-lab.spec.ts:116:5 › same-time contradictory sportsbook quotes are not silently accepted (600ms)
+  ok 20 tests\e2e\live-game-lab.spec.ts:130:5 › Game Lab supports mobile, refresh and accessible navigation (852ms)
+  ok 21 tests\e2e\live-game-lab.spec.ts:147:5 › unavailable prepared inputs do not block viewing or refreshing available game data (654ms)
+  ok 22 tests\e2e\live-game-lab.spec.ts:160:5 › pending prepared inputs keep their loading state while game refresh remains usable (641ms)
+  ok 17 tests\e2e\live-screens.spec.ts:39:9 › engine-backed screens › Live Slate shows engine data or says the engine is down (4.8s)
+  ok 23 tests\e2e\live-game-lab.spec.ts:182:5 › Game Lab recovers from a schedule failure without a demo fallback (687ms)
+  ok 25 tests\e2e\live-game-lab.spec.ts:194:5 › equal instants with different UTC offsets retain both conflicting prices (611ms)
+  ok 24 tests\e2e\live-screens.spec.ts:39:9 › engine-backed screens › Slate shows engine data or says the engine is down (833ms)
+  ok 26 tests\e2e\live-screens.spec.ts:39:9 › engine-backed screens › Model Audit shows engine data or says the engine is down (578ms)
+  ok 27 tests\e2e\live-screens.spec.ts:39:9 › engine-backed screens › Data Health shows engine data or says the engine is down (762ms)
+  ok 28 tests\e2e\live-screens.spec.ts:54:7 › engine-backed screens › the navigation separates live screens from demonstration screens (416ms)
+  ok 29 tests\e2e\live-screens.spec.ts:68:7 › screens that show no dataset at all › Settings carries neither live nor demonstration chrome (591ms)
+  ok 30 tests\e2e\live-screens.spec.ts:87:7 › screens that show no dataset at all › Settings does not promise a mode the ledger refuses (537ms)
+  ok 31 tests\e2e\live-screens.spec.ts:106:7 › screens that show no dataset at all › the demonstration screens still carry their banner (529ms)
+  ok 32 tests\e2e\live-screens.spec.ts:122:7 › a stored line always says whose it is › CLV is never labelled in bare points (994ms)
+  ok 33 tests\e2e\live-screens.spec.ts:134:7 › a stored line always says whose it is › the odds board names the team on every spread (632ms)
+  ok 34 tests\e2e\live-screens.spec.ts:158:7 › the two screens Phase 3 named › Candidates never presents itself as a wager (729ms)
+  ok 35 tests\e2e\live-screens.spec.ts:175:7 › the two screens Phase 3 named › Model Audit does not call a burned season out-of-sample (487ms)
+  ok 36 tests\e2e\live-screens.spec.ts:193:7 › the two screens Phase 3 named › Forward Test says its sample cannot support a claim (490ms)
+
+  36 passed (46.6s)

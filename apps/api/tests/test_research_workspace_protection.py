@@ -56,7 +56,7 @@ def test_historical_evaluations_block_even_an_attested_database(tmp_path):
     path = tmp_path / "isolated.db"
     initialize_workspace(path)
     with sqlite3.connect(path) as db:
-        db.execute("INSERT INTO model_evaluations VALUES ('frozen','model','test','{}',1,'2026-10-13')")
+        db.execute("INSERT INTO model_evaluations (id,model_version_id,scope,metrics,sample_size,created_at) VALUES ('frozen','model','test','{}',1,'2026-10-13')")
     before = path.read_bytes()
     with pytest.raises(ValueError, match="Historical research"):
         authorize_database(path)

@@ -1,0 +1,25 @@
+
+> fourth-down-edge@0.1.0 test:db
+> node supabase/test/validate-migrations.mjs
+
+OK   auth schema stub
+OK   0001_initial_schema.sql
+OK   0002_row_level_security.sql
+OK   0003_append_only_guards.sql
+OK   0004_recommendations_require_authentication.sql
+OK   seed.sql
+---
+public tables: 37 | triggers: 17 | RLS policies: 50 | RLS-enabled tables: 37
+OK   immutability guard blocked UPDATE on predictions (UPDATE on predictions is forbidden: records are immutable/append-only)
+OK   settlement guard blocked direct re-settlement (Settled bets may only change via the correction path (CORRECTED bet_event required))
+OK   RLS: the owner cannot UPDATE a bankroll account to another user (new row violates row-level security policy for table "bankroll_accounts")
+OK   RLS: a different authenticated user sees ZERO of another user's manual_book_prices rows
+OK   RLS: a different authenticated user sees ZERO of another user's bankroll_accounts rows
+OK   RLS: a user cannot INSERT a manual price claiming to be a different user (new row violates row-level security policy for table "manual_book_prices")
+OK   RLS: shared reference data (teams) remains readable across users
+OK   GUARD: the owner cannot UPDATE a bet to reassign it (immutability trigger fires first) (Bet identity fields are immutable)
+OK   RLS: an authenticated user CAN read global recommendations
+OK   RLS: an unauthenticated session sees ZERO user-owned manual_book_prices rows
+OK   RLS: an unauthenticated session sees ZERO global recommendations
+---
+ALL CHECKS PASSED

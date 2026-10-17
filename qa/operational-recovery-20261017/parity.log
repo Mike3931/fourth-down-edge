@@ -1,0 +1,17 @@
+============================= test session starts =============================
+collected 1 item
+
+tests\test_chain_direct.py .                                             [100%]
+
+- generated xml file: C:\Users\mjcun\fde-handoff-release0\apps\api\build\parity-junit.xml -
+============================== 1 passed in 5.37s ==============================
+
+=== PARITY GATE ===
+    test       tests/test_chain_direct.py::TestDirectAndSchedulerChainsAgree::test_the_semantic_hashes_match
+    collected  1
+    passed     1
+    skipped    0
+    failed     0
+    errors     0
+
+PARITY GATE PASSED

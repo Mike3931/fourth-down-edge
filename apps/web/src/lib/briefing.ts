@@ -54,9 +54,10 @@ const schema = z.object({
 
 export type Intelligence = NonNullable<z.infer<typeof schema>['games'][number]['intelligence']>;
 
-export function useBriefing() {
-  return useQuery({ queryKey: ['engine', 'war-room'],
-    queryFn: async () => schema.parse(await engineGet<unknown>('/v1/research/briefing')),
-    retry: false, refetchInterval: 60_000,
+export function useBriefing(gameId?: string) {
+  return useQuery({ queryKey: ['engine', 'war-room', gameId ?? null],
+    queryFn: async ({ signal }) => schema.parse(await engineGet<unknown>('/v1/research/briefing' +
+      (gameId ? `?canonical_game_id=${encodeURIComponent(gameId)}` : ''), signal)),
+    retry: false, staleTime: 30_000, refetchOnWindowFocus: false, refetchInterval: 60_000,
   });
 }

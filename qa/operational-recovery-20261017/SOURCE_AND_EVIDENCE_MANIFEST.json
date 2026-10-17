@@ -1,0 +1,247 @@
+{
+  "base_commit": "607dcb6e6a0e5f19331285c896d512ca54d43f87",
+  "branch": "codex/operational-recovery",
+  "checked_at": "2026-10-17T11:45:33.550873+00:00",
+  "files": {
+    "apps/api/migrations/versions/fb0100000001_forecast_freezes.py": {
+      "sha256_staged_blob": "0e34998c4e3d1c42c8915955031ad6363cff4d234ff25cf17a5ad722e54ea94b",
+      "bytes": 2299
+    },
+    "apps/api/scripts/attest_pregame_baseline.py": {
+      "sha256_staged_blob": "891ba9af73c0491ae536bc6d3b71c9719683fe1f12ef8cbd58cada55ab027604",
+      "bytes": 3804
+    },
+    "apps/api/src/fde_api/api/main.py": {
+      "sha256_staged_blob": "7d0da03818e193ff3391fae4a11cead61ea67dd6a6352fc1727969ba86e8157a",
+      "bytes": 50484
+    },
+    "apps/api/src/fde_api/db/models.py": {
+      "sha256_staged_blob": "2ce030777c6ec5e9cd24219ee2c83259d17109575342c66690bdc8fcb1101203",
+      "bytes": 20484
+    },
+    "apps/api/src/fde_api/forward/briefing.py": {
+      "sha256_staged_blob": "6d1b9c2b79b5d237d8c85417e9c9513c05019c5f0ad54ddf42d59bb24cc818c5",
+      "bytes": 15563
+    },
+    "apps/api/src/fde_api/forward/fact_reads.py": {
+      "sha256_staged_blob": "b7158993e161d0dcb8c8a84ca388215582944d2adb240cf3d51b8d486a04c28c",
+      "bytes": 2715
+    },
+    "apps/api/src/fde_api/forward/forecast_integrity.py": {
+      "sha256_staged_blob": "f988a206fcb7fdc9ccad678592143a9068efe82f4a21f0dd8ad72f08b6c38cea",
+      "bytes": 3032
+    },
+    "apps/api/src/fde_api/forward/intelligence.py": {
+      "sha256_staged_blob": "23c4408e9a7ef02af16f8d8a608ee270c4318d52e627487c6cb9829350f49396",
+      "bytes": 35478
+    },
+    "apps/api/src/fde_api/forward/prospective.py": {
+      "sha256_staged_blob": "38681ce983262e0be80448bfa27e1e47632261d9c520e2e9e1ff05d0ff584c0a",
+      "bytes": 30026
+    },
+    "apps/api/src/fde_api/forward/read_queries.py": {
+      "sha256_staged_blob": "3d20b52cf5175a68fba966c56f1ede666560dacc680311f48f11e52084a47758",
+      "bytes": 815
+    },
+    "apps/api/tests/test_briefing_read_contention.py": {
+      "sha256_staged_blob": "ee01608977fecd6a71e7ffe52f748562a4d460dcd6139a807770c64909199e9f",
+      "bytes": 2632
+    },
+    "apps/api/tests/test_operational_reads.py": {
+      "sha256_staged_blob": "77ee5e3fe8170b5efff8837adb2ee4d667c7a480c13235290d32767ab5ce4897",
+      "bytes": 4047
+    },
+    "apps/api/tests/test_postgame_integrity.py": {
+      "sha256_staged_blob": "1f55c6977fe432acff955f811be250ccdadc7f47f802747a0a973b266c86f5ad",
+      "bytes": 7198
+    },
+    "apps/api/tests/test_prospective_guards.py": {
+      "sha256_staged_blob": "614b600ad0ff24199fdc735e681ccf95624e3695833af42ac94cf88076343756",
+      "bytes": 4506
+    },
+    "apps/api/tests/test_research_vintage_migration.py": {
+      "sha256_staged_blob": "87addf731607784af469402fba0d413802973979d2af01d31fd6d3571a576d2a",
+      "bytes": 1942
+    },
+    "apps/api/tests/test_research_workspace_protection.py": {
+      "sha256_staged_blob": "afceca0af817ebed5286e235f7a24607f1f3b1e70eb1c180279585f5bb8f35ad",
+      "bytes": 4011
+    },
+    "apps/web/src/components/ProspectiveResearch.tsx": {
+      "sha256_staged_blob": "0ee321cdeed5691e3223cdddc3ecb8b930606662694f13c9d5cb4f05363f6140",
+      "bytes": 9412
+    },
+    "apps/web/src/lib/briefing.ts": {
+      "sha256_staged_blob": "c495c390caf20c0c962505ed4729b7768b71ac6f391d81b7c646c07777a22126",
+      "bytes": 4465
+    },
+    "apps/web/src/lib/engine.ts": {
+      "sha256_staged_blob": "c644976e06aa263f94595cb0c662166454195895db1b421cbeb4ac7b2867366a",
+      "bytes": 7010
+    },
+    "apps/web/src/pages/LiveGameLab.tsx": {
+      "sha256_staged_blob": "0e60299ff5d8a10047820696ebe3ac7705f1274c59dc056505a009769c944d07",
+      "bytes": 20893
+    },
+    "qa/operational-recovery-20261017/DATA_PRESERVATION.md": {
+      "sha256_staged_blob": "18c79fe4c38bfa05f92d2c0267c69007d32548dce768399f5373a37eac519749",
+      "bytes": 2521
+    },
+    "qa/operational-recovery-20261017/PERFORMANCE.md": {
+      "sha256_staged_blob": "620169abf9090c26cbfed734c531657c230a99761b74a6317691cb3d217f7459",
+      "bytes": 2919
+    },
+    "qa/operational-recovery-20261017/README.md": {
+      "sha256_staged_blob": "87e617b1f06d9196770b31c83116bed3327e2feb31ac8d26f25828605a45a34b",
+      "bytes": 4191
+    },
+    "qa/operational-recovery-20261017/TEST_RESULTS.md": {
+      "sha256_staged_blob": "f9ad7791743ce8e424a021a7a25e47b405b746efa5c2e4ad0e5379046e0d9685",
+      "bytes": 4993
+    },
+    "qa/operational-recovery-20261017/backend-final.log": {
+      "sha256_staged_blob": "13b68a38f4f87f6816acfa6ea838ed4574ddc8e2becf7b4ceedf1fa55afce6e2",
+      "bytes": 4672
+    },
+    "qa/operational-recovery-20261017/backend-final.xml": {
+      "sha256_staged_blob": "f45e19d3d48cf786dd064ac4cfb7f6b23d8d97996ed4f6cc0ebb4c72b082dae2",
+      "bytes": 241841
+    },
+    "qa/operational-recovery-20261017/browser-complete.log": {
+      "sha256_staged_blob": "8e0dd27d94f1c247dfd12a6411c31811437babf25f5b866a01fd2b8053a8ad9f",
+      "bytes": 6208
+    },
+    "qa/operational-recovery-20261017/browser-journey-times.json": {
+      "sha256_staged_blob": "310e04f6fd789a156bdf023589696a77c23d268abc4ac2a590546d06f8af6075",
+      "bytes": 593
+    },
+    "qa/operational-recovery-20261017/build.log": {
+      "sha256_staged_blob": "f33c7710bd45430bc18841362c5897f35d265cd2bc386fba5e56af4c45652e71",
+      "bytes": 668
+    },
+    "qa/operational-recovery-20261017/bundle-audit-final.log": {
+      "sha256_staged_blob": "d69e98c6ad204d8e3234d91b67222c8f45931674fa4516c6ec80586f665ed00d",
+      "bytes": 142
+    },
+    "qa/operational-recovery-20261017/dependency-audit.log": {
+      "sha256_staged_blob": "7099c683ca9ce125e964d3eb553c839bb87a0e8c77114f9d664e58646e078af6",
+      "bytes": 631
+    },
+    "qa/operational-recovery-20261017/endpoint-final.json": {
+      "sha256_staged_blob": "0538fb26c7cf6ec7771a4a0d46e43b2ce139e1ba82eb3eaeecfe8b632bf7d885",
+      "bytes": 4131
+    },
+    "qa/operational-recovery-20261017/endpoint-times.json": {
+      "sha256_staged_blob": "379ba550b7ff01927933194114c52f45391458f38909209f48a02a15e643faaf",
+      "bytes": 12170
+    },
+    "qa/operational-recovery-20261017/equivalence.log": {
+      "sha256_staged_blob": "941bb1a9bcefa320a18635509118f1ececa9824aff2ef0d0fe0068bd3c49f3c5",
+      "bytes": 128
+    },
+    "qa/operational-recovery-20261017/frontend.log": {
+      "sha256_staged_blob": "7358e619dbe47b41e8c5161e6a34ab1df5ba47334bdab7ae95767c40088d91f3",
+      "bytes": 1663
+    },
+    "qa/operational-recovery-20261017/idempotency.json": {
+      "sha256_staged_blob": "5c53d975e80ef3ca6cb037e70423eb0e9f95080b3d078568137801840cc5852f",
+      "bytes": 2472
+    },
+    "qa/operational-recovery-20261017/lint-ci.log": {
+      "sha256_staged_blob": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "bytes": 19
+    },
+    "qa/operational-recovery-20261017/live-accepted.log": {
+      "sha256_staged_blob": "01ff3313f2f0b25e48bbcf7385625f839084318dd3b7bbca18d47467fc0c371e",
+      "bytes": 1842
+    },
+    "qa/operational-recovery-20261017/manual-journey.json": {
+      "sha256_staged_blob": "38ecc2d433cecc3d39343e56ab5355f9831eb1e63a36451da0a4f93e2c67ea7b",
+      "bytes": 675
+    },
+    "qa/operational-recovery-20261017/mypy-accepted.log": {
+      "sha256_staged_blob": "4ceb57b647f65ad9bc4a2ac12b1f1d95323ae55da4304fb3e5014cf75bf56502",
+      "bytes": 44
+    },
+    "qa/operational-recovery-20261017/official-disabled.json": {
+      "sha256_staged_blob": "d6e5f65f3b1d5c9a38d97dcf6ada93ce063725a9546e9f7ed413d8a1d8bc1bd0",
+      "bytes": 148
+    },
+    "qa/operational-recovery-20261017/parity.log": {
+      "sha256_staged_blob": "8b79ff066c6309cb880cfb984e1e36c3335dcf8009fc7014cd1f03e7d4da36b5",
+      "bytes": 586
+    },
+    "qa/operational-recovery-20261017/parity.xml": {
+      "sha256_staged_blob": "d3770e205a915a1f6dce6762993db99cdafd485bcd4eb14165369fafae2c0da1",
+      "bytes": 373
+    },
+    "qa/operational-recovery-20261017/pg-migrations.log": {
+      "sha256_staged_blob": "5bd73790c103aab3ffdaede594a2149abc3b65da41eac39928bf05cfef4acb51",
+      "bytes": 5973
+    },
+    "qa/operational-recovery-20261017/postgres-tests.log": {
+      "sha256_staged_blob": "d21d77d629bc84b0af4356e07ed92b780a693b8eb377aae8499469b835798016",
+      "bytes": 2960
+    },
+    "qa/operational-recovery-20261017/postgres.xml": {
+      "sha256_staged_blob": "d94f931a60a3c032d083a52ef6e2b09d15a9d8808c5448371fda5cdc5c5b4de6",
+      "bytes": 7493
+    },
+    "qa/operational-recovery-20261017/retained-schedule.log": {
+      "sha256_staged_blob": "b5bed773eba3ce6e5975b034fc3ca423ed3986fefc403e280b1b029f67013a12",
+      "bytes": 572
+    },
+    "qa/operational-recovery-20261017/retained-schedule.xml": {
+      "sha256_staged_blob": "e00d3f4cf187139891fad3805716d5072ec2d0b76f730e9b528fdb5d0def4d74",
+      "bytes": 1691
+    },
+    "qa/operational-recovery-20261017/web-db-migrations.log": {
+      "sha256_staged_blob": "8f0afd76b681ae5d935053502ed4090479b393660e6e7096ecf193a22307ae17",
+      "bytes": 1527
+    },
+    "qa/release0.1-postgame-20261016/FORECAST_INTEGRITY.md": {
+      "sha256_staged_blob": "4567e93e36943366fc511e45c4026befcde7fe61a10059e8cc444b0843a8b218",
+      "bytes": 2324
+    },
+    "qa/release0.1-postgame-20261016/IDEMPOTENCY_VALIDATION.md": {
+      "sha256_staged_blob": "f668e10dbc5b32c7efcec1958b5d5b3593f4bac4c61213273833da051c53be8a",
+      "bytes": 1310
+    },
+    "qa/release0.1-postgame-20261016/OFFICIAL_RESULT_VERIFICATION.md": {
+      "sha256_staged_blob": "c3f9c98bea3c576f285231dac7b44c1009d97b37fb8b47eaac524035c1cdded9",
+      "bytes": 1672
+    },
+    "qa/release0.1-postgame-20261016/POSTGAME_EVALUATION.md": {
+      "sha256_staged_blob": "0c600a94b783af79e7c39145b54fc4be7927ed3182a3690be59b00a3d2112cfb",
+      "bytes": 1639
+    },
+    "qa/release0.1-postgame-20261016/RELEASE_0_1_HANDOFF.md": {
+      "sha256_staged_blob": "9953f6b6412b4ca80024365d8e0a84515d3d24ffa9b9372b0a6c8215e12c40cd",
+      "bytes": 6237
+    },
+    "qa/release0.1-postgame-20261016/SAFEGUARD_VALIDATION.md": {
+      "sha256_staged_blob": "3d523f762431e9b6cd14bf1ac554a1e95855dc88e439240269ae4c0a746657af",
+      "bytes": 1630
+    },
+    "qa/release0.1-postgame-20261016/SYSTEM_STATE.md": {
+      "sha256_staged_blob": "27c671c30d727bd3293e097ac1b025d354da846287e79fd219f9ac32bc55f66c",
+      "bytes": 2638
+    },
+    "qa/release0.1-postgame-20261016/TEST_RESULTS.md": {
+      "sha256_staged_blob": "5b875aec05e9682be1d752db2ef2864486b9b34156449954a37a6dd47e2b6783",
+      "bytes": 4153
+    },
+    "tests/e2e/live-game-lab.spec.ts": {
+      "sha256_staged_blob": "4ef0030fdc05565c870554ceaffc4452ee6664b18d1111bd595752c5e7bdb815",
+      "bytes": 11700
+    },
+    "tests/e2e/prospective.spec.ts": {
+      "sha256_staged_blob": "1f0f0a039201e1917100259af94f061dc8f81a582590aea0a2a6bf7b5747f168",
+      "bytes": 4631
+    },
+    "tests/engine-e2e/live-engine-required.spec.ts": {
+      "sha256_staged_blob": "9ede3458dd601f66e82edc2786a6c4c144eeb505f4d78455daadc71b3858fc4d",
+      "bytes": 16788
+    }
+  }
+}

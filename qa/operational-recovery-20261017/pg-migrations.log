@@ -1,0 +1,44 @@
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> c6e894509ff2, initial canonical schema
+INFO  [alembic.runtime.migration] Running upgrade c6e894509ff2 -> 34134455937d, phase 3 forward capture tables
+INFO  [alembic.runtime.migration] Running upgrade 34134455937d -> c034f7ebc265, scheduler outcome/domain split and recovery lineage
+INFO  [alembic.runtime.migration] Running upgrade c034f7ebc265 -> abc511bec1a3, state origin and lineage constraints
+INFO  [alembic.runtime.migration] Running upgrade abc511bec1a3 -> d41a9c72b8e5, Record provider provenance on captured and derived market records.
+INFO  [alembic.runtime.migration] Running upgrade d41a9c72b8e5 -> e7b3c04d1f28, Persist provider mode on scheduled job runs.
+INFO  [alembic.runtime.migration] Running upgrade e7b3c04d1f28 -> f19c2a7d5e34, Give manually entered prices the governance fields every other record has.
+INFO  [alembic.runtime.migration] Running upgrade f19c2a7d5e34 -> a4d81c6b0e57, The close becomes its own immutable record instead of a flag on a snapshot.
+INFO  [alembic.runtime.migration] Running upgrade a4d81c6b0e57 -> b7e2f9c41a68, Persist logical identity and content hashes; enforce uniqueness on the identity.
+INFO  [alembic.runtime.migration] Running upgrade b7e2f9c41a68 -> d8f41c6a3b92, Give three tables a real cohort, because their identity already claimed one.
+INFO  [alembic.runtime.migration] Running upgrade d8f41c6a3b92 -> e92a61bf4037, Add empty identity/isolated-workspace tables. No historical backfill or remapping.
+INFO  [alembic.runtime.migration] Running upgrade e92a61bf4037 -> f13b2a9c8041, Empty append-only research tables; no legacy backfill or identity resolution.
+INFO  [alembic.runtime.migration] Running upgrade f13b2a9c8041 -> fa41b4c80312, Explicit prospective capability; immutable scoped existing records. No backfill.
+INFO  [alembic.runtime.migration] Running upgrade fa41b4c80312 -> fb0100000001, Add immutable forecast attestations; no historical records are backfilled.
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running downgrade fb0100000001 -> fa41b4c80312, Add immutable forecast attestations; no historical records are backfilled.
+INFO  [alembic.runtime.migration] Running downgrade fa41b4c80312 -> f13b2a9c8041, Explicit prospective capability; immutable scoped existing records. No backfill.
+INFO  [alembic.runtime.migration] Running downgrade f13b2a9c8041 -> e92a61bf4037, Empty append-only research tables; no legacy backfill or identity resolution.
+INFO  [alembic.runtime.migration] Running downgrade e92a61bf4037 -> d8f41c6a3b92, Add empty identity/isolated-workspace tables. No historical backfill or remapping.
+INFO  [alembic.runtime.migration] Running downgrade d8f41c6a3b92 -> b7e2f9c41a68, Give three tables a real cohort, because their identity already claimed one.
+INFO  [alembic.runtime.migration] Running downgrade b7e2f9c41a68 -> a4d81c6b0e57, Persist logical identity and content hashes; enforce uniqueness on the identity.
+INFO  [alembic.runtime.migration] Running downgrade a4d81c6b0e57 -> f19c2a7d5e34, The close becomes its own immutable record instead of a flag on a snapshot.
+INFO  [alembic.runtime.migration] Running downgrade f19c2a7d5e34 -> e7b3c04d1f28, Give manually entered prices the governance fields every other record has.
+INFO  [alembic.runtime.migration] Running downgrade e7b3c04d1f28 -> d41a9c72b8e5, Persist provider mode on scheduled job runs.
+INFO  [alembic.runtime.migration] Running downgrade d41a9c72b8e5 -> abc511bec1a3, Record provider provenance on captured and derived market records.
+INFO  [alembic.runtime.migration] Running downgrade abc511bec1a3 -> c034f7ebc265, state origin and lineage constraints
+INFO  [alembic.runtime.migration] Running downgrade c034f7ebc265 -> 34134455937d, scheduler outcome/domain split and recovery lineage
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade 34134455937d -> c034f7ebc265, scheduler outcome/domain split and recovery lineage
+INFO  [alembic.runtime.migration] Running upgrade c034f7ebc265 -> abc511bec1a3, state origin and lineage constraints
+INFO  [alembic.runtime.migration] Running upgrade abc511bec1a3 -> d41a9c72b8e5, Record provider provenance on captured and derived market records.
+INFO  [alembic.runtime.migration] Running upgrade d41a9c72b8e5 -> e7b3c04d1f28, Persist provider mode on scheduled job runs.
+INFO  [alembic.runtime.migration] Running upgrade e7b3c04d1f28 -> f19c2a7d5e34, Give manually entered prices the governance fields every other record has.
+INFO  [alembic.runtime.migration] Running upgrade f19c2a7d5e34 -> a4d81c6b0e57, The close becomes its own immutable record instead of a flag on a snapshot.
+INFO  [alembic.runtime.migration] Running upgrade a4d81c6b0e57 -> b7e2f9c41a68, Persist logical identity and content hashes; enforce uniqueness on the identity.
+INFO  [alembic.runtime.migration] Running upgrade b7e2f9c41a68 -> d8f41c6a3b92, Give three tables a real cohort, because their identity already claimed one.
+INFO  [alembic.runtime.migration] Running upgrade d8f41c6a3b92 -> e92a61bf4037, Add empty identity/isolated-workspace tables. No historical backfill or remapping.
+INFO  [alembic.runtime.migration] Running upgrade e92a61bf4037 -> f13b2a9c8041, Empty append-only research tables; no legacy backfill or identity resolution.
+INFO  [alembic.runtime.migration] Running upgrade f13b2a9c8041 -> fa41b4c80312, Explicit prospective capability; immutable scoped existing records. No backfill.
+INFO  [alembic.runtime.migration] Running upgrade fa41b4c80312 -> fb0100000001, Add immutable forecast attestations; no historical records are backfilled.

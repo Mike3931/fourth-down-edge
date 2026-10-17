@@ -27,7 +27,7 @@ def test_fresh_workspace_capability_cannot_be_added_to_capture_or_frozen_profile
     initialize_workspace(target, purpose="PROSPECTIVE")
     authorize_database(target, prospective=True)
     with sqlite3.connect(target) as db:
-        db.execute("INSERT INTO model_evaluations VALUES ('frozen','model','test','{}',1,'2026-10-13')")
+        db.execute("INSERT INTO model_evaluations (id,model_version_id,scope,metrics,sample_size,created_at) VALUES ('frozen','model','test','{}',1,'2026-10-13')")
     with pytest.raises(ValueError, match="Historical research"):
         authorize_database(target, prospective=True)
 
@@ -74,6 +74,12 @@ def assert_immutable(engine, session):
     assert session.get(Prediction, prediction.id) is not None
     assert session.get(ModelVersion, prediction.model_version_id) is not None
     assert session.get(FeatureSnapshot, prediction.feature_snapshot_id) is not None
+    for statement in (
+        "UPDATE forecast_freezes SET graph_hash='changed' WHERE prediction_id=:id",
+        "DELETE FROM forecast_freezes WHERE prediction_id=:id",
+    ):
+        with pytest.raises(DBAPIError, match="immutable"), engine.begin() as c:
+            c.execute(text(statement), {"id": prediction.id})
 
 
 def test_real_sqlite_migration_guards_and_restart(cohort, tmp_path):  # noqa: F811
