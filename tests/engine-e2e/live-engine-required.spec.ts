@@ -31,7 +31,11 @@ test('populated operational workspace supports repeated navigation and refresh w
     const listener=(r:{url:()=>string})=>calls.push(r.url());
     page.on('request',listener);
     start=Date.now();
-    const refreshed=page.waitForResponse(r=>r.url().endsWith('/research-api/v1/forward/live') && r.ok());
+    const refreshed=page.waitForResponse(r=>{
+      const url=new URL(r.url());
+      return url.pathname==='/research-api/v1/forward/live'
+        && url.searchParams.get('canonical_game_id')===game.canonical_game_id && r.ok();
+    });
     await page.getByRole('button',{name:'Refresh analysis',exact:true}).click();
     await refreshed;
     await expect(page.getByRole('button',{name:'Refresh analysis',exact:true})).toBeEnabled();
