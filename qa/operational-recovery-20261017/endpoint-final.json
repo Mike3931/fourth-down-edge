@@ -1,0 +1,188 @@
+{
+  "sequential": [
+    {
+      "path": "/v1/research/briefing",
+      "seconds": 1.0812,
+      "status": 200,
+      "repeat": 0
+    },
+    {
+      "path": "/v1/forward/slate",
+      "seconds": 0.46,
+      "status": 200,
+      "repeat": 0
+    },
+    {
+      "path": "/v1/forward/candidates",
+      "seconds": 0.4997,
+      "status": 200,
+      "repeat": 0
+    },
+    {
+      "path": "/v1/forward/slate?canonical_game_id=2026_06_HOU_JAX",
+      "seconds": 0.5616,
+      "status": 200,
+      "repeat": 0
+    },
+    {
+      "path": "/v1/research/briefing?canonical_game_id=2026_06_HOU_JAX",
+      "seconds": 0.9806,
+      "status": 200,
+      "repeat": 0
+    },
+    {
+      "path": "/v1/research/prospective?canonical_game_id=2026_06_HOU_JAX",
+      "seconds": 0.4356,
+      "status": 200,
+      "repeat": 0
+    },
+    {
+      "path": "/v1/research/briefing",
+      "seconds": 0.8812,
+      "status": 200,
+      "repeat": 1
+    },
+    {
+      "path": "/v1/forward/slate",
+      "seconds": 0.3855,
+      "status": 200,
+      "repeat": 1
+    },
+    {
+      "path": "/v1/forward/candidates",
+      "seconds": 0.4003,
+      "status": 200,
+      "repeat": 1
+    },
+    {
+      "path": "/v1/forward/slate?canonical_game_id=2026_06_HOU_JAX",
+      "seconds": 0.3839,
+      "status": 200,
+      "repeat": 1
+    },
+    {
+      "path": "/v1/research/briefing?canonical_game_id=2026_06_HOU_JAX",
+      "seconds": 0.58,
+      "status": 200,
+      "repeat": 1
+    },
+    {
+      "path": "/v1/research/prospective?canonical_game_id=2026_06_HOU_JAX",
+      "seconds": 0.4219,
+      "status": 200,
+      "repeat": 1
+    },
+    {
+      "path": "/v1/research/briefing",
+      "seconds": 0.988,
+      "status": 200,
+      "repeat": 2
+    },
+    {
+      "path": "/v1/forward/slate",
+      "seconds": 0.4066,
+      "status": 200,
+      "repeat": 2
+    },
+    {
+      "path": "/v1/forward/candidates",
+      "seconds": 0.3928,
+      "status": 200,
+      "repeat": 2
+    },
+    {
+      "path": "/v1/forward/slate?canonical_game_id=2026_06_HOU_JAX",
+      "seconds": 0.3585,
+      "status": 200,
+      "repeat": 2
+    },
+    {
+      "path": "/v1/research/briefing?canonical_game_id=2026_06_HOU_JAX",
+      "seconds": 0.6038,
+      "status": 200,
+      "repeat": 2
+    },
+    {
+      "path": "/v1/research/prospective?canonical_game_id=2026_06_HOU_JAX",
+      "seconds": 0.3945,
+      "status": 200,
+      "repeat": 2
+    },
+    {
+      "path": "/v1/research/briefing",
+      "seconds": 0.8097,
+      "status": 200,
+      "repeat": 3
+    },
+    {
+      "path": "/v1/forward/slate",
+      "seconds": 0.3732,
+      "status": 200,
+      "repeat": 3
+    },
+    {
+      "path": "/v1/forward/candidates",
+      "seconds": 0.374,
+      "status": 200,
+      "repeat": 3
+    },
+    {
+      "path": "/v1/forward/slate?canonical_game_id=2026_06_HOU_JAX",
+      "seconds": 0.3397,
+      "status": 200,
+      "repeat": 3
+    },
+    {
+      "path": "/v1/research/briefing?canonical_game_id=2026_06_HOU_JAX",
+      "seconds": 0.674,
+      "status": 200,
+      "repeat": 3
+    },
+    {
+      "path": "/v1/research/prospective?canonical_game_id=2026_06_HOU_JAX",
+      "seconds": 0.369,
+      "status": 200,
+      "repeat": 3
+    }
+  ],
+  "concurrent": [
+    {
+      "path": "/v1/research/briefing",
+      "seconds": 1.0716,
+      "status": 200
+    },
+    {
+      "path": "/v1/forward/slate",
+      "seconds": 0.6745,
+      "status": 200
+    },
+    {
+      "path": "/v1/forward/candidates",
+      "seconds": 0.713,
+      "status": 200
+    },
+    {
+      "path": "/v1/research/briefing",
+      "seconds": 1.6647,
+      "status": 200
+    },
+    {
+      "path": "/v1/forward/slate",
+      "seconds": 0.6553,
+      "status": 200
+    },
+    {
+      "path": "/v1/forward/candidates",
+      "seconds": 0.63,
+      "status": 200
+    }
+  ],
+  "warm_medians": {
+    "/v1/research/briefing": 0.8812,
+    "/v1/forward/slate": 0.3855,
+    "/v1/forward/candidates": 0.3928,
+    "/v1/forward/slate?canonical_game_id=2026_06_HOU_JAX": 0.3585,
+    "/v1/research/briefing?canonical_game_id=2026_06_HOU_JAX": 0.6038,
+    "/v1/research/prospective?canonical_game_id=2026_06_HOU_JAX": 0.3945
+  }
+}

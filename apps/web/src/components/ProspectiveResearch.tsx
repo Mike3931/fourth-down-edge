@@ -11,11 +11,13 @@ const schema = z.object({ version: z.literal('prospective-scores-v1'), status: z
   limitations: z.array(z.string()), sample_policy: z.string(),
   records: z.array(z.object({ id: z.string(), game_id: z.string(), model_version: z.string(), feature_snapshot_id: z.string(),
     horizon: z.enum(['PROS_EARLY','PROS_72H','PROS_24H','PROS_FINAL']), created_at: z.string().datetime({offset:true}),
-    current: z.boolean(), state: z.string(), outputs: z.object({ approach:z.string(), home_win_prob:finite.min(0).max(1),
+    current: z.boolean(), state: z.string(), evaluation_state:z.string().optional(), verification_warning:z.string().nullable().optional(), outputs: z.object({ approach:z.string(), home_win_prob:finite.min(0).max(1),
       expected_margin:finite, expected_total:finite, margin_p10:finite, margin_p90:finite,total_p10:finite,total_p90:finite,
       validation_status:z.enum(['RESEARCH ONLY','VALIDATION FAILED']),approval_status:z.literal('research_only'),
       research_only:z.literal(true),missing:z.array(z.string()),training_games:z.number().int().nonnegative(),
-    }), evaluation:z.object({home_score:finite,away_score:finite}).nullable(),
+    }), evaluation:z.object({home_score:finite,away_score:finite, actual_margin:finite.optional(),actual_total:finite.optional(),
+      brier:metric.optional(),margin_signed_error:finite.optional(),total_signed_error:finite.optional(),
+      evaluated_at:z.string().optional(),verification:z.string().optional(),winner_correct:z.boolean().nullable().optional()}).nullable(),
     change:z.object({previous_prediction_id:z.string(),home_win_probability_delta:finite,margin_delta:finite,total_delta:finite}).nullable(),
   })),
   performance:z.array(z.object({approach:z.string(),horizon:z.string(),season:z.string(),week:z.string(),
@@ -46,10 +48,16 @@ export default function ProspectiveResearch({gameId}:{gameId?:string}) {
             <Link className="font-semibold text-accent" to={`/live/game/${encodeURIComponent(r.game_id)}`}>{r.game_id}</Link>
             <p className="mt-1 break-words text-ink">{r.outputs.approach}</p>
             <p>{r.current?'Captured pregame estimate':`Historical record · ${r.state}`}</p>
+            <p className="mt-2 text-ink">{r.evaluation_state ?? 'Evaluation status unavailable'}</p>
+            {r.verification_warning && <p className="text-warning">{r.verification_warning}</p>}
             <p className="mt-2">Home win {(r.outputs.home_win_prob*100).toFixed(1)}% · home margin {r.outputs.expected_margin.toFixed(1)} · total {r.outputs.expected_total.toFixed(1)}</p>
             <p>80% model range: margin {r.outputs.margin_p10.toFixed(1)} to {r.outputs.margin_p90.toFixed(1)}; total {r.outputs.total_p10.toFixed(1)} to {r.outputs.total_p90.toFixed(1)}.</p>
             <p className="mt-2">Recorded {fmtInstant(r.created_at)} · {r.horizon.replace('PROS_','')} checkpoint.</p>
             {r.evaluation && <p>Final score: home {r.evaluation.home_score}, away {r.evaluation.away_score}.</p>}
+            {r.evaluation && <p>Actual home margin {value(r.evaluation.actual_margin ?? null)}; actual total {value(r.evaluation.actual_total ?? null)}.
+              {' '}Prediction minus outcome: margin {value(r.evaluation.margin_signed_error ?? null)}, total {value(r.evaluation.total_signed_error ?? null)}.
+              {' '}Brier {value(r.evaluation.brier ?? null)}. Winner {r.evaluation.winner_correct == null ? 'not scored (tie or no favored team)' : r.evaluation.winner_correct ? 'correct' : 'incorrect'}.
+              {' '}Evaluated {r.evaluation.evaluated_at ? fmtInstant(r.evaluation.evaluated_at) : 'timestamp unavailable'}; {r.evaluation.verification}.</p>}
             {r.change && <p className="mt-2">Since prior record: win estimate {(r.change.home_win_probability_delta*100).toFixed(1)} percentage points; margin {r.change.margin_delta.toFixed(1)}; total {r.change.total_delta.toFixed(1)}. Evidence was captured again; unvalidated inputs do not change model estimates.</p>}
             <details className="mt-3"><summary className="cursor-pointer text-accent">Missing inputs and forecast details</summary>
               <p className="mt-2">{r.outputs.validation_status} · {r.outputs.training_games} captured training games. A model win estimate is not confidence in a profitable bet.</p>
@@ -65,7 +73,7 @@ export default function ProspectiveResearch({gameId}:{gameId?:string}) {
               {p.approach} · {p.horizon}: {p.n} games, {p.n_moneyline} non-ties, {p.ties} ties. Brier {value(p.brier)} · log loss {value(p.log_loss)} · margin error {value(p.margin_mae)} · total error {value(p.total_mae)}. INSUFFICIENT EVIDENCE.
             </p>)}
             <details className="mt-3"><summary className="cursor-pointer text-accent">Results by season and week</summary>{data.performance.filter(p=>p.season!=='ALL').map(p=><p className="mt-2" key={`${p.approach}:${p.horizon}:${p.season}:${p.week}`}>{p.approach} · {p.horizon} · {p.season}, {p.week==='ALL'?'all weeks':`week ${p.week}`}: {p.n} games; Brier {value(p.brier)}, log loss {value(p.log_loss)}, margin error {value(p.margin_mae)}, total error {value(p.total_mae)}; observed 80% interval coverage: margin {value(p.margin_coverage80)}, total {value(p.total_coverage80)}.</p>)}</details>
-            <ul className="mt-3 space-y-2">{data.records.map(r=><li className="break-words" key={r.id}>{r.game_id} · {r.outputs.approach} · {r.horizon} · {fmtInstant(r.created_at)} · {r.state} · {r.evaluation?`final ${r.evaluation.home_score}–${r.evaluation.away_score}`:'Awaiting uncontested final evidence'} · {r.id}</li>)}</ul>
+            <ul className="mt-3 space-y-2">{data.records.map(r=><li className="break-words" key={r.id}>{r.game_id} · {r.outputs.approach} · {r.horizon} · {fmtInstant(r.created_at)} · {r.evaluation_state ?? r.state} · {r.verification_warning && `${r.verification_warning} · `}{r.evaluation?`final ${r.evaluation.home_score}–${r.evaluation.away_score}`:'Awaiting uncontested final evidence'} · {r.id}</li>)}</ul>
             <ul className="mt-4 list-disc space-y-1 pl-4">{data.limitations.map((l,i)=><li key={i}>{l}</li>)}</ul>
           </details>
         </>}

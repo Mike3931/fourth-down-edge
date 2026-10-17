@@ -32,6 +32,8 @@ from fde_api.db.research_models import (
     ResearchPoll,
     ResearchSource,
 )
+from fde_api.forward.fact_reads import read_facts
+from fde_api.forward.read_queries import latest_schedule
 from fde_api.forward.usage_evidence import usage_evidence
 from fde_api.ingest import _mirror
 from fde_api.pit.guards import assert_no_lookahead
@@ -398,9 +400,16 @@ class IntelligenceAt:
                 if src and src.captured_at <= now and (src.published_at is None or src.published_at <= now):
                     self.sources[key] = src
         self.facts: dict[str, list[ResearchFact]] = defaultdict(list)
-        ids = {src.id for src in self.sources.values()}
-        for fact in s.scalars(select(ResearchFact).where(ResearchFact.source_id.in_(ids))):
+        # Directory/schedule facts are never consumed by game(). Identity still
+        # comes from the complete cutoff-gated binding/review tables below.
+        ids = {src.id for src in self.sources.values() if src.dataset not in {"players", "schedule"}}
+        for fact in read_facts(s, ids):
             self.facts[fact.source_id].append(fact)
+        self._past_cache: dict[tuple[int, str, str], list[ResearchFact]] = {}
+        self._team_facts: dict[tuple[int, str | None], list[ResearchFact]] = defaultdict(list)
+        for rows in self.facts.values():
+            for fact in rows:
+                self._team_facts[(id(rows), fact.team_id)].append(fact)
         self.blocked = {r.player_id for r in s.scalars(select(PlayerIdentityReview).where(
             PlayerIdentityReview.observed_at <= now,
             PlayerIdentityReview.reason.in_(["PROVIDER_ID_COLLISION", "BIRTH_DATE_DISAGREEMENT"])))}
@@ -411,9 +420,10 @@ class IntelligenceAt:
         self.invalid_games = {r.evidence.get("canonical_game_id") for r in s.scalars(select(GameIdentityReview).where(
             GameIdentityReview.data_mode == "LIVE_RESEARCH", GameIdentityReview.created_at <= now,
             GameIdentityReview.reason == "RESULT_CONFLICT_OR_INVALID"))}
-        for game in s.scalars(select(ScheduleObservation).where(
-            ScheduleObservation.data_mode == "LIVE_RESEARCH", ScheduleObservation.observed_at <= now).order_by(
-                ScheduleObservation.observed_at, ScheduleObservation.id)):
+        linked = {r.canonical_game_id for rows in self.facts.values() for r in rows if r.canonical_game_id}
+        for game in s.scalars(latest_schedule(
+            ScheduleObservation.data_mode == "LIVE_RESEARCH", ScheduleObservation.observed_at <= now,
+            ScheduleObservation.canonical_game_id.in_(linked))):
             self.schedule[game.canonical_game_id] = game
         from fde_api.db.forward_models import InjuryObservation
         self.official: dict[str, dict[str, InjuryObservation]] = defaultdict(dict)
@@ -556,8 +566,11 @@ class IntelligenceAt:
         return content
 
     def _past(self, rows: list[ResearchFact], team: str, game: ScheduleObservation) -> list[ResearchFact]:
+        key = (id(rows), team, game.canonical_game_id)
+        if key in self._past_cache:
+            return self._past_cache[key]
         result = []
-        for r in rows:
+        for r in self._team_facts[(id(rows), team)]:
             previous = self.schedule.get(r.canonical_game_id or "")
             if (r.team_id == team and r.week is not None and game.week is not None
                     and r.week < game.week and r.values.get("season_type", r.values.get("game_type", "REG")) == "REG"
@@ -567,4 +580,5 @@ class IntelligenceAt:
                     and previous.kickoff_utc is not None and previous.kickoff_utc < self.now
                     and (r.player_id is None or r.player_id in self.bound)):
                 result.append(r)
+        self._past_cache[key] = result
         return result

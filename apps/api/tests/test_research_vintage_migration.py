@@ -13,7 +13,7 @@ def test_append_only_triggers_on_actual_sqlite_migration(tmp_path):
     target = tmp_path / "new.db"
     initialize_workspace(target)
     with sqlite3.connect(target) as db:
-        assert db.execute("select version_num from alembic_version").fetchone()[0] == "fa41b4c80312"
+        assert db.execute("select version_num from alembic_version").fetchone()[0] == "fb0100000001"
         db.execute("INSERT INTO research_player_bindings VALUES ('espn','ID','GSIS','2026-10-13','{}')")
         with pytest.raises(sqlite3.IntegrityError, match="append-only"):
             db.execute("UPDATE research_player_bindings SET player_id='CHANGED'")

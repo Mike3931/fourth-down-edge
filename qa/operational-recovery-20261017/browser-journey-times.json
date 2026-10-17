@@ -1,0 +1,42 @@
+[
+  {
+    "action": "cold War Room",
+    "ms": 3160
+  },
+  {
+    "action": "1: Slate",
+    "ms": 243
+  },
+  {
+    "action": "1: Game Lab evidence and forecasts",
+    "ms": 721
+  },
+  {
+    "action": "1: Game Lab refresh",
+    "ms": 176
+  },
+  {
+    "action": "1: return War Room",
+    "ms": 148
+  },
+  {
+    "action": "2: Slate",
+    "ms": 152
+  },
+  {
+    "action": "2: Game Lab evidence and forecasts",
+    "ms": 83
+  },
+  {
+    "action": "2: Game Lab refresh",
+    "ms": 345
+  },
+  {
+    "action": "2: return War Room",
+    "ms": 185
+  },
+  {
+    "action": "Candidates",
+    "ms": 152
+  }
+]

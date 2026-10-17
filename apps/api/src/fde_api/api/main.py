@@ -13,12 +13,14 @@ progress is polled via GET /v1/jobs/{id}.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import secrets
 import threading
 import uuid
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Annotated, Any, Literal, cast
+from weakref import WeakKeyDictionary
 
 if TYPE_CHECKING:
     from fde_api.forward.cohort import Cohort
@@ -27,8 +29,9 @@ if TYPE_CHECKING:
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func, select, true
+from sqlalchemy import case, func, select, true
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from fde_api import RESEARCH_BANNER, __version__
 from fde_api.api import schemas
@@ -114,6 +117,7 @@ def _require_auth(authorization: Annotated[str | None, Header()] = None) -> None
 
 
 Auth = Depends(_require_auth)
+_briefing_gates: WeakKeyDictionary = WeakKeyDictionary()
 
 
 def read_session() -> Iterator[Session]:
@@ -146,10 +150,19 @@ Db = Annotated[Session, Depends(read_session)]
 
 
 @app.get("/v1/research/briefing", dependencies=[Auth])
-def get_research_briefing(s: Db) -> dict[str, Any]:
+async def get_research_briefing(s: Db, canonical_game_id: str | None = None) -> dict[str, Any]:
     from fde_api.forward.briefing import read_briefing
 
-    return read_briefing(s, now=utc_now())
+    if canonical_game_id is not None or s.get_bind().dialect.name != "sqlite":
+        return await run_in_threadpool(read_briefing, s, now=utc_now(), **(
+            {"canonical_game_id": canonical_game_id} if canonical_game_id is not None else {}))
+    # Wait outside the shared sync worker pool and before acquiring a DB
+    # connection. Otherwise a burst of abandoned page loads starves unrelated
+    # health/forecast requests while waiting for the expensive briefing read.
+    gate = _briefing_gates.setdefault(asyncio.get_running_loop(), asyncio.Lock())
+    async with gate:
+        return await run_in_threadpool(read_briefing, s, now=utc_now(), **(
+            {"canonical_game_id": canonical_game_id} if canonical_game_id is not None else {}))
 
 
 @app.get("/v1/research/model-comparison", dependencies=[Auth])
@@ -826,30 +839,25 @@ def get_forward_slate(
     """The ingested slate, newest observation per game."""
     from fde_api.db.forward_models import ScheduleObservation
     from fde_api.forward.modes import DataMode
+    from fde_api.forward.read_queries import latest_schedule
 
     mode = DataMode(data_mode)
     if not 1 <= limit <= 2000 or offset < 0:
         raise HTTPException(status_code=422, detail="Invalid pagination bounds")
     now = utc_now()
     with session_scope() as s:
-        rows = list(s.scalars(
-            select(ScheduleObservation)
-            .where(ScheduleObservation.data_mode == mode.value)
-            .order_by(ScheduleObservation.observed_at, ScheduleObservation.id)
-        ))
-        latest: dict[str, Any] = {}
-        for o in rows:
-            latest[o.canonical_game_id] = o
+        stmt = latest_schedule(ScheduleObservation.data_mode == mode.value)
+        if canonical_game_id is not None:
+            stmt = stmt.where(ScheduleObservation.canonical_game_id == canonical_game_id)
         # Upcoming first, nearest kickoff first; history newest first. Stable
         # canonical IDs break kickoff ties. Pagination never deletes observations.
-        selected = [o for o in latest.values()
-                    if canonical_game_id is None or o.canonical_game_id == canonical_game_id]
-        selected.sort(key=lambda o: (
-            o.kickoff_utc < now,
-            o.kickoff_utc.timestamp() if o.kickoff_utc >= now else -o.kickoff_utc.timestamp(),
-            o.canonical_game_id,
-        ))
-        total_count = len(selected)
+        total_count = s.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        selected = s.scalars(stmt.order_by(
+            case((ScheduleObservation.kickoff_utc < now, 1), else_=0),
+            case((ScheduleObservation.kickoff_utc >= now, ScheduleObservation.kickoff_utc)),
+            case((ScheduleObservation.kickoff_utc < now, ScheduleObservation.kickoff_utc)).desc(),
+            ScheduleObservation.canonical_game_id,
+        ).offset(offset).limit(limit))
         games = [
             {
                 "canonical_game_id": o.canonical_game_id,
@@ -860,7 +868,7 @@ def get_forward_slate(
                 "venue": o.stadium_name, "neutral_site": bool(o.neutral_site),
                 "game_status": o.game_status, "schedule_provider": o.provider,
             }
-            for o in selected[offset:offset + limit]
+            for o in selected
         ]
     return {
         "generated_at_utc": utc_now().isoformat(),
@@ -951,6 +959,7 @@ def get_forward_candidates(
 
     from fde_api.db.forward_models import ForwardLedgerEntry, ScheduleObservation
     from fde_api.forward.modes import DataMode
+    from fde_api.forward.read_queries import latest_schedule
 
     mode = DataMode(data_mode)
     now = utc_now()
@@ -960,12 +969,12 @@ def get_forward_candidates(
 
     kickoffs: dict[str, ScheduleObservation] = {}
     for o in s.scalars(
-        select(ScheduleObservation).where(
+        latest_schedule(
             ScheduleObservation.data_mode == mode.value,
             ScheduleObservation.kickoff_utc.isnot(None),
             ScheduleObservation.canonical_game_id == canonical_game_id
             if canonical_game_id is not None else true(),
-        ).order_by(ScheduleObservation.observed_at, ScheduleObservation.id)
+        ).where(ScheduleObservation.kickoff_utc >= now, ScheduleObservation.kickoff_utc <= horizon_end)
     ):
         kickoffs[o.canonical_game_id] = o
 

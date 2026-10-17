@@ -332,6 +332,16 @@ class Prediction(Base):
     __table_args__ = (UniqueConstraint("game_id", "model_version_id", "horizon", "as_of_at"),)
 
 
+class ForecastFreeze(Base):
+    """Append-only attestation of the complete prediction graph, never a backfill."""
+    __tablename__ = "forecast_freezes"
+    prediction_id: Mapped[str] = mapped_column(ForeignKey("predictions.id"), primary_key=True)
+    graph_hash: Mapped[str] = mapped_column(String(64))
+    attested_at: Mapped[datetime] = mapped_column()
+    recorded_at: Mapped[datetime] = mapped_column()
+    provenance: Mapped[str] = mapped_column(Text)
+
+
 class PredictionComponent(Base):
     __tablename__ = "prediction_components"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -349,6 +359,9 @@ class ModelEvaluation(Base):
     metrics: Mapped[dict[str, Any]] = mapped_column()
     sample_size: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column()
+    prediction_id: Mapped[str | None] = mapped_column(ForeignKey("predictions.id"))
+    result_observation_id: Mapped[int | None] = mapped_column(ForeignKey("schedule_observations.id"))
+    __table_args__ = (UniqueConstraint("prediction_id", "result_observation_id", name="uq_evaluation_result"),)
 
 
 class CalibrationArtifact(Base):

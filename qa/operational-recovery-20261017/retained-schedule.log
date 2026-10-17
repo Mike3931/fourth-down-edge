@@ -1,0 +1,11 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-8.4.2, pluggy-1.6.0
+rootdir: C:\Users\mjcun\fde-handoff-release0\apps\api
+configfile: pyproject.toml
+plugins: anyio-4.14.2, hypothesis-6.138.17, cov-6.2.1
+collected 10 items
+
+tests\test_international_slate.py ..........                             [100%]
+
+- generated xml file: C:\Users\mjcun\fde-handoff-release0\qa\operational-recovery-20261017\retained-schedule.xml -
+============================= 10 passed in 6.09s ==============================

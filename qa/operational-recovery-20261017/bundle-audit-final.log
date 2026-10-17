@@ -1,0 +1,5 @@
+
+> fourth-down-edge@0.1.0 audit:bundle
+> node scripts/audit-bundle-secrets.mjs
+
+BUNDLE SECRET AUDIT PASSED: no credential reaches client code

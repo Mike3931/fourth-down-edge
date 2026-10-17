@@ -1,0 +1,42 @@
+[
+  {
+    "action": "War Room to Slate",
+    "ms": 464
+  },
+  {
+    "action": "Refresh HOU at JAX analysis",
+    "ms": 343
+  },
+  {
+    "action": "Game Lab to War Room",
+    "ms": 972
+  },
+  {
+    "action": "Repeat: War Room to Slate",
+    "ms": 343
+  },
+  {
+    "action": "Repeat: select HOU at JAX; predictions visible",
+    "ms": 749
+  },
+  {
+    "action": "Repeat: refresh Game Lab",
+    "ms": 819
+  },
+  {
+    "action": "Repeat: return to War Room",
+    "ms": 297
+  },
+  {
+    "action": "War Room to Candidates",
+    "ms": 293
+  },
+  {
+    "action": "Switch to BAL at CLE Game Lab",
+    "ms": 437
+  },
+  {
+    "action": "Refresh BAL at CLE analysis",
+    "ms": 273
+  }
+]

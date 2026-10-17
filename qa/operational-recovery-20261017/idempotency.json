@@ -1,0 +1,57 @@
+{
+  "at": "2026-10-17T11:21:49.926379+00:00",
+  "actual_read_only_evaluation_retries": [
+    {
+      "evaluations_added": 0
+    },
+    {
+      "evaluations_added": 0
+    }
+  ],
+  "clone_forecast_first": {
+    "created": 0,
+    "unchanged": 0,
+    "withheld": [
+      "2026_06_HOU_JAX: ambiguous identity or stale schedule",
+      "2026_06_BAL_CLE: ambiguous identity or stale schedule",
+      "2026_06_CAR_PHI: ambiguous identity or stale schedule",
+      "2026_06_CHI_ATL: ambiguous identity or stale schedule",
+      "2026_06_NO_NYG: ambiguous identity or stale schedule",
+      "2026_06_NYJ_NE: ambiguous identity or stale schedule",
+      "2026_06_PIT_TB: ambiguous identity or stale schedule",
+      "2026_06_TEN_IND: ambiguous identity or stale schedule",
+      "2026_06_ARI_LA: ambiguous identity or stale schedule",
+      "2026_06_BUF_LV: ambiguous identity or stale schedule",
+      "2026_06_LAC_KC: ambiguous identity or stale schedule",
+      "2026_06_DAL_GB: ambiguous identity or stale schedule",
+      "2026_06_WAS_SF: ambiguous identity or stale schedule",
+      "2026_07_NE_CHI: ambiguous identity or stale schedule"
+    ],
+    "training_games": 4255
+  },
+  "clone_forecast_retry": {
+    "created": 0,
+    "unchanged": 0,
+    "withheld": [
+      "2026_06_HOU_JAX: ambiguous identity or stale schedule",
+      "2026_06_BAL_CLE: ambiguous identity or stale schedule",
+      "2026_06_CAR_PHI: ambiguous identity or stale schedule",
+      "2026_06_CHI_ATL: ambiguous identity or stale schedule",
+      "2026_06_NO_NYG: ambiguous identity or stale schedule",
+      "2026_06_NYJ_NE: ambiguous identity or stale schedule",
+      "2026_06_PIT_TB: ambiguous identity or stale schedule",
+      "2026_06_TEN_IND: ambiguous identity or stale schedule",
+      "2026_06_ARI_LA: ambiguous identity or stale schedule",
+      "2026_06_BUF_LV: ambiguous identity or stale schedule",
+      "2026_06_LAC_KC: ambiguous identity or stale schedule",
+      "2026_06_DAL_GB: ambiguous identity or stale schedule",
+      "2026_06_WAS_SF: ambiguous identity or stale schedule",
+      "2026_07_NE_CHI: ambiguous identity or stale schedule"
+    ],
+    "training_games": 4255
+  },
+  "original_predictions_preserved": 345,
+  "original_evaluations_preserved": 3,
+  "production_db_sha256_before_and_after": "4fd5169bc99deca682df76c4af84e600d08471920b320f59d8a646a3e88af656",
+  "clone_only": "C:\\Users\\mjcun\\fde-handoff-release0\\qa\\operational-recovery-20261017\\idempotency-only.db"
+}

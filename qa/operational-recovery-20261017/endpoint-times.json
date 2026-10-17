@@ -1,0 +1,482 @@
+{
+  "before": {
+    "sequential": [
+      {
+        "path": "/v1/research/briefing",
+        "seconds": 3.558184399968013,
+        "status": 200,
+        "bytes": 1639782,
+        "decision": "NO_BET",
+        "repeat": 0
+      },
+      {
+        "path": "/v1/forward/slate",
+        "seconds": 0.6924358999822289,
+        "status": 200,
+        "bytes": 108322,
+        "decision": null,
+        "repeat": 0
+      },
+      {
+        "path": "/v1/forward/candidates",
+        "seconds": 0.7045680999872275,
+        "status": 200,
+        "bytes": 1185,
+        "decision": null,
+        "repeat": 0
+      },
+      {
+        "path": "/v1/forward/slate?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.5997446000110358,
+        "status": 200,
+        "bytes": 503,
+        "decision": null,
+        "repeat": 0
+      },
+      {
+        "path": "/v1/research/briefing?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 2.198117399995681,
+        "status": 200,
+        "bytes": 1639782,
+        "decision": "NO_BET",
+        "repeat": 0
+      },
+      {
+        "path": "/v1/research/prospective?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 3.872768199944403,
+        "status": 200,
+        "bytes": 268722,
+        "decision": "NO BET",
+        "repeat": 0
+      },
+      {
+        "path": "/v1/research/briefing",
+        "seconds": 2.5801321999751963,
+        "status": 200,
+        "bytes": 1639782,
+        "decision": "NO_BET",
+        "repeat": 1
+      },
+      {
+        "path": "/v1/forward/slate",
+        "seconds": 0.8004931000177749,
+        "status": 200,
+        "bytes": 108322,
+        "decision": null,
+        "repeat": 1
+      },
+      {
+        "path": "/v1/forward/candidates",
+        "seconds": 0.6962683000019751,
+        "status": 200,
+        "bytes": 1185,
+        "decision": null,
+        "repeat": 1
+      },
+      {
+        "path": "/v1/forward/slate?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.8054361999966204,
+        "status": 200,
+        "bytes": 503,
+        "decision": null,
+        "repeat": 1
+      },
+      {
+        "path": "/v1/research/briefing?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 3.521741300006397,
+        "status": 200,
+        "bytes": 1639782,
+        "decision": "NO_BET",
+        "repeat": 1
+      },
+      {
+        "path": "/v1/research/prospective?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.7490045999875292,
+        "status": 200,
+        "bytes": 268722,
+        "decision": "NO BET",
+        "repeat": 1
+      },
+      {
+        "path": "/v1/research/briefing",
+        "seconds": 2.8232044000178576,
+        "status": 200,
+        "bytes": 1639767,
+        "decision": "NO_BET",
+        "repeat": 2
+      },
+      {
+        "path": "/v1/forward/slate",
+        "seconds": 0.8962114999885671,
+        "status": 200,
+        "bytes": 108322,
+        "decision": null,
+        "repeat": 2
+      },
+      {
+        "path": "/v1/forward/candidates",
+        "seconds": 0.880032199958805,
+        "status": 200,
+        "bytes": 1185,
+        "decision": null,
+        "repeat": 2
+      },
+      {
+        "path": "/v1/forward/slate?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.7495799999451265,
+        "status": 200,
+        "bytes": 503,
+        "decision": null,
+        "repeat": 2
+      },
+      {
+        "path": "/v1/research/briefing?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 2.5454312000074424,
+        "status": 200,
+        "bytes": 1639767,
+        "decision": "NO_BET",
+        "repeat": 2
+      },
+      {
+        "path": "/v1/research/prospective?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.9394598999642767,
+        "status": 200,
+        "bytes": 268722,
+        "decision": "NO BET",
+        "repeat": 2
+      },
+      {
+        "path": "/v1/research/briefing",
+        "seconds": 2.681718300038483,
+        "status": 200,
+        "bytes": 1639782,
+        "decision": "NO_BET",
+        "repeat": 3
+      },
+      {
+        "path": "/v1/forward/slate",
+        "seconds": 0.8486936999834143,
+        "status": 200,
+        "bytes": 108322,
+        "decision": null,
+        "repeat": 3
+      },
+      {
+        "path": "/v1/forward/candidates",
+        "seconds": 0.6464693000307307,
+        "status": 200,
+        "bytes": 1185,
+        "decision": null,
+        "repeat": 3
+      },
+      {
+        "path": "/v1/forward/slate?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.6204803999862634,
+        "status": 200,
+        "bytes": 503,
+        "decision": null,
+        "repeat": 3
+      },
+      {
+        "path": "/v1/research/briefing?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 2.42146420001518,
+        "status": 200,
+        "bytes": 1639782,
+        "decision": "NO_BET",
+        "repeat": 3
+      },
+      {
+        "path": "/v1/research/prospective?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.8879845000337809,
+        "status": 200,
+        "bytes": 268722,
+        "decision": "NO BET",
+        "repeat": 3
+      }
+    ],
+    "concurrent": [
+      {
+        "path": "/v1/research/briefing",
+        "seconds": 6.29773990000831,
+        "status": 200,
+        "bytes": 1639782,
+        "decision": "NO_BET"
+      },
+      {
+        "path": "/v1/forward/slate",
+        "seconds": 2.338877499976661,
+        "status": 200,
+        "bytes": 108322,
+        "decision": null
+      },
+      {
+        "path": "/v1/forward/candidates",
+        "seconds": 4.399472000019159,
+        "status": 200,
+        "bytes": 1185,
+        "decision": null
+      },
+      {
+        "path": "/v1/research/briefing",
+        "seconds": 8.412795199954417,
+        "status": 200,
+        "bytes": 1639780,
+        "decision": "NO_BET"
+      },
+      {
+        "path": "/v1/forward/slate",
+        "seconds": 3.8306509000249207,
+        "status": 200,
+        "bytes": 108322,
+        "decision": null
+      },
+      {
+        "path": "/v1/forward/candidates",
+        "seconds": 3.859905599965714,
+        "status": 200,
+        "bytes": 1185,
+        "decision": null
+      }
+    ]
+  },
+  "after": {
+    "sequential": [
+      {
+        "path": "/v1/research/briefing",
+        "seconds": 1.015829499985557,
+        "status": 200,
+        "bytes": 1639767,
+        "decision": "NO_BET",
+        "repeat": 0
+      },
+      {
+        "path": "/v1/forward/slate",
+        "seconds": 0.39153319998877123,
+        "status": 200,
+        "bytes": 108322,
+        "decision": null,
+        "repeat": 0
+      },
+      {
+        "path": "/v1/forward/candidates",
+        "seconds": 0.572289899981115,
+        "status": 200,
+        "bytes": 1185,
+        "decision": null,
+        "repeat": 0
+      },
+      {
+        "path": "/v1/forward/slate?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.36032529996009544,
+        "status": 200,
+        "bytes": 503,
+        "decision": null,
+        "repeat": 0
+      },
+      {
+        "path": "/v1/research/briefing?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.6877867999719456,
+        "status": 200,
+        "bytes": 642,
+        "decision": "NO_BET",
+        "repeat": 0
+      },
+      {
+        "path": "/v1/research/prospective?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.8797171000041999,
+        "status": 200,
+        "bytes": 268722,
+        "decision": "NO BET",
+        "repeat": 0
+      },
+      {
+        "path": "/v1/research/briefing",
+        "seconds": 0.8976080999709666,
+        "status": 200,
+        "bytes": 1639775,
+        "decision": "NO_BET",
+        "repeat": 1
+      },
+      {
+        "path": "/v1/forward/slate",
+        "seconds": 0.39686899998923764,
+        "status": 200,
+        "bytes": 108322,
+        "decision": null,
+        "repeat": 1
+      },
+      {
+        "path": "/v1/forward/candidates",
+        "seconds": 0.7598721999675035,
+        "status": 200,
+        "bytes": 1185,
+        "decision": null,
+        "repeat": 1
+      },
+      {
+        "path": "/v1/forward/slate?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.38449889997718856,
+        "status": 200,
+        "bytes": 503,
+        "decision": null,
+        "repeat": 1
+      },
+      {
+        "path": "/v1/research/briefing?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.6236204999731854,
+        "status": 200,
+        "bytes": 642,
+        "decision": "NO_BET",
+        "repeat": 1
+      },
+      {
+        "path": "/v1/research/prospective?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.8458455000072718,
+        "status": 200,
+        "bytes": 268722,
+        "decision": "NO BET",
+        "repeat": 1
+      },
+      {
+        "path": "/v1/research/briefing",
+        "seconds": 0.9582404000102542,
+        "status": 200,
+        "bytes": 1639775,
+        "decision": "NO_BET",
+        "repeat": 2
+      },
+      {
+        "path": "/v1/forward/slate",
+        "seconds": 0.3567880999762565,
+        "status": 200,
+        "bytes": 108322,
+        "decision": null,
+        "repeat": 2
+      },
+      {
+        "path": "/v1/forward/candidates",
+        "seconds": 0.5292314000544138,
+        "status": 200,
+        "bytes": 1185,
+        "decision": null,
+        "repeat": 2
+      },
+      {
+        "path": "/v1/forward/slate?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.3316086999839172,
+        "status": 200,
+        "bytes": 503,
+        "decision": null,
+        "repeat": 2
+      },
+      {
+        "path": "/v1/research/briefing?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.6928058000048622,
+        "status": 200,
+        "bytes": 642,
+        "decision": "NO_BET",
+        "repeat": 2
+      },
+      {
+        "path": "/v1/research/prospective?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.87347829999635,
+        "status": 200,
+        "bytes": 268722,
+        "decision": "NO BET",
+        "repeat": 2
+      },
+      {
+        "path": "/v1/research/briefing",
+        "seconds": 0.784917899989523,
+        "status": 200,
+        "bytes": 1639780,
+        "decision": "NO_BET",
+        "repeat": 3
+      },
+      {
+        "path": "/v1/forward/slate",
+        "seconds": 0.387182800041046,
+        "status": 200,
+        "bytes": 108322,
+        "decision": null,
+        "repeat": 3
+      },
+      {
+        "path": "/v1/forward/candidates",
+        "seconds": 0.6623700000345707,
+        "status": 200,
+        "bytes": 1185,
+        "decision": null,
+        "repeat": 3
+      },
+      {
+        "path": "/v1/forward/slate?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.326074399985373,
+        "status": 200,
+        "bytes": 503,
+        "decision": null,
+        "repeat": 3
+      },
+      {
+        "path": "/v1/research/briefing?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.4919001000234857,
+        "status": 200,
+        "bytes": 642,
+        "decision": "NO_BET",
+        "repeat": 3
+      },
+      {
+        "path": "/v1/research/prospective?canonical_game_id=2026_06_SEA_DEN",
+        "seconds": 0.7588768999557942,
+        "status": 200,
+        "bytes": 268722,
+        "decision": "NO BET",
+        "repeat": 3
+      }
+    ],
+    "concurrent": [
+      {
+        "path": "/v1/research/briefing",
+        "seconds": 1.8892418000032194,
+        "status": 200,
+        "bytes": 1639780,
+        "decision": "NO_BET"
+      },
+      {
+        "path": "/v1/forward/slate",
+        "seconds": 0.6989250999758951,
+        "status": 200,
+        "bytes": 108322,
+        "decision": null
+      },
+      {
+        "path": "/v1/forward/candidates",
+        "seconds": 1.6168042999925092,
+        "status": 200,
+        "bytes": 1185,
+        "decision": null
+      },
+      {
+        "path": "/v1/research/briefing",
+        "seconds": 2.312801899970509,
+        "status": 200,
+        "bytes": 1639782,
+        "decision": "NO_BET"
+      },
+      {
+        "path": "/v1/forward/slate",
+        "seconds": 0.740117100009229,
+        "status": 200,
+        "bytes": 108322,
+        "decision": null
+      },
+      {
+        "path": "/v1/forward/candidates",
+        "seconds": 1.6389869999838993,
+        "status": 200,
+        "bytes": 1185,
+        "decision": null
+      }
+    ]
+  }
+}

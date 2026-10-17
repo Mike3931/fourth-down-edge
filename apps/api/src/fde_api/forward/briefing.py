@@ -7,8 +7,10 @@ research cohort contains a candidate. Capture freshness is not price freshness.
 from __future__ import annotations
 
 from collections import defaultdict
+from contextlib import nullcontext
 from copy import deepcopy
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
+from threading import Lock
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -27,26 +29,34 @@ from fde_api.db.models import Job
 from fde_api.db.research_models import PlayerBinding, PlayerIdentityReview, ResearchPoll, ResearchSource
 from fde_api.forward.intelligence import VERSION as INTELLIGENCE_VERSION
 from fde_api.forward.intelligence import IntelligenceAt
+from fde_api.forward.read_queries import latest_schedule
 
 VERSION = "war-room-foundation-v1"
 TIMEZONE = "America/Chicago"
 KIND = "war_room_research"
+_sqlite_briefing_read = Lock()
 
 
 def _iso(value: datetime | None) -> str | None:
     return value.isoformat() if value is not None else None
 
 
-def prepare_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
+def prepare_briefing(s: Session, *, now: datetime, canonical_game_id: str | None = None) -> dict[str, Any]:
     """Complete seven-day window, point-in-time observations, no global row cap."""
     if now.tzinfo is None:
         raise ValueError("An aware cutoff is required")
     mode = "LIVE_RESEARCH"
     local_day = now.astimezone(ZoneInfo(TIMEZONE)).date()
     schedule: dict[str, ScheduleObservation] = {}
-    for row in s.scalars(select(ScheduleObservation).where(
+    stmt = latest_schedule(
         ScheduleObservation.data_mode == mode, ScheduleObservation.observed_at <= now,
-    ).order_by(ScheduleObservation.observed_at, ScheduleObservation.id)):
+    ).where(
+        ScheduleObservation.kickoff_utc >= datetime.combine(local_day, time.min, ZoneInfo(TIMEZONE)),
+        ScheduleObservation.kickoff_utc <= now + timedelta(days=7),
+    )
+    if canonical_game_id is not None:
+        stmt = stmt.where(ScheduleObservation.canonical_game_id == canonical_game_id)
+    for row in s.scalars(stmt):
         schedule[row.canonical_game_id] = row
     games = [g for g in schedule.values() if g.kickoff_utc is not None
              and local_day <= g.kickoff_utc.astimezone(ZoneInfo(TIMEZONE)).date()
@@ -85,8 +95,9 @@ def prepare_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
         elif entry.as_of_at == previous[0].as_of_at:
             previous.append(entry)  # Equal-time conflicts require an owner, not an ID tiebreak.
     prepared = []
-    intelligence = IntelligenceAt(s, now)
+    intelligence = IntelligenceAt(s, now) if games else None
     for game in games:
+        assert intelligence is not None
         assert game.kickoff_utc is not None
         gid = game.canonical_game_id
         research_inputs = intelligence.game(game)
@@ -172,7 +183,21 @@ def prepare_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
                 "No approved joint-probability model"]}}
 
 
-def read_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
+def read_briefing(s: Session, *, now: datetime, canonical_game_id: str | None = None) -> dict[str, Any]:
+    if canonical_game_id is not None:
+        current = prepare_briefing(s, now=now, canonical_game_id=canonical_game_id)
+        current.update(latest_run=None, changes=[])
+        return current
+    # Concurrent SQLite cursor materialization of this large research graph
+    # causes a GIL convoy and exhausts pooled connections during page navigation.
+    # Acquire before the first query: waiting readers hold no DB connection.
+    # Do not cache results or relax freshness checks; PostgreSQL remains parallel.
+    guard = _sqlite_briefing_read if s.get_bind().dialect.name == "sqlite" else nullcontext()
+    with guard:
+        return _read_briefing(s, now=now)
+
+
+def _read_briefing(s: Session, *, now: datetime) -> dict[str, Any]:
     """Live read plus immutable completed run snapshots. Failed attempts stay visible."""
     runs = list(s.scalars(select(Job).where(Job.kind == KIND, Job.created_at <= now)
                           .order_by(Job.created_at.desc(), Job.id.desc()).limit(3)))

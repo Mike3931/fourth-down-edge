@@ -1,0 +1,49 @@
+
+> fourth-down-edge@0.1.0 test
+> npm run test -w @fde/calculations && npm run test -w @fde/api-client
+
+
+> @fde/calculations@0.1.0 test
+> vitest run
+
+
+ RUN  v2.1.9 C:/Users/mjcun/fde-handoff-release0/packages/calculations
+
+ ✓ tests/performance.test.ts (8 tests) 11ms
+ ✓ tests/pointInTime.test.ts (10 tests) 11ms
+ ✓ tests/odds.test.ts (18 tests) 13ms
+ ✓ tests/marketDisplay.test.ts (58 tests) 27ms
+ ✓ tests/freshness-distributions.test.ts (13 tests) 10ms
+ ✓ tests/ev-kelly.test.ts (12 tests) 10ms
+ ✓ tests/paper-mode-mandatory.test.ts (5 tests) 9ms
+ ✓ tests/recommendation.test.ts (17 tests) 13ms
+ ✓ tests/staking.test.ts (7 tests) 8ms
+ ✓ tests/integration.test.ts (7 tests) 16ms
+ ✓ tests/formula-consistency.test.ts (22 tests) 241ms
+
+ Test Files  11 passed (11)
+      Tests  177 passed (177)
+   Start at  06:18:16
+   Duration  3.49s (transform 13.03s, setup 0ms, collect 14.55s, tests 369ms, environment 4ms, prepare 12.36s)
+
+
+> @fde/api-client@0.1.0 test
+> vitest run
+
+
+ RUN  v2.1.9 C:/Users/mjcun/fde-handoff-release0/packages/api-client
+
+ ✓ tests/research.test.ts (8 tests) 24ms
+ ✓ tests/market-movement.test.ts (8 tests) 29ms
+ ✓ tests/spread-convention.test.ts (5 tests) 18ms
+ ✓ tests/exposure.test.ts (9 tests) 55ms
+ ✓ tests/lookahead.test.ts (5 tests) 103ms
+ ✓ tests/cutoff-required.test.ts (7 tests) 87ms
+ ✓ tests/dataset.test.ts (20 tests) 564ms
+   ✓ MockFdeApi > serves the typed contract and appends manual prices immutably 513ms
+
+ Test Files  7 passed (7)
+      Tests  62 passed (62)
+   Start at  06:18:21
+   Duration  1.95s (transform 1.18s, setup 0ms, collect 3.41s, tests 881ms, environment 3ms, prepare 1.93s)
+

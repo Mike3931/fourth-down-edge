@@ -1,0 +1,20 @@
+
+> fourth-down-edge@0.1.0 build
+> npm run build -w @fde/web
+
+
+> @fde/web@0.1.0 build
+> tsc --noEmit && vite build && node scripts/build-sw.mjs
+
+vite v6.4.3 building for production...
+transforming...
+✓ 809 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   1.65 kB │ gzip:   0.80 kB
+dist/assets/index-arWQ_LT0.css   33.96 kB │ gzip:   6.70 kB
+dist/assets/vendor-DyRrujhR.js  250.82 kB │ gzip:  77.53 kB
+dist/assets/index-CLTtb5nm.js   335.81 kB │ gzip:  94.27 kB
+dist/assets/charts-DpQMzoXd.js  416.24 kB │ gzip: 112.19 kB
+✓ built in 5.09s
+sw.js: precached 9 files under base "/" as cache "fde-4ff8e6c419cc"

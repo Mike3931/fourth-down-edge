@@ -65,7 +65,7 @@ const percent = (value: number | null) =>
 export default function LiveGameLab() {
   const { gameId } = useParams<{ gameId: string }>();
   const slate = useForwardSlate(gameId);
-  const preparation = useBriefing();
+  const preparation = useBriefing(gameId);
   const inputs = !preparation.error
     ? preparation.data?.games.find(g => g.canonical_game_id === gameId) : undefined;
   const markets = useQuery({
@@ -145,7 +145,7 @@ export default function LiveGameLab() {
   return (
     <div className="space-y-5 p-2 sm:p-6">
       <header className="space-y-2">
-        <button type="button" className="float-right rounded border border-border px-3 py-2 text-sm text-accent" disabled={slate.isFetching || markets.isFetching || candidates.isFetching || preparation.isFetching} onClick={() => { void slate.refetch(); void markets.refetch(); void candidates.refetch(); void preparation.refetch(); }}>Refresh analysis</button>
+        <button type="button" className="float-right rounded border border-border px-3 py-2 text-sm text-accent" disabled={slate.isFetching || markets.isFetching || candidates.isFetching} onClick={() => { void slate.refetch(); void markets.refetch(); void candidates.refetch(); void preparation.refetch(); }}>Refresh analysis</button>
         <Link to="/slate" className="text-xs text-accent underline">← All games</Link>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-semibold text-fg">Game Lab · {game.away_team_id} @ {game.home_team_id}</h1>
