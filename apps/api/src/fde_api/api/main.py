@@ -599,8 +599,14 @@ def get_forward_live(
     #
     # `lookback_hours` stays at 72: that one IS about the past, keeping a
     # finished game and its result on screen for three days.
-    data_mode: str = "LIVE_RESEARCH", hours: int = 240, lookback_hours: int = 72
+    data_mode: str = "LIVE_RESEARCH", hours: int = 240, lookback_hours: int = 72,
+    canonical_game_id: str | None = None,
 ) -> dict[str, Any]:
+    """An optional game ID scopes all subsequent quote/consensus reads.
+
+    A named game's captured history remains inspectable after the unscoped
+    live-slate lookback expires. It is historical evidence, never a live offer.
+    """
     from datetime import timedelta
 
     from fde_api.db.forward_models import ConsensusSnapshot, OddsQuote, ScheduleObservation
@@ -620,19 +626,25 @@ def get_forward_live(
     # table before and after a call to this path, and the file exists
     # because this endpoint used to call `build_consensus`, which upserts.
     with session_scope() as s:
-        observations = list(
-            s.scalars(
-                select(ScheduleObservation).where(
-                    ScheduleObservation.data_mode == mode.value,
-                    # A six-hour lookback dropped a game the moment it
-                    # finished - taking the result, the closing line and
-                    # the CLV comparison off the screen at exactly the
-                    # point they became the most informative thing on it.
-                    ScheduleObservation.kickoff_utc >= now - timedelta(hours=lookback_hours),
-                    ScheduleObservation.kickoff_utc <= horizon,
-                ).order_by(ScheduleObservation.observed_at, ScheduleObservation.id)
+        # The newest schedule revision wins BEFORE any time-window filtering.
+        # Otherwise a game moved outside the live horizon still appears under
+        # its older kickoff, and a cancelled game can be falsely resurrected.
+        from fde_api.forward.read_queries import latest_schedule
+
+        criteria = [ScheduleObservation.data_mode == mode.value]
+        if canonical_game_id is not None:
+            # Push identity down into the ranked query: select only this game,
+            # including historical fixtures outside the default live window.
+            criteria.append(ScheduleObservation.canonical_game_id == canonical_game_id)
+        schedule_query = latest_schedule(*criteria)
+        if canonical_game_id is None:
+            schedule_query = schedule_query.where(
+                ScheduleObservation.kickoff_utc >= now - timedelta(hours=lookback_hours),
+                ScheduleObservation.kickoff_utc <= horizon,
             )
-        )
+        observations = list(s.scalars(schedule_query.order_by(
+            ScheduleObservation.kickoff_utc, ScheduleObservation.canonical_game_id,
+        )))
         # One entry per game: the schedule is append-only, so the newest
         # observation of a fixture is the current one.
         latest: dict[str, Any] = {}

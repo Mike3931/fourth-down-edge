@@ -69,8 +69,10 @@ export default function LiveGameLab() {
   const inputs = !preparation.error
     ? preparation.data?.games.find(g => g.canonical_game_id === gameId) : undefined;
   const markets = useQuery({
-    queryKey: ['engine', 'forward-live', 'game-lab'],
-    queryFn: () => engineGet<CapturedResponse>('/v1/forward/live'),
+    queryKey: ['engine', 'forward-live', 'game-lab', gameId],
+    queryFn: ({ signal }) => engineGet<CapturedResponse>(
+      `/v1/forward/live?canonical_game_id=${encodeURIComponent(gameId!)}`, signal,
+    ),
     enabled: Boolean(gameId),
     retry: false,
     refetchInterval: 60_000,
@@ -84,10 +86,12 @@ export default function LiveGameLab() {
   );
   const latestQuotes = useMemo(() => {
     // Every observation is historical, and the provider can send many
-    // revisions. Show the newest observation per (book, market, side).
+    // revisions. Preserve a separate historical series for each exact
+    // (book, market, side, line). Alternate lines are not revisions of one
+    // another; treating them as one silently deletes observed alternatives.
     const bySide = new Map<string, CapturedQuote[]>();
     for (const q of captured?.quotes ?? []) {
-      const key = JSON.stringify([q.sportsbook, q.market, q.selection]);
+      const key = JSON.stringify([q.sportsbook, q.market, q.selection, q.line]);
       const time = Date.parse(q.observed_at);
       if (!Number.isFinite(time)) {
         bySide.set(JSON.stringify(q), [q]);
