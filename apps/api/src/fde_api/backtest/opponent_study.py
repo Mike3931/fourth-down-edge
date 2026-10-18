@@ -263,7 +263,11 @@ def study(
                         id=f"od-e-{run_id}-{year}",
                         model_version_id=next(iter(versions.values())),
                         scope=f"exploratory fold:{year}",
-                        metrics=fold["models"][name],
+                        metrics=fold["models"][name]
+                        | {
+                            "evaluation_grain": "aggregate fold across member versions",
+                            "member_model_versions": list(versions.values()),
+                        },
                         sample_size=len(test),
                         created_at=now,
                     )

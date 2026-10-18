@@ -18,6 +18,8 @@ def main() -> int:
     parser.add_argument("--database-file", required=True, type=Path)
     parser.add_argument("--licensed-games-file", required=True, type=Path)
     parser.add_argument("--source-receipt", required=True, type=Path)
+    parser.add_argument("--efficiency-stats-file", type=Path)
+    parser.add_argument("--stats-sha256")
     args = parser.parse_args()
     target = args.database_file.resolve()
     if target.exists() or target.name.lower() == "fde.db":
@@ -32,6 +34,11 @@ def main() -> int:
         != "https://github.com/nflverse/nflverse-data/releases/download/schedules/games.csv"
     ):
         parser.error("Hash-verified licensed nflverse schedule receipt required")
+    stats_payload = None
+    if args.efficiency_stats_file:
+        stats_payload = args.efficiency_stats_file.read_bytes()
+        if hashlib.sha256(stats_payload).hexdigest() != args.stats_sha256:
+            parser.error("Historical aggregate hash mismatch")
     from fde_api.forward.workspace import initialize_workspace
 
     initialize_workspace(target)
@@ -63,24 +70,39 @@ def main() -> int:
         load_games_csv(s, payload, seasons=list(range(2010, 2026)), source_manifest_version=source_hash)
         s.commit()
         try:
-            original = run_comparison(
-                s, test_seasons=[2022, 2023, 2024, 2025], source_hash=source_hash, now=now
-            )
-            s.commit()
-            (settings.reports_dir / "baseline-reproduction.json").write_text(
-                json.dumps(original, indent=2, allow_nan=False), encoding="utf-8"
-            )
             history = LeagueHistory.load(s)
             market, _ = load_market_refs(s)
-            result = study(
-                s,
-                history,
-                market,
-                seasons=[2022, 2023, 2024, 2025],
-                source_hash=source_hash,
-                run_id=run_id,
-                now=now,
-            )
+            if stats_payload is not None:
+                from fde_api.backtest.efficiency_study import efficiency_study
+
+                (settings.raw_dir / "historical-team-stats.json").write_bytes(stats_payload)
+                result = efficiency_study(
+                    s,
+                    history,
+                    market,
+                    stats=json.loads(stats_payload)["rows"],
+                    source_hash=source_hash,
+                    stats_hash=args.stats_sha256,
+                    run_id=run_id,
+                    now=now,
+                )
+            else:
+                original = run_comparison(
+                    s, test_seasons=[2022, 2023, 2024, 2025], source_hash=source_hash, now=now
+                )
+                s.commit()
+                (settings.reports_dir / "baseline-reproduction.json").write_text(
+                    json.dumps(original, indent=2, allow_nan=False), encoding="utf-8"
+                )
+                result = study(
+                    s,
+                    history,
+                    market,
+                    seasons=[2022, 2023, 2024, 2025],
+                    source_hash=source_hash,
+                    run_id=run_id,
+                    now=now,
+                )
             s.commit()
         except Exception as exc:
             s.rollback()
