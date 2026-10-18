@@ -30,6 +30,13 @@ times, or bypass the exclusive workspace lock. Only the most recent due horizon
 is attempted; report earlier missed horizons. Complete official availability is
 still required at the final checkpoint.
 
+The selected-game forecast panel also exposes the existing checkpoint policy as
+read-only status: recorded approaches, windows not yet due, missed windows,
+withheld publication with its reason, and eligible windows awaiting capture.
+This display never generates forecasts or backfills a missed window. Existing
+forecast/evaluation labels continue to distinguish pregame, pending final,
+evaluated, disputed and historical evidence.
+
 Capture jobs, provider polls, forecast jobs and immutable forecast freezes are
 the execution evidence. A process alive or one completed cycle is not proof of
 unattended weekend operation. Record observed cycles, interruption/restart

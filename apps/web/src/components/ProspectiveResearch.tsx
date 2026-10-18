@@ -9,6 +9,8 @@ const metric = finite.nullable();
 const schema = z.object({ version: z.literal('prospective-scores-v1'), status: z.literal('RESEARCH ONLY'),
   decision: z.literal('NO BET'), count: z.number().int().nonnegative(), evaluated_forecasts: z.number().int().nonnegative(),
   limitations: z.array(z.string()), sample_policy: z.string(),
+  checkpoint_statuses:z.array(z.object({horizon:z.string(),state:z.string(),recorded_approaches:z.number().int().nonnegative(),
+    window_opens_at:z.string().datetime({offset:true}),reason:z.string().nullable()})).optional().default([]),
   records: z.array(z.object({ id: z.string(), game_id: z.string(), model_version: z.string(), feature_snapshot_id: z.string(),
     horizon: z.enum(['PROS_EARLY','PROS_72H','PROS_24H','PROS_FINAL']), created_at: z.string().datetime({offset:true}),
     current: z.boolean(), state: z.string(), evaluation_state:z.string().optional(), verification_warning:z.string().nullable().optional(), outputs: z.object({ approach:z.string(), home_win_prob:finite.min(0).max(1),
@@ -43,6 +45,11 @@ export default function ProspectiveResearch({gameId}:{gameId?:string}) {
       : query.isPending ? <p role="status" className="mt-3 text-ink-muted">Loading recorded forecasts…</p>
         : data && <>
           <p className="mt-3 text-sm text-ink-muted">{data.count} forecast records · {data.evaluated_forecasts} evaluated. {data.evaluated_forecasts===0?'No settled prospective sample yet. We must wait for actual games.':'Results remain insufficient to establish reliability.'}</p>
+          {data.checkpoint_statuses.length>0 && <ul aria-label="Forecast checkpoints" className="mt-3 space-y-1 text-sm text-ink-muted">
+            {data.checkpoint_statuses.map(c=><li key={c.horizon}><strong>{c.horizon.replace('PROS_','')}</strong>: {c.state.replaceAll('_',' ')}
+              {c.recorded_approaches>0 ? ` · ${c.recorded_approaches} model approaches` : ''}
+              {c.reason ? ` · ${c.reason}` : ''}{c.state==='NOT_YET_DUE' ? ` · opens ${fmtInstant(c.window_opens_at)}` : ''}.</li>)}
+          </ul>}
           {latest.length===0 && <p className="mt-3 text-sm text-ink-muted">No pregame forecast has been recorded in this workspace. A research worker must capture eligible evidence before kickoff.</p>}
           <div className="mt-4 grid gap-3 md:grid-cols-2">{latest.slice(0,gameId?6:3).map(r=><article key={r.id} className="min-w-0 rounded border border-edge p-3 text-sm text-ink-muted">
             <Link className="font-semibold text-accent" to={`/live/game/${encodeURIComponent(r.game_id)}`}>{r.game_id}</Link>

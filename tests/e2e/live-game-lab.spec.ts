@@ -6,8 +6,8 @@ import { expect, test, type Page } from '@playwright/test';
  * the actual FastAPI process is reachable. These test that UI rendering is
  * truthful, links use canonical IDs, and no demo pick is substituted.
  */
-async function stubCapturedGame(page: Page, quotes: unknown[] = []) {
-  const kickoff = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
+async function stubCapturedGame(page: Page, quotes: unknown[] = [], leadHours = 24) {
+  const kickoff = new Date(Date.now() + leadHours * 60 * 60_000).toISOString();
   const observed = new Date(Date.now() - 2 * 60_000).toISOString();
   await page.route('**/research-api/v1/forward/slate*', (route) => route.fulfill({
     contentType: 'application/json',
@@ -43,6 +43,35 @@ async function stubCapturedGame(page: Page, quotes: unknown[] = []) {
 async function login(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: /enter local demo session/i }).click();
+}
+
+for (const finalDue of [false, true]) {
+  test(`checkpoint status distinguishes ${finalDue ? 'withheld final' : 'future and missed windows'} without inventing forecasts`, async ({ page }) => {
+    await stubCapturedGame(page, [], finalDue ? 1 : 48);
+    const kickoffMs = Date.now() + (finalDue ? 1 : 48) * 60 * 60_000;
+    const hours: Record<string, number> = { PROS_EARLY: 168, PROS_72H: 72, PROS_24H: 24, PROS_FINAL: 1.5 };
+    const checkpoint_statuses = [
+      { horizon: 'PROS_EARLY', state: 'MISSED', reason: 'No eligible forecast recorded; no backfill' },
+      { horizon: 'PROS_72H', state: finalDue ? 'MISSED' : 'AWAITING_CAPTURE', reason: null },
+      { horizon: 'PROS_24H', state: finalDue ? 'MISSED' : 'NOT_YET_DUE', reason: null },
+      { horizon: 'PROS_FINAL', state: finalDue ? 'WITHHELD' : 'NOT_YET_DUE',
+        reason: finalDue ? 'Complete official availability and fresh schedule are required' : null },
+    ].map(c => ({ ...c, recorded_approaches: 0, window_opens_at: new Date(kickoffMs - hours[c.horizon]! * 60 * 60_000).toISOString() }));
+    await page.route('**/research-api/v1/research/prospective*', route => route.fulfill({
+      contentType: 'application/json', body: JSON.stringify({ version: 'prospective-scores-v1',
+        status: 'RESEARCH ONLY', decision: 'NO BET', count: 0, evaluated_forecasts: 0,
+        records: [], performance: [], limitations: [], sample_policy: 'Separate horizons', checkpoint_statuses }),
+    }));
+    await login(page);
+    await page.goto('/live/game/FDE-REAL-TEST-GAME');
+    const statuses = page.getByRole('list', { name: 'Forecast checkpoints' });
+    await expect(statuses.getByText(/EARLY: MISSED/)).toBeVisible();
+    await expect(statuses.getByText(finalDue ? /FINAL: WITHHELD/ : /FINAL: NOT YET DUE/)).toBeVisible();
+    if (finalDue) await expect(statuses.getByText(/Complete official availability/)).toBeVisible();
+    else await expect(statuses.getByText(/72H: AWAITING CAPTURE/)).toBeVisible();
+    await expect(page.getByText(/No pregame forecast has been recorded/)).toBeVisible();
+    await expect(page.getByText(/Home win/)).toHaveCount(0);
+  });
 }
 
 test('a real fixture links to an engine-backed Game Lab with no invented price', async ({ page }) => {
