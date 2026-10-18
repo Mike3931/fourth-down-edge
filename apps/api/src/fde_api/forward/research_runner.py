@@ -20,7 +20,7 @@ def run_cycle(factory: Callable[[], Session], capture: Callable[[], dict[str, in
     job_id = str(uuid.uuid4())
     with factory() as s:
         s.add(Job(id=job_id, kind=KIND, params={"version": VERSION, "dates": dates,
-              "source": "espn-public-scoreboard-v2"}, status="running", created_at=now,
+              "source": "nflverse-licensed-release"}, status="running", created_at=now,
               started_at=now))
         s.commit()
     try:
