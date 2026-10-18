@@ -57,6 +57,8 @@ class EfficiencyResidual(GamePredictor):
                 continue
             if g.result_observed_at <= g.kickoff:
                 raise LookaheadError("Malformed training result availability")
+            if datetime.fromisoformat(f["as_of"]) >= g.kickoff:
+                raise LookaheadError("Training feature cutoff is not pregame")
             x.append([f.get(k, np.nan) if f.get(k) is not None else np.nan for k in COLUMNS])
             y.append(
                 [

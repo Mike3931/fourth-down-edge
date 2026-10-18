@@ -34,7 +34,9 @@ def inputs(league_session):
 def test_lagged_stats_excludes_own_future_and_late_receipts(inputs):
     h, rows, features = inputs
     target = h.games[-1]
-    poisoned = [dict(r, metrics=dict.fromkeys(KEYS, 99999.0)) if r["game_id"] == target.id else r for r in rows]
+    poisoned = [
+        dict(r, metrics=dict.fromkeys(KEYS, 99999.0)) if r["game_id"] == target.id else r for r in rows
+    ]
     original = lagged_stats(h.games, rows, 365.0)
     assert lagged_stats(h.games, poisoned, 365.0)[target.id] == original[target.id]
     delayed = [dict(r, observed_at=(target.kickoff + timedelta(days=10)).isoformat()) for r in rows]
@@ -63,7 +65,8 @@ def test_train_only_scaling_and_artifact_reproduction(inputs):
     prediction = model.predict(target, features[target.id])
     assert pickle.loads(pickle.dumps(model)).predict(target, features[target.id]) == prediction
     changed = dict(features)
-    changed[target.id] = dict.fromkeys(COLUMNS, 99999.0) | features[target.id]
+    changed[target.id] = features[target.id] | dict.fromkeys(COLUMNS, 99999.0)
+    assert changed[target.id][COLUMNS[0]] != features[target.id][COLUMNS[0]]
     # Poison future targets as well as their feature values: neither may enter fitting.
     future = [replace(g, home_score=80) if g.season == year else g for g in h.games]
     other = EfficiencyResidual()
@@ -89,3 +92,15 @@ def test_missing_stats_fall_back_and_disputes_refuse(inputs):
     with pytest.raises(LookaheadError):
         model.predict(target, features[target.id] | {"as_of": cutoff(train_game := h.games[0]).isoformat()})
     assert train_game.id in model.training_ids
+
+
+def test_future_training_feature_and_malformed_receipt_are_refused(inputs):
+    h, rows, features = inputs
+    train = h.games[:-10]
+    g = train[-1]
+    changed = dict(features)
+    changed[g.id] = features[g.id] | {"as_of": g.kickoff.isoformat()}
+    with pytest.raises(LookaheadError, match="feature cutoff"):
+        EfficiencyResidual().fit(train, changed, h)
+    with pytest.raises(ValueError, match="receipt timestamp"):
+        lagged_stats(h.games, [dict(rows[0], observed_at=h.games[0].kickoff.isoformat())], 365.0)

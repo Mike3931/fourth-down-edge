@@ -1,6 +1,9 @@
 import pickle
+import subprocess
+import sys
 from dataclasses import replace
 from datetime import timedelta
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -131,3 +134,52 @@ def test_study_refuses_duplicate_folds_and_future_evaluation(history, session):
                 run_id="test",
                 now=history.games[-1].kickoff,
             )
+
+
+def test_cli_refuses_existing_database_before_reading_or_migrating(tmp_path):
+    target = tmp_path / "protected-study.db"
+    target.write_bytes(b"must remain unchanged")
+    script = Path(__file__).parents[1] / "scripts" / "study_opponent_scores.py"
+    run = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--database-file",
+            str(target),
+            "--licensed-games-file",
+            str(tmp_path / "absent.csv"),
+            "--source-receipt",
+            str(tmp_path / "absent.json"),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 2 and "existing databases are never adopted" in run.stderr
+    assert target.read_bytes() == b"must remain unchanged"
+
+
+def test_cli_refuses_unverified_source_before_creating_workspace(tmp_path):
+    target = tmp_path / "new.db"
+    source = tmp_path / "games.csv"
+    source.write_bytes(b"test fixture, never real research data")
+    receipt = tmp_path / "receipt.json"
+    receipt.write_text("{}")
+    script = Path(__file__).parents[1] / "scripts" / "study_opponent_scores.py"
+    run = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--database-file",
+            str(target),
+            "--licensed-games-file",
+            str(source),
+            "--source-receipt",
+            str(receipt),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert run.returncode == 2 and "Hash-verified licensed" in run.stderr
+    assert not target.exists()

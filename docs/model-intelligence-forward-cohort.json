@@ -1803,5 +1803,14 @@
     }
   ],
   "rules": "Preserve denominator including missed/withheld/disputed/cancelled games; paired unique games by model/checkpoint; no promotion; at least200 independently verified paired outcomes and week-block inference plus independent review",
-  "status": "PREDECLARED_NOT_EXECUTED"
+  "status": "PREDECLARED_NOT_EXECUTED",
+  "additional_candidate": {
+    "name": "efficiency-residual-v1",
+    "primary_alpha": 100,
+    "half_life_days": 365,
+    "declaration": "second experiment in model-intelligence-declaration.md",
+    "selection_outcomes_used": "historical2019-2025 only; no2026 outcomes",
+    "execution": "not activated"
+  },
+  "research_disposition": "Both candidates rejected on exploratory historical evidence; no live candidate activation or promotion. Future cohort remains a predeclared research protocol, not collected evidence."
 }

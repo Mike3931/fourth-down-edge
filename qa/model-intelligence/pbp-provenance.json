@@ -1,0 +1,78 @@
+{
+  "source_database_read_only": true,
+  "raw_manifest_matches": [
+    {
+      "version_id": "20260801T125454000816Z-2e6f2dce",
+      "params": "{\"season\": 2018}",
+      "payload_sha256": "2e6f2dce7c7ebd46e985cabe0c17eb72b39a77f98cb4478409294f50b5820150",
+      "schema_version": "nflverse-pbp-v1",
+      "source_updated_at": "Wed, 30 Apr 2025 06:39:20 GMT",
+      "observed_at": "2026-08-01 12:54:53.991006",
+      "raw_payload_hash_valid": true
+    },
+    {
+      "version_id": "20260801T125456439013Z-60c30670",
+      "params": "{\"season\": 2019}",
+      "payload_sha256": "60c3067017db2d28a78f66a79b657268be8578d9a5288e6a827efdcd7fe42540",
+      "schema_version": "nflverse-pbp-v1",
+      "source_updated_at": "Thu, 31 Jul 2025 18:17:18 GMT",
+      "observed_at": "2026-08-01 12:54:56.418879",
+      "raw_payload_hash_valid": true
+    },
+    {
+      "version_id": "20260801T125458893309Z-73b7dbf6",
+      "params": "{\"season\": 2020}",
+      "payload_sha256": "73b7dbf66fa8cb9356f58bf6b1f15a0fee197ecc10cf4983b640cb9679b15cb4",
+      "schema_version": "nflverse-pbp-v1",
+      "source_updated_at": "Wed, 30 Apr 2025 08:01:50 GMT",
+      "observed_at": "2026-08-01 12:54:58.883880",
+      "raw_payload_hash_valid": true
+    },
+    {
+      "version_id": "20260801T125501290940Z-333ad343",
+      "params": "{\"season\": 2021}",
+      "payload_sha256": "333ad34378e5339d5172717cc83378e908daf02c8699416ab3e17c2ec10f78d8",
+      "schema_version": "nflverse-pbp-v1",
+      "source_updated_at": "Thu, 08 Jan 2026 13:13:13 GMT",
+      "observed_at": "2026-08-01 12:55:01.262494",
+      "raw_payload_hash_valid": true
+    },
+    {
+      "version_id": "20260801T125503680900Z-931121d8",
+      "params": "{\"season\": 2022}",
+      "payload_sha256": "931121d8897779d7944e2a293e92ed8799c8e5cceef84096ac42339003fedc09",
+      "schema_version": "nflverse-pbp-v1",
+      "source_updated_at": "Thu, 12 Feb 2026 10:25:24 GMT",
+      "observed_at": "2026-08-01 12:55:03.652351",
+      "raw_payload_hash_valid": true
+    },
+    {
+      "version_id": "20260801T125506074830Z-bd348473",
+      "params": "{\"season\": 2023}",
+      "payload_sha256": "bd3484731408def6b0ec93225bba2bd7b2c65769ca707a2b9444d891abdc6776",
+      "schema_version": "nflverse-pbp-v1",
+      "source_updated_at": "Thu, 12 Feb 2026 10:24:52 GMT",
+      "observed_at": "2026-08-01 12:55:06.054151",
+      "raw_payload_hash_valid": true
+    },
+    {
+      "version_id": "20260801T125508477222Z-6d432dd4",
+      "params": "{\"season\": 2024}",
+      "payload_sha256": "6d432dd4308329bfddaef633309ea119f9ca46d52cbb3c09f47172a2e8efcd01",
+      "schema_version": "nflverse-pbp-v1",
+      "source_updated_at": "Wed, 03 Sep 2025 09:25:07 GMT",
+      "observed_at": "2026-08-01 12:55:08.456745",
+      "raw_payload_hash_valid": true
+    },
+    {
+      "version_id": "20260801T125510991924Z-3730c4db",
+      "params": "{\"season\": 2025}",
+      "payload_sha256": "3730c4db2ab99d2dfc4017de975b7610c46c35301b9280b65c03de1b1c74265a",
+      "schema_version": "nflverse-pbp-v1",
+      "source_updated_at": "Thu, 12 Feb 2026 09:58:23 GMT",
+      "observed_at": "2026-08-01 12:55:10.969925",
+      "raw_payload_hash_valid": true
+    }
+  ],
+  "limitations": "2026 captures of revised historical files; not historical publication vintages; canonical aggregation source retained"
+}

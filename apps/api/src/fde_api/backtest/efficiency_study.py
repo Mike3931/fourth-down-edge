@@ -50,6 +50,8 @@ def lagged_stats(
             raise ValueError("Invalid result chronology")
         original = datetime.fromisoformat(row["observed_at"])
         original = original.replace(tzinfo=game.kickoff.tzinfo) if original.tzinfo is None else original
+        if original <= game.kickoff:
+            raise ValueError("Malformed statistic receipt timestamp")
         # Both the stat's recorded receipt and the schedule's result must be visible.
         received = max(original, game.result_observed_at)
         opponent = game.away if row["team_id"] == game.home else game.home
@@ -206,7 +208,10 @@ def efficiency_study(
                             as_of_at=cutoff(g),
                             values=f,
                             content_hash=content,
-                            unavailable_features=dict.fromkeys(("QB", "personnel", "availability", "weather"), "No archived point-in-time evidence"),
+                            unavailable_features=dict.fromkeys(
+                                ("QB", "personnel", "availability", "weather"),
+                                "No archived point-in-time evidence",
+                            ),
                             code_commit=current_code_commit(),
                             created_at=now,
                         )

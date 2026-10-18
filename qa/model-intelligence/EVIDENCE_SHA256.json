@@ -1,0 +1,16 @@
+{
+  "baseline-reproduction.json": "2edf2396b9a5447f73d2dda0aaae97a3647146aa50a26149e437389ff52f8dc9",
+  "candidate-tests.xml": "b1afe331aa839efe53958b6dcd48be818e9e13cd11c91c711eb60c1a1dc99b77",
+  "efficiency-artifact-audit.json": "df84faab1a75cee90b403fc7d5efeac36dab8e991fe3eced405f4b502fc5b03e",
+  "efficiency-comparison.json": "f998b7af8fc129ee1203bc7c0eeed391672c2b844ccbdb1a64a6ef5d8154cbca",
+  "efficiency-per-game.csv": "aad8cd4f8919cb1aa894ff62c75889802c325700260629109d354725c7696848",
+  "focused-tests.xml": "4bd1762597999b04e0c5a0e845b8c70aa427e242212a1928905057a9ee304b0c",
+  "isolated-initialization-audit.json": "c65ec1408a0203506db8ed17172e915a0fd9cf482035e405bcc3030aa2aa6f2b",
+  "MODEL_REPORT.md": "53a92436ed935451ec0b68b53e6c335157f8b776fb111b1f7246242c9ebc2fb1",
+  "pbp-provenance.json": "4a5068efa89f2dee131672a46750a7bf24b2bb2ab34d52af3b0730f2eaa2c920",
+  "preservation-receipt.json": "c300dd696a4a6a640ef911415d6321b48a3408aef29b16d70fdb0f4b3e3f23a6",
+  "review.ipynb": "b1316c9f8f59dda0c3a99bf9be7f0467919d479e713f436068a58de46e9b524d",
+  "score-artifact-audit.json": "596ad9fdc9e8e49acf6fb305f5a7f3543896a8816c9d81b6dfa2787ad9d49bd7",
+  "score-comparison.json": "08c37f524da364555b1f84d4959f47c7adbada3ee229886f4dfd242fec6f8da1",
+  "score-per-game.csv": "903cc990e4a90815a54674d03380bdd96b67ce348cbce5e7ca9b765ef995648e"
+}
