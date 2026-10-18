@@ -687,10 +687,16 @@ def checkpoint_statuses(s: Session, game: ScheduleObservation, records: list[dic
         return []
     lead = (game.kickoff_utc - now).total_seconds() / 3600
     due = checkpoint(game.kickoff_utc, now, CHECKPOINTS)
-    job = s.scalars(select(Job).where(Job.kind == "prospective_forecast", Job.created_at <= now)
-                    .order_by(Job.created_at.desc(), Job.id.desc()).limit(1)).first()
+    jobs = list(s.scalars(select(Job).where(Job.kind == "prospective_forecast", Job.created_at <= now)
+                    .order_by(Job.created_at.desc(), Job.id.desc())))
+    job = jobs[0] if jobs else None
     withheld = ((job.result or {}).get("forecasts") or {}).get("withheld", []) if job else []
     reasons = [r for r in withheld if r.startswith(game.canonical_game_id + ":") or ":" not in r]
+    # A closed final window is not an unexplained miss when its real attempt
+    # was withheld. Retain that explicit recorded reason after kickoff too.
+    final_reason = next((reason for attempt in jobs
+        for reason in (((attempt.result or {}).get("forecasts") or {}).get("withheld", []))
+        if reason.startswith(game.canonical_game_id + ": final checkpoint requires ")), None)
     result = []
     for horizon, hours in CHECKPOINTS.items():
         approaches = {r["outputs"]["approach"] for r in records
@@ -703,6 +709,8 @@ def checkpoint_statuses(s: Session, game: ScheduleObservation, records: list[dic
             state, reason = "NOT_ELIGIBLE", "Game is cancelled or postponed"
         elif lead > hours:
             state, reason = "NOT_YET_DUE", "Checkpoint window has not opened"
+        elif horizon == "PROS_FINAL" and final_reason:
+            state, reason = "WITHHELD", final_reason
         elif lead <= 0 or horizon != due:
             state, reason = "MISSED", "No eligible forecast recorded in this window; no backfill"
         elif game.canonical_game_id in blocked:
