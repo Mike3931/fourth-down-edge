@@ -28,7 +28,7 @@ We can quantify this gap and reject specific proposed explanations; this observa
 
 Data: existing licensed nflverse schedule release, sha256690d9e1530c8e29477ebda065979e8c0f43ef6b3c632cf4eafca654c20680a76, with retained capture receipt/CC-BY-4.0 attribution. Team aggregates were exported READ-ONLY from protected originalfde.db:4454 rows, 2018â€“2025, zero game-join orphans. All17 measured keys are non-null in 4,454 rows except neutral EPA 4,453/4,454; neutralEPA is not a candidate regressor. Original observed timestamps and result visibility both gate lagging. All 26,088 scored candidate stat cells are present;0/26088 missing. Current historical revisions cannot be relabeled original publication vintages.
 
-No new dependency, endpoint, worker integration, frontend redesign or deployment. Both failed candidates and 497 registry artifacts remain in new attested study workspaces, with 2,174 immutable candidate prediction/feature pairs. The score-only study also retains its original baseline models/predictions. No model was promoted.
+No new dependency, endpoint, worker integration, frontend redesign or deployment. Both failed candidates and 497 registry artifacts remain in new attested study workspaces, with 2,174 timestamped retrospective candidate prediction/feature snapshots. The score-only study also retains its original baseline models/predictions. No model was promoted.
 
 ## C. Did it work?
 
@@ -130,3 +130,5 @@ The original source CSV, receipt, aggregate export and model artifacts are prese
 Raw provenance check: all eight retained 2018–2025 nflverse play-by-play artifacts match their original ingestion SHA256 values. See pbp-provenance.json. They were captured in August2026, not at each historical game cutoff.
 
 Final guard hardening also rejects nonfinite/missing frozen baseline moments and invalid uncertainty before emitting a probability; the22 candidate tests pass, and all1087 EPA predictions still exactly reproduce after this guard. This changes no fitted coefficient or study result.
+
+Integrity scope: the existing database UPDATE/DELETE triggers protect PROS_* predictions and prospective-scores-v1 features; they do not enforce generic DML immutability for these explicitly retrospective candidate rows. This workflow never rewrites them and refuses existing study targets. Frozen report/input/artifact hashes detect changed evidence and replay all predictions; this is not a claim of prospective attestation or universal database write protection. Any actual future candidate cohort must use the existing prospective freezing safeguards in a separately reviewed integration.
