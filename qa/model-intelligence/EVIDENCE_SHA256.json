@@ -1,0 +1,17 @@
+{
+  ".gitattributes": "a79691a93b46e49ce460c26ef22afcc03d6eca1e63bf2edbc20e96159510f6c9",
+  "baseline-reproduction.json": "710abc5eca26e8957dfd41f5b7b2ab40d3bb5605aab582c5557641758db1e260",
+  "candidate-tests.xml": "96e2a69a96b21cbec7c7ec29b021445b6c1dadf22196aee8cf73cb319d56379f",
+  "efficiency-artifact-audit.json": "0e1c2c0e205aa1d3f9bd0ca61ebc6be7a3268c60a104ae5448992b1c5b6b7d73",
+  "efficiency-comparison.json": "7951a4c6cf7108565b92e03678acad213038e1dbee81c3e3383ac27ff907b545",
+  "efficiency-per-game.csv": "bcf2580abb76af4b559ce8d8f8ee2b859d303a31ba1ae6bd5fd242346a26d1e8",
+  "focused-tests.xml": "4bd1762597999b04e0c5a0e845b8c70aa427e242212a1928905057a9ee304b0c",
+  "isolated-initialization-audit.json": "c65ec1408a0203506db8ed17172e915a0fd9cf482035e405bcc3030aa2aa6f2b",
+  "MODEL_REPORT.md": "2720d7c62579c9ad8ce7a68a8f3f69a6341089f1e78a303515a8324848143852",
+  "pbp-provenance.json": "6f506a5bb3b208327506adebfa7f67e147371f2c8c4f19fdf529e4d919b3d63c",
+  "preservation-receipt.json": "7dc904d306819326d9872d5e7792ce849831ea54fbfc07db0ef0da121f9f788f",
+  "review.ipynb": "2e0c336fd1cf159788b90d1979e2833591df21311daf4e91444eaedb371711ac",
+  "score-artifact-audit.json": "8ef52f4186a2362a7de829a3aa5c6bfe79d47a917e796ebe52114d2233bfec04",
+  "score-comparison.json": "b0d616e0b2c4a1e5f0273502cef5b60d9477a54492c4d0f06fea5180b1c4aed9",
+  "score-per-game.csv": "b8daabd4dd7aa3242ac3764766a1926da11b7cf5a3f62da0b9f95b041df5fa84"
+}

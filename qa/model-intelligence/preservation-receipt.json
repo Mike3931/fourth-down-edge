@@ -1,0 +1,22 @@
+{
+  "at": "2026-10-18T12:19:12.678231+00:00",
+  "protected_hashes_identical": true,
+  "protected_hashes": {
+    "C:\\Users\\mjcun\\NFL\\apps\\api\\data\\fde.db": "133ff5b1a59229280ec19e84c59c314f200b377623b3bfa26de0fa583e2e5d0a",
+    "C:\\Users\\mjcun\\fde-handoff-release0\\apps\\api\\data\\research_1b3_ordered_20261014.db": "89ef633f244a514a68c216cab54f6ad39bda6d986c94ce4f2d2efeb4feba734e",
+    "C:\\Users\\mjcun\\fde-handoff-release0\\qa\\tonight-20261015\\SEA-DEN-PREGAME-BASELINE.json": "02fc85576c97d5b4cbc343629fa7bfd93e795c0db3c64a55c62ce1d7078164f2",
+    "C:\\Users\\mjcun\\fde-handoff-release0\\apps\\api\\data\\research_1b4_final_20261014.db": "4fd5169bc99deca682df76c4af84e600d08471920b320f59d8a646a3e88af656"
+  },
+  "original_forecasts": 345,
+  "original_evaluations": 3,
+  "historical_unresolved": 3,
+  "existing_weekend_freeze_rows_identical": 168,
+  "current_weekend_predictions": 408,
+  "HOU_final_forecast_rows": 0,
+  "latest_finished_phase": "2026-10-18 12:02:55.923342",
+  "HOU_final_withheld_reasons": [
+    "2026_06_HOU_JAX: final checkpoint requires complete official availability"
+  ],
+  "active_worker_checkout": "58b3ccae557c6fb718aef9716f9f90b417ec6c71",
+  "no_live_writes_by_study": true
+}
