@@ -100,7 +100,20 @@ def test_future_training_feature_and_malformed_receipt_are_refused(inputs):
     g = train[-1]
     changed = dict(features)
     changed[g.id] = features[g.id] | {"as_of": g.kickoff.isoformat()}
-    with pytest.raises(LookaheadError, match="feature cutoff"):
+    with pytest.raises(LookaheadError, match="Feature cutoff"):
         EfficiencyResidual().fit(train, changed, h)
     with pytest.raises(ValueError, match="receipt timestamp"):
         lagged_stats(h.games, [dict(rows[0], observed_at=h.games[0].kickoff.isoformat())], 365.0)
+
+
+@pytest.mark.parametrize(
+    "field,value", [("base_margin", float("nan")), ("base_total", None), ("base_sigma_margin", 0.0)]
+)
+def test_invalid_frozen_baseline_refused(inputs, field, value):
+    h, _, features = inputs
+    year = max(g.season for g in h.games)
+    model = EfficiencyResidual()
+    model.fit([g for g in h.games if g.season < year], features, h)
+    target = h.games[-1]
+    with pytest.raises(ValueError, match="baseline"):
+        model.predict(target, features[target.id] | {field: value})

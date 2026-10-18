@@ -37,6 +37,20 @@ class EfficiencyResidual(GamePredictor):
             "excluded": ["QB", "personnel", "official availability", "weather", "travel", "closing prices"],
         }
 
+    @staticmethod
+    def _require_base(features: dict[str, Any], game: GameRow) -> datetime:
+        keys = ("base_margin", "base_total", "base_sigma_margin", "base_sigma_total")
+        if any(features.get(k) is None or not np.isfinite(features[k]) for k in keys):
+            raise ValueError("Finite frozen baseline moments required")
+        if features["base_sigma_margin"] <= 0 or features["base_sigma_total"] <= 0:
+            raise ValueError("Positive frozen baseline uncertainty required")
+        if not features.get("as_of"):
+            raise ValueError("Explicit aware feature cutoff required")
+        at = datetime.fromisoformat(features["as_of"])
+        if at.tzinfo is None or at >= game.kickoff:
+            raise LookaheadError("Feature cutoff must be aware and strictly pregame")
+        return at
+
     def fit(
         self,
         train_games: list[GameRow],
@@ -57,8 +71,7 @@ class EfficiencyResidual(GamePredictor):
                 continue
             if g.result_observed_at <= g.kickoff:
                 raise LookaheadError("Malformed training result availability")
-            if datetime.fromisoformat(f["as_of"]) >= g.kickoff:
-                raise LookaheadError("Training feature cutoff is not pregame")
+            self._require_base(f, g)
             x.append([f.get(k, np.nan) if f.get(k) is not None else np.nan for k in COLUMNS])
             y.append(
                 [
@@ -90,7 +103,7 @@ class EfficiencyResidual(GamePredictor):
             raise ValueError("Unreviewed identity/result or missing feature snapshot")
         if game.id in self.training_ids:
             raise LookaheadError("Own training result cannot predict itself")
-        if self.max_training_result_at >= datetime.fromisoformat(features["as_of"]):
+        if self.max_training_result_at >= self._require_base(features, game):
             raise LookaheadError("Training results overlap forecast cutoff")
         raw = np.asarray(
             [features.get(k) if features.get(k) is not None else np.nan for k in COLUMNS], dtype=float
