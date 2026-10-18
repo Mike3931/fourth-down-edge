@@ -1,16 +1,17 @@
 {
-  "baseline-reproduction.json": "2edf2396b9a5447f73d2dda0aaae97a3647146aa50a26149e437389ff52f8dc9",
+  ".gitattributes": "a79691a93b46e49ce460c26ef22afcc03d6eca1e63bf2edbc20e96159510f6c9",
+  "baseline-reproduction.json": "710abc5eca26e8957dfd41f5b7b2ab40d3bb5605aab582c5557641758db1e260",
   "candidate-tests.xml": "b1afe331aa839efe53958b6dcd48be818e9e13cd11c91c711eb60c1a1dc99b77",
-  "efficiency-artifact-audit.json": "df84faab1a75cee90b403fc7d5efeac36dab8e991fe3eced405f4b502fc5b03e",
-  "efficiency-comparison.json": "f998b7af8fc129ee1203bc7c0eeed391672c2b844ccbdb1a64a6ef5d8154cbca",
-  "efficiency-per-game.csv": "aad8cd4f8919cb1aa894ff62c75889802c325700260629109d354725c7696848",
+  "efficiency-artifact-audit.json": "0e1c2c0e205aa1d3f9bd0ca61ebc6be7a3268c60a104ae5448992b1c5b6b7d73",
+  "efficiency-comparison.json": "7951a4c6cf7108565b92e03678acad213038e1dbee81c3e3383ac27ff907b545",
+  "efficiency-per-game.csv": "bcf2580abb76af4b559ce8d8f8ee2b859d303a31ba1ae6bd5fd242346a26d1e8",
   "focused-tests.xml": "4bd1762597999b04e0c5a0e845b8c70aa427e242212a1928905057a9ee304b0c",
   "isolated-initialization-audit.json": "c65ec1408a0203506db8ed17172e915a0fd9cf482035e405bcc3030aa2aa6f2b",
-  "MODEL_REPORT.md": "53a92436ed935451ec0b68b53e6c335157f8b776fb111b1f7246242c9ebc2fb1",
-  "pbp-provenance.json": "4a5068efa89f2dee131672a46750a7bf24b2bb2ab34d52af3b0730f2eaa2c920",
-  "preservation-receipt.json": "c300dd696a4a6a640ef911415d6321b48a3408aef29b16d70fdb0f4b3e3f23a6",
-  "review.ipynb": "b1316c9f8f59dda0c3a99bf9be7f0467919d479e713f436068a58de46e9b524d",
-  "score-artifact-audit.json": "596ad9fdc9e8e49acf6fb305f5a7f3543896a8816c9d81b6dfa2787ad9d49bd7",
-  "score-comparison.json": "08c37f524da364555b1f84d4959f47c7adbada3ee229886f4dfd242fec6f8da1",
-  "score-per-game.csv": "903cc990e4a90815a54674d03380bdd96b67ce348cbce5e7ca9b765ef995648e"
+  "MODEL_REPORT.md": "4aa6825c2efa3cf185130ad90d4538908ace73fb9bea3cb29bde368517b65485",
+  "pbp-provenance.json": "6f506a5bb3b208327506adebfa7f67e147371f2c8c4f19fdf529e4d919b3d63c",
+  "preservation-receipt.json": "7dc904d306819326d9872d5e7792ce849831ea54fbfc07db0ef0da121f9f788f",
+  "review.ipynb": "69a7fe1874469e85b9a677f58881bc92822135b1d9f0afea0f2a04a3b60c034e",
+  "score-artifact-audit.json": "8ef52f4186a2362a7de829a3aa5c6bfe79d47a917e796ebe52114d2233bfec04",
+  "score-comparison.json": "b0d616e0b2c4a1e5f0273502cef5b60d9477a54492c4d0f06fea5180b1c4aed9",
+  "score-per-game.csv": "b8daabd4dd7aa3242ac3764766a1926da11b7cf5a3f62da0b9f95b041df5fa84"
 }
