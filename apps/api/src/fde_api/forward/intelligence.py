@@ -60,7 +60,9 @@ def source_url(dataset: str, season: int) -> str:
              "injuries": f"injuries/injuries_{season}.csv",
              "snap_counts": f"snap_counts/snap_counts_{season}.csv"}
     if dataset == "schedule":
-        return "https://raw.githubusercontent.com/nflverse/nfldata/master/data/games.csv"
+        # The release repository publishes its data license alongside the
+        # downloadable artifacts. Retain attribution and actual receipt time.
+        return BASE + "schedules/games.csv"
     return BASE + paths[dataset]
 
 

@@ -515,7 +515,7 @@ def read_prospective(s: Session, *, now: datetime, game_id: str | None = None) -
     if game_id:
         predictions = [p for p in predictions if p.game_id == game_id]
     valid = [p for p in predictions if p.outputs.get("prospective_version") == VERSION]
-    states, blocked = schedule_at(s, now, {p.game_id for p in valid})
+    states, blocked = schedule_at(s, now, {p.game_id for p in valid} | ({game_id} if game_id else set()))
     by_id = {p.id: p for p in valid}
     features = {
         f.id: f
@@ -671,8 +671,74 @@ def read_prospective(s: Session, *, now: datetime, game_id: str | None = None) -
         "as_of_at": now.isoformat(),
         "count": len(records),
         "records": list(reversed(records)),
+        "checkpoint_statuses": checkpoint_statuses(s, states[game_id], records, now, blocked)
+        if game_id and game_id in states else [],
         "performance": performance,
         "evaluated_forecasts": len(latest_eval),
         "limitations": LIMITATIONS,
         "sample_policy": "Latest eligible evidence per game, approach and horizon; horizons are separate repeated cohorts, never independent games.",
     }
+
+
+def checkpoint_statuses(s: Session, game: ScheduleObservation, records: list[dict[str, Any]],
+                        now: datetime, blocked: set[str]) -> list[dict[str, Any]]:
+    """Explain existing selected-game policy without publishing or backfilling."""
+    if game.kickoff_utc is None:
+        return []
+    lead = (game.kickoff_utc - now).total_seconds() / 3600
+    due = checkpoint(game.kickoff_utc, now, CHECKPOINTS)
+    jobs = list(s.scalars(select(Job).where(Job.kind == "prospective_forecast", Job.created_at <= now)
+                    .order_by(Job.created_at.desc(), Job.id.desc())))
+    job = jobs[0] if jobs else None
+    withheld = ((job.result or {}).get("forecasts") or {}).get("withheld", []) if job else []
+    reasons = [r for r in withheld if r.startswith(game.canonical_game_id + ":") or ":" not in r]
+    # A closed final window is not an unexplained miss when its real attempt
+    # was withheld. Retain that explicit recorded reason after kickoff too.
+    final_reason = next((reason for attempt in jobs
+        for reason in (((attempt.result or {}).get("forecasts") or {}).get("withheld", []))
+        if reason.startswith(game.canonical_game_id + ": final checkpoint requires ")), None)
+    result = []
+    for horizon, hours in CHECKPOINTS.items():
+        approaches = {r["outputs"]["approach"] for r in records
+                      if r["game_id"] == game.canonical_game_id and r["horizon"] == horizon
+                      and r["eligible_pregame_record"]}
+        reason = None
+        if approaches and game.canonical_game_id not in blocked:
+            state = "RECORDED"
+        elif game.game_status in {"CANCELLED", "POSTPONED"}:
+            state, reason = "NOT_ELIGIBLE", "Game is cancelled or postponed"
+        elif lead > hours:
+            state, reason = "NOT_YET_DUE", "Checkpoint window has not opened"
+        elif horizon == "PROS_FINAL" and final_reason:
+            state, reason = "WITHHELD", final_reason
+        elif lead <= 0 or horizon != due:
+            state, reason = "MISSED", "No eligible forecast recorded in this window; no backfill"
+        elif game.canonical_game_id in blocked:
+            state, reason = "WITHHELD", "Canonical game identity requires review"
+        elif horizon == "PROS_FINAL":
+            intel = IntelligenceAt(s, now)
+            research = intel.game(game)
+            poll = intel.polls.get((game.season, "schedule"))
+            received = poll.captured_at if poll and poll.status == "SUCCESS" else game.observed_at
+            if (any(not t["availability_complete"] for t in research["teams"])
+                    or now - received > timedelta(hours=6)):
+                state, reason = "WITHHELD", "Complete official availability and fresh schedule are required"
+            else:
+                state, reason = "AWAITING_CAPTURE", "Eligible checkpoint has not been recorded"
+        elif reasons or (job and job.status == "failed"):
+            state, reason = "WITHHELD", "; ".join(reasons) or (job.error if job else None)
+        else:
+            from fde_api.db.research_models import ResearchPoll
+
+            poll = s.scalars(select(ResearchPoll).where(ResearchPoll.dataset == "schedule",
+                    ResearchPoll.season == game.season, ResearchPoll.captured_at <= now)
+                    .order_by(ResearchPoll.captured_at.desc(), ResearchPoll.id.desc()).limit(1)).first()
+            received = poll.captured_at if poll and poll.status == "SUCCESS" else game.observed_at
+            if now - received > timedelta(hours=24):
+                state, reason = "WITHHELD", "Schedule evidence is stale"
+            else:
+                state, reason = "AWAITING_CAPTURE", "Eligible checkpoint has not been recorded"
+        result.append({"horizon": horizon, "state": state, "recorded_approaches": len(approaches),
+                       "window_opens_at": (game.kickoff_utc - timedelta(hours=hours)).isoformat(),
+                       "reason": reason})
+    return result

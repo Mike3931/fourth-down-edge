@@ -54,7 +54,6 @@ def main() -> int:
 def run(args: argparse.Namespace, target: Path) -> int:
     os.environ["FDE_DATABASE_URL"] = f"sqlite:///{target.as_posix()}"
     os.environ["FDE_DATA_DIR"] = str(target.parent / (target.stem + ".research-data"))
-    from espn_live_capture import discover, fetch, persist, within_utc_window
     from sqlalchemy.orm import sessionmaker
 
     from fde_api.config import settings
@@ -83,10 +82,11 @@ def run(args: argparse.Namespace, target: Path) -> int:
         dates = f"{now - timedelta(days=1):%Y%m%d}-{now + timedelta(days=7):%Y%m%d}"
         def capture(window: str = dates, season: int = getattr(args, "season", None)
                     or (now.year if now.month >= 8 else now.year - 1)) -> dict[str, int]:
-            games = within_utc_window(discover(fetch(window)), window)
-            counts = persist(games, data_mode_value="LIVE_RESEARCH")
-            if counts["identity_refused"]:
-                raise ValueError("Game identity review required; no complete-slate claim")
+            # Public API accessibility does not grant automated collection
+            # rights. No ESPN permission is on file. Keep its existing offline
+            # parser/history intact; use the already supported licensed nflverse
+            # schedule/results path instead. There is no runtime opt-in.
+            counts = {"espn_disabled_pending_authorization": 1}
             with factory() as s:
                 counts.update(collect_intelligence(s, now=datetime.now(UTC), season=season,
                     include_history=getattr(args, "prospective", False)))
